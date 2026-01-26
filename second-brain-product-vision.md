@@ -766,7 +766,7 @@ SUMMARIZE_AFTER_MESSAGES=20
 | **Backend** | Express.js + TypeScript | Simple, flexible, good ecosystem |
 | **Database** | PostgreSQL 16 | Reliable, battle-tested, Prisma support |
 | **ORM** | Prisma | Type-safe queries, migrations, great DX |
-| **LLM** | OpenAI API (GPT-4o) | Best function calling, structured output |
+| **LLM** | OpenAI API (GPT-5.2) | Best function calling, structured output |
 | **Email** | Nodemailer + node-imap | Standard Node.js email libraries |
 | **Scheduler** | node-cron | In-process, no external dependencies |
 | **Git** | simple-git (npm) | Node.js git wrapper |
