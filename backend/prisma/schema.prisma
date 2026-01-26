@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Channel {
+  chat
+  email
+  api
+}
+
+enum Role {
+  user
+  assistant
+}
+
+enum JobStatus {
+  running
+  success
+  failed
+}
+
+enum Operation {
+  create
+  update
+  delete
+  move
+}
+
+model Conversation {
+  id         String    @id @default(uuid())
+  channel    Channel
+  externalId String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  
+  messages   Message[]
+  summaries  ConversationSummary[]
+  
+  @@index([channel, externalId])
+}
+
+model Message {
+  id              String       @id @default(uuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id])
+  role            Role
+  content         String
+  filedEntryPath  String?
+  filedConfidence Float?
+  createdAt       DateTime     @default(now())
+  
+  @@index([conversationId, createdAt])
+}
+
+model ConversationSummary {
+  id              String       @id @default(uuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id])
+  summary         String
+  messageCount    Int
+  startMessageId  String
+  endMessageId    String
+  createdAt       DateTime     @default(now())
+  
+  @@index([conversationId, createdAt])
+}
+
+model EmailThread {
+  id             String   @id @default(uuid())
+  messageId      String   @unique
+  threadId       String
+  inReplyTo      String?
+  subject        String
+  fromAddress    String
+  conversationId String
+  createdAt      DateTime @default(now())
+  
+  @@index([threadId])
+  @@index([conversationId])
+}
+
+model CronJobRun {
+  id          String    @id @default(uuid())
+  jobName     String
+  status      JobStatus
+  result      String?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  
+  @@index([jobName, startedAt])
+}
+
+model EntryAuditLog {
+  id            String    @id @default(uuid())
+  entryPath     String
+  operation     Operation
+  gitCommitHash String?
+  channel       Channel
+  messageId     String?
+  createdAt     DateTime  @default(now())
+  
+  @@index([entryPath, createdAt])
+}
