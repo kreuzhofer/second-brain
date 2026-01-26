@@ -12,8 +12,12 @@ export interface EnvConfig {
   
   // Optional with defaults
   TIMEZONE: string;
-  CONFIDENCE_THRESHOLD: number;
   PORT: number;
+  
+  // Chat configuration (optional with defaults)
+  CONFIDENCE_THRESHOLD: number;
+  MAX_VERBATIM_MESSAGES: number;
+  SUMMARIZE_AFTER_MESSAGES: number;
 }
 
 export class MissingEnvVarError extends Error {
@@ -53,8 +57,12 @@ export function loadEnvConfig(): EnvConfig {
     API_KEY: process.env.API_KEY || '',
     DATA_PATH: process.env.DATA_PATH || '/data',
     TIMEZONE: process.env.TIMEZONE || 'Europe/Berlin',
+    PORT: parseInt(process.env.PORT || '3000', 10),
+    
+    // Chat configuration
     CONFIDENCE_THRESHOLD: parseFloat(process.env.CONFIDENCE_THRESHOLD || '0.6'),
-    PORT: parseInt(process.env.PORT || '3000', 10)
+    MAX_VERBATIM_MESSAGES: parseInt(process.env.MAX_VERBATIM_MESSAGES || '15', 10),
+    SUMMARIZE_AFTER_MESSAGES: parseInt(process.env.SUMMARIZE_AFTER_MESSAGES || '20', 10)
   };
 }
 

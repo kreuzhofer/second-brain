@@ -3,6 +3,10 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Brain, CheckCircle, AlertCircle } from 'lucide-react';
+import { ChatUI } from '@/components/chat';
+import { EntryModal } from '@/components/EntryModal';
+import { RecentEntries } from '@/components/RecentEntries';
+import { api } from '@/services/api';
 
 interface HealthStatus {
   status: string;
@@ -18,16 +22,34 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedEntryPath, setSelectedEntryPath] = useState<string | null>(null);
 
-  // Check health on mount
+  // Check health on mount and try to get API key from server
   useEffect(() => {
     checkHealth();
+    // Try to fetch the API key from the server (for local dev convenience)
+    fetchApiKey();
   }, []);
+
+  const fetchApiKey = async () => {
+    try {
+      const response = await fetch('/api/auth/key');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.key) {
+          setApiKey(data.key);
+        }
+      }
+    } catch {
+      // Server doesn't expose key, that's fine - user will enter manually
+    }
+  };
 
   // Check authentication when API key changes
   useEffect(() => {
     if (apiKey) {
       localStorage.setItem('second-brain-api-key', apiKey);
+      api.setAuthToken(apiKey);
       checkAuth();
     } else {
       setIsAuthenticated(false);
@@ -63,6 +85,14 @@ function App() {
       setIsAuthenticated(false);
       setError('Failed to connect to API');
     }
+  };
+
+  const handleEntryClick = (path: string) => {
+    setSelectedEntryPath(path);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedEntryPath(null);
   };
 
   return (
@@ -119,49 +149,52 @@ function App() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Dashboard</CardTitle>
-                <CardDescription>
-                  Your personal knowledge management system is ready
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  The chat interface and full functionality will be implemented in future specs.
-                  For now, you can use the REST API to manage your entries.
-                </p>
-                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-2xl font-bold">People</div>
-                      <p className="text-sm text-muted-foreground">Contacts & relationships</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-2xl font-bold">Projects</div>
-                      <p className="text-sm text-muted-foreground">Active work</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-2xl font-bold">Ideas</div>
-                      <p className="text-sm text-muted-foreground">Future possibilities</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-2xl font-bold">Admin</div>
-                      <p className="text-sm text-muted-foreground">Tasks & errands</p>
-                    </CardContent>
-                  </Card>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Chat UI - Main area */}
+            <div className="lg:col-span-2">
+              <ChatUI onEntryClick={handleEntryClick} />
+            </div>
+
+            {/* Sidebar - Recent entries */}
+            <div className="space-y-6">
+              <RecentEntries onEntryClick={handleEntryClick} />
+              
+              {/* Category cards */}
+              <div className="grid grid-cols-2 gap-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-lg font-bold">People</div>
+                    <p className="text-xs text-muted-foreground">Contacts</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-lg font-bold">Projects</div>
+                    <p className="text-xs text-muted-foreground">Active work</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-lg font-bold">Ideas</div>
+                    <p className="text-xs text-muted-foreground">Future</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-lg font-bold">Admin</div>
+                    <p className="text-xs text-muted-foreground">Tasks</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </div>
         )}
+
+        {/* Entry Modal */}
+        <EntryModal 
+          entryPath={selectedEntryPath} 
+          onClose={handleCloseModal} 
+        />
       </main>
 
       {/* Footer */}

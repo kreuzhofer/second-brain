@@ -1,6 +1,10 @@
 // Jest setup file
+import { config } from 'dotenv';
 import { rm, mkdir } from 'fs/promises';
 import { join } from 'path';
+
+// Load environment variables from .env file at the root
+config({ path: join(__dirname, '../../.env') });
 
 // Test data directory
 export const TEST_DATA_DIR = join(__dirname, '../.test-data');

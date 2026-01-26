@@ -5,6 +5,7 @@ import { authMiddleware } from './middleware/auth';
 import { healthRouter } from './routes/health';
 import { entriesRouter } from './routes/entries';
 import { indexRouter } from './routes/index-route';
+import { chatRouter } from './routes/chat';
 import { initializeDataFolder } from './services/init.service';
 
 // Validate environment variables before starting
@@ -19,9 +20,16 @@ app.use(express.json());
 // Public routes (no auth required)
 app.use('/api/health', healthRouter);
 
+// Convenience endpoint: expose API key for local single-user setup
+// This allows the frontend to auto-authenticate without manual key entry
+app.get('/api/auth/key', (req, res) => {
+  res.json({ key: config.API_KEY });
+});
+
 // Protected routes
 app.use('/api/entries', authMiddleware, entriesRouter);
 app.use('/api/index', authMiddleware, indexRouter);
+app.use('/api/chat', authMiddleware, chatRouter);
 
 // Serve frontend static files in production
 if (process.env.NODE_ENV === 'production') {

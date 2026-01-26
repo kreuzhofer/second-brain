@@ -52,6 +52,36 @@ export interface ApiError {
   };
 }
 
+// Chat types
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  filedEntryPath?: string;
+  filedConfidence?: number;
+  createdAt: string;
+}
+
+export interface ChatResponse {
+  conversationId: string;
+  message: ChatMessage;
+  entry?: {
+    path: string;
+    category: string;
+    name: string;
+    confidence: number;
+  };
+  clarificationNeeded: boolean;
+}
+
+export interface Conversation {
+  id: string;
+  channel: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
 class ApiClient {
   private authToken: string = '';
   private baseUrl: string = '/api';
@@ -183,6 +213,59 @@ class ApiClient {
      */
     get: async (): Promise<string> => {
       return this.request<string>('/index');
+    },
+  };
+
+  /**
+   * Chat operations
+   */
+  chat = {
+    /**
+     * Send a chat message
+     */
+    send: async (message: string, conversationId?: string, hints?: string): Promise<ChatResponse> => {
+      return this.request<ChatResponse>('/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message, conversationId, hints }),
+      });
+    },
+
+    /**
+     * List conversations
+     */
+    listConversations: async (limit?: number, offset?: number): Promise<Conversation[]> => {
+      const params = new URLSearchParams();
+      if (limit) params.set('limit', limit.toString());
+      if (offset) params.set('offset', offset.toString());
+      
+      const queryString = params.toString();
+      const endpoint = queryString ? `/chat/conversations?${queryString}` : '/chat/conversations';
+      
+      const response = await this.request<{ conversations: Conversation[] }>(endpoint);
+      return response.conversations;
+    },
+
+    /**
+     * Get messages for a conversation
+     */
+    getMessages: async (conversationId: string, limit?: number): Promise<ChatMessage[]> => {
+      const params = new URLSearchParams();
+      if (limit) params.set('limit', limit.toString());
+      
+      const queryString = params.toString();
+      const endpoint = queryString 
+        ? `/chat/conversations/${conversationId}/messages?${queryString}` 
+        : `/chat/conversations/${conversationId}/messages`;
+      
+      const response = await this.request<{ messages: ChatMessage[] }>(endpoint);
+      return response.messages;
+    },
+
+    /**
+     * Get a specific conversation
+     */
+    getConversation: async (conversationId: string): Promise<Conversation> => {
+      return this.request<Conversation>(`/chat/conversations/${conversationId}`);
     },
   };
 }
