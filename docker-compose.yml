@@ -9,13 +9,13 @@ services:
       - DATABASE_URL=postgresql://secondbrain:secondbrain@db:5432/secondbrain
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - API_KEY=${API_KEY}
-      - DATA_PATH=/data
+      - DATA_PATH=/memory
       - TIMEZONE=${TIMEZONE:-Europe/Berlin}
       - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD:-0.6}
       - PORT=3000
       - NODE_ENV=production
     volumes:
-      - ${DATA_PATH:-./data}:/data
+      - ${DATA_PATH:-./memory}:/memory
     depends_on:
       db:
         condition: service_healthy

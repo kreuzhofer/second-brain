@@ -82,7 +82,7 @@ These principles are derived from the 12 engineering patterns for reliable AI sy
            ▼                                      ▼
     ┌─────────────────┐                  ┌─────────────────┐
     │  Local Folder   │                  │  External APIs  │
-    │  /data          │                  │  • OpenAI       │
+    │  /memory        │                  │  • OpenAI       │
     │  ├── people/    │                  │  • SMTP Server  │
     │  ├── projects/  │                  └─────────────────┘
     │  ├── ideas/     │
@@ -111,7 +111,7 @@ These principles are derived from the 12 engineering patterns for reliable AI sy
 
 Each entry is a markdown file with YAML frontmatter:
 
-**People** (`/data/people/{slug}.md`)
+**People** (`/memory/people/{slug}.md`)
 ```yaml
 ---
 id: uuid
@@ -137,7 +137,7 @@ confidence: 0.92
 - Has budget authority for tools <€50k
 ```
 
-**Projects** (`/data/projects/{slug}.md`)
+**Projects** (`/memory/projects/{slug}.md`)
 ```yaml
 ---
 id: uuid
@@ -167,7 +167,7 @@ confidence: 0.88
 - 2026-01-15: Kickoff call completed
 ```
 
-**Ideas** (`/data/ideas/{slug}.md`)
+**Ideas** (`/memory/ideas/{slug}.md`)
 ```yaml
 ---
 id: uuid
@@ -191,7 +191,7 @@ German Mittelstand has massive pain points in quote generation:
 Could be a signature workshop offering...
 ```
 
-**Admin** (`/data/admin/{slug}.md`)
+**Admin** (`/memory/admin/{slug}.md`)
 ```yaml
 ---
 id: uuid
@@ -211,7 +211,7 @@ confidence: 0.97
 - Book exam slot by mid-February
 ```
 
-**Inbox** (`/data/inbox/{YYYYMMDD-HHMMSS}-{slug}.md`)
+**Inbox** (`/memory/inbox/{YYYYMMDD-HHMMSS}-{slug}.md`)
 ```yaml
 ---
 id: uuid
@@ -927,7 +927,7 @@ SUMMARIZE_BATCH_SIZE=10
 
 **Infrastructure:**
 - [x] Docker Compose (app + PostgreSQL)
-- [x] Volume mount for /data
+- [x] Volume mount for /memory
 - [x] Environment-based configuration
 
 ### 12.2 Out of Scope (v0.1)
@@ -980,7 +980,7 @@ How do we know this is working?
 
 2. **Entry archival**: When a project is "done", should it move to `/archive/projects/`? Or stay in place with `status: done`?
 
-3. **Image handling**: If user pastes an image in chat (e.g., whiteboard photo), store in `/data/assets/` and link from entry?
+3. **Image handling**: If user pastes an image in chat (e.g., whiteboard photo), store in `/memory/assets/` and link from entry?
 
 4. **Mobile capture**: For MVP, REST API works. Should we prioritize a PWA wrapper for "Add to Home Screen" experience?
 
@@ -991,7 +991,7 @@ How do we know this is working?
 ## Appendix A: Folder Structure
 
 ```
-/data/                          # Volume mount point
+/memory/                          # Volume mount point
 ├── .git/                       # Git repository
 ├── index.md                    # Auto-generated index
 ├── people/
@@ -1026,7 +1026,7 @@ services:
       - TIMEZONE=${TIMEZONE:-Europe/Berlin}
       # ... other env vars
     volumes:
-      - ${DATA_PATH:-./data}:/data
+      - ${DATA_PATH:-./memory}:/memory
     depends_on:
       db:
         condition: service_healthy

@@ -150,7 +150,7 @@ export function loadEnvConfig(): EnvConfig {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
     DATABASE_URL: process.env.DATABASE_URL || '',
     API_KEY: process.env.API_KEY || '',
-    DATA_PATH: process.env.DATA_PATH || '/data',
+    DATA_PATH: process.env.DATA_PATH || '/memory',
     TIMEZONE: process.env.TIMEZONE || 'Europe/Berlin',
     PORT: parseInt(process.env.PORT || '3000', 10),
     

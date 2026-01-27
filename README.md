@@ -34,7 +34,7 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
    Edit `.env` and set:
    - `OPENAI_API_KEY`: Your OpenAI API key
    - `API_KEY`: A secure random string for API authentication
-   - `DATA_PATH`: Path to your data directory (default: `./data`)
+   - `DATA_PATH`: Path to your memory directory (default: `./memory`)
 
 4. **Start with Docker Compose**
    ```bash
@@ -51,7 +51,7 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
 | `OPENAI_API_KEY` | Yes | - | OpenAI API key for classification |
 | `DATABASE_URL` | Yes | - | PostgreSQL connection string |
 | `API_KEY` | Yes | - | API authentication key |
-| `DATA_PATH` | Yes | - | Path to data directory |
+| `DATA_PATH` | Yes | - | Path to memory directory |
 | `TIMEZONE` | No | `Europe/Berlin` | Timezone for timestamps |
 | `CONFIDENCE_THRESHOLD` | No | `0.6` | Classification confidence threshold |
 | `PORT` | No | `3000` | Server port |
@@ -106,7 +106,7 @@ second-brain/
 │   │   └── types/          # TypeScript types
 │   ├── prisma/             # Database schema
 │   └── tests/              # Test files
-└── data/                   # Data directory (gitignored)
+└── memory/                 # Memory directory (gitignored)
     ├── .git/               # Git repository for data
     ├── index.md            # Auto-generated index
     ├── people/             # People entries

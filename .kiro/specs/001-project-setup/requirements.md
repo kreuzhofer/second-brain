@@ -10,7 +10,7 @@ This document defines the requirements for the foundational setup of the Second 
 - **Entry**: A markdown file with YAML frontmatter representing a piece of knowledge (person, project, idea, or admin task)
 - **Category**: One of five entry types: people, projects, ideas, admin, or inbox
 - **Frontmatter**: YAML metadata at the top of a markdown file between `---` delimiters
-- **Data_Folder**: The `/data` volume-mounted directory containing all markdown entries and git repository
+- **Data_Folder**: The `/memory` volume-mounted directory containing all markdown entries and git repository
 - **Index_Generator**: Component that auto-generates index.md summarizing all entries
 - **Entry_Service**: Backend service handling CRUD operations for markdown entries
 - **Git_Service**: Backend service managing git operations for the data folder
@@ -29,7 +29,7 @@ This document defines the requirements for the foundational setup of the Second 
 2. THE Second_Brain_App SHALL include a `docker-compose.yml` file defining app and PostgreSQL containers
 3. WHEN Docker Compose starts, THE Second_Brain_App SHALL expose port 3000 for the application
 4. WHEN Docker Compose starts, THE PostgreSQL container SHALL be healthy before the app container starts
-5. THE Second_Brain_App SHALL mount the external data directory (specified by `DATA_PATH` environment variable) as a volume at `/data` inside the container
+5. THE Second_Brain_App SHALL mount the external data directory (specified by `DATA_PATH` environment variable) as a volume at `/memory` inside the container
 6. THE Second_Brain_App SHALL include a root `package.json` with workspace configuration for the monorepo
 7. THE Data_Folder SHALL be located outside the project directory to maintain separate git repositories for code and data
 
@@ -77,11 +77,11 @@ This document defines the requirements for the foundational setup of the Second 
 
 #### Acceptance Criteria
 
-1. WHEN creating a people entry, THE Entry_Service SHALL write a markdown file to `/data/people/{slug}.md` with frontmatter containing id, name, context, follow_ups array, related_projects array, last_touched, tags array, created_at, updated_at, source_channel, and confidence
-2. WHEN creating a projects entry, THE Entry_Service SHALL write a markdown file to `/data/projects/{slug}.md` with frontmatter containing id, name, status (active/waiting/blocked/someday/done), next_action, related_people array, tags array, due_date, created_at, updated_at, source_channel, and confidence
-3. WHEN creating an ideas entry, THE Entry_Service SHALL write a markdown file to `/data/ideas/{slug}.md` with frontmatter containing id, name, one_liner, tags array, related_projects array, created_at, updated_at, source_channel, and confidence
-4. WHEN creating an admin entry, THE Entry_Service SHALL write a markdown file to `/data/admin/{slug}.md` with frontmatter containing id, name, status (pending/done), due_date, tags array, created_at, updated_at, source_channel, and confidence
-5. WHEN creating an inbox entry, THE Entry_Service SHALL write a markdown file to `/data/inbox/{timestamp}-{slug}.md` with frontmatter containing id, original_text, suggested_category, suggested_name, confidence, status (needs_review), source_channel, and created_at
+1. WHEN creating a people entry, THE Entry_Service SHALL write a markdown file to `/memory/people/{slug}.md` with frontmatter containing id, name, context, follow_ups array, related_projects array, last_touched, tags array, created_at, updated_at, source_channel, and confidence
+2. WHEN creating a projects entry, THE Entry_Service SHALL write a markdown file to `/memory/projects/{slug}.md` with frontmatter containing id, name, status (active/waiting/blocked/someday/done), next_action, related_people array, tags array, due_date, created_at, updated_at, source_channel, and confidence
+3. WHEN creating an ideas entry, THE Entry_Service SHALL write a markdown file to `/memory/ideas/{slug}.md` with frontmatter containing id, name, one_liner, tags array, related_projects array, created_at, updated_at, source_channel, and confidence
+4. WHEN creating an admin entry, THE Entry_Service SHALL write a markdown file to `/memory/admin/{slug}.md` with frontmatter containing id, name, status (pending/done), due_date, tags array, created_at, updated_at, source_channel, and confidence
+5. WHEN creating an inbox entry, THE Entry_Service SHALL write a markdown file to `/memory/inbox/{timestamp}-{slug}.md` with frontmatter containing id, original_text, suggested_category, suggested_name, confidence, status (needs_review), source_channel, and created_at
 6. THE Entry_Service SHALL use the gray-matter library to serialize frontmatter and content into markdown files
 7. THE Entry_Service SHALL generate a UUID for the id field of each new entry
 
@@ -123,7 +123,7 @@ This document defines the requirements for the foundational setup of the Second 
 
 #### Acceptance Criteria
 
-1. WHEN the application starts and no git repository exists in `/data`, THE Git_Service SHALL initialize a new git repository
+1. WHEN the application starts and no git repository exists in `/memory`, THE Git_Service SHALL initialize a new git repository
 2. WHEN an entry is created, THE Git_Service SHALL create a commit with message format `create({category}): {entry_name} [confidence: {confidence}] [via: {channel}]`
 3. WHEN an entry is updated, THE Git_Service SHALL create a commit with message format `update({category}): {entry_name} - {change_summary} [via: {channel}]`
 4. WHEN an entry is deleted, THE Git_Service SHALL create a commit with message format `delete({category}): {entry_name} [via: {channel}]`
@@ -136,7 +136,7 @@ This document defines the requirements for the foundational setup of the Second 
 
 #### Acceptance Criteria
 
-1. WHEN any entry is created, updated, or deleted, THE Index_Generator SHALL regenerate `/data/index.md`
+1. WHEN any entry is created, updated, or deleted, THE Index_Generator SHALL regenerate `/memory/index.md`
 2. THE Index_Generator SHALL include a header with last updated timestamp and total entry counts by category
 3. THE Index_Generator SHALL list people entries in a table with Name, Context, and Last Touched columns
 4. THE Index_Generator SHALL list active projects in a table with Project, Next Action, and Status columns

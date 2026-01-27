@@ -16,7 +16,7 @@ This implementation plan establishes the foundational infrastructure for the Sec
   - [x] 1.2 Create Docker Compose configuration
     - Create `docker-compose.yml` with app and PostgreSQL containers
     - Configure PostgreSQL health check and app dependency
-    - Mount `${DATA_PATH}` volume to `/data` in app container
+    - Mount `${DATA_PATH}` volume to `/memory` in app container
     - Expose port 3000 for the application
     - _Requirements: 1.2, 1.3, 1.4, 1.5, 1.7_
   

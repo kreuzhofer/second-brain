@@ -41,5 +41,5 @@ backend/prisma/*.db-journal
 # Docker
 .docker/
 
-# Data directory (configured via DATA_PATH, should be outside project)
-data/
+# Memory directory (configured via DATA_PATH, should be outside project)
+memory/

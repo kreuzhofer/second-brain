@@ -5,7 +5,7 @@
 This design document describes the foundational architecture for the Second Brain application - a self-hosted, AI-powered personal knowledge management system. The project-setup spec establishes the monorepo structure, Docker containerization, backend/frontend foundations, database schema, markdown entry system with YAML frontmatter, git integration, and index generation.
 
 The system follows a clean separation of concerns:
-- **Memory**: Markdown files with YAML frontmatter stored in `/data` volume
+- **Memory**: Markdown files with YAML frontmatter stored in `/memory` volume
 - **Compute**: Express.js backend with Prisma ORM
 - **Interface**: React frontend with Tailwind CSS
 
@@ -27,7 +27,7 @@ graph TB
         BE --> DB
     end
     
-    subgraph "Volume Mount /data"
+    subgraph "Volume Mount /memory"
         GIT[.git/]
         IDX[index.md]
         PPL[people/]
@@ -92,7 +92,7 @@ second-brain/
 
 # Data directory (separate location, local git repo only)
 # Configured via DATA_PATH environment variable
-# Default: ~/second-brain-data or /path/to/your/data
+# Default: ~/second-brain-memory or /path/to/your/memory
 ${DATA_PATH}/
 ├── .git/                        # Local git repo (not pushed to GitHub)
 ├── index.md
@@ -109,7 +109,7 @@ The data directory location is configured via the `DATA_PATH` environment variab
 
 ```env
 # Example configurations:
-DATA_PATH=~/second-brain-data           # Home directory
+DATA_PATH=~/second-brain-memory           # Home directory
 DATA_PATH=/mnt/data/second-brain        # Custom mount point
 DATA_PATH=/var/lib/second-brain         # System directory
 ```
@@ -118,7 +118,7 @@ In Docker Compose, this is mounted as a volume:
 
 ```yaml
 volumes:
-  - ${DATA_PATH:-./data}:/data
+  - ${DATA_PATH:-./memory}:/memory
 ```
 
 This separation ensures:
@@ -139,7 +139,7 @@ interface EnvConfig {
   OPENAI_API_KEY: string;
   DATABASE_URL: string;
   API_KEY: string;
-  DATA_PATH: string;             // Path to data directory (mounted at /data in container)
+  DATA_PATH: string;             // Path to memory directory (mounted at /memory in container)
   
   // Optional with defaults
   TIMEZONE: string;              // default: 'Europe/Berlin'
@@ -435,7 +435,7 @@ model EntryAuditLog {
 
 Each category has a specific frontmatter schema:
 
-**People** (`/data/people/{slug}.md`):
+**People** (`/memory/people/{slug}.md`):
 ```yaml
 ---
 id: string           # UUID
@@ -452,7 +452,7 @@ confidence: number
 ---
 ```
 
-**Projects** (`/data/projects/{slug}.md`):
+**Projects** (`/memory/projects/{slug}.md`):
 ```yaml
 ---
 id: string
@@ -469,7 +469,7 @@ confidence: number
 ---
 ```
 
-**Ideas** (`/data/ideas/{slug}.md`):
+**Ideas** (`/memory/ideas/{slug}.md`):
 ```yaml
 ---
 id: string
@@ -484,7 +484,7 @@ confidence: number
 ---
 ```
 
-**Admin** (`/data/admin/{slug}.md`):
+**Admin** (`/memory/admin/{slug}.md`):
 ```yaml
 ---
 id: string
@@ -499,7 +499,7 @@ confidence: number
 ---
 ```
 
-**Inbox** (`/data/inbox/{timestamp}-{slug}.md`):
+**Inbox** (`/memory/inbox/{timestamp}-{slug}.md`):
 ```yaml
 ---
 id: string

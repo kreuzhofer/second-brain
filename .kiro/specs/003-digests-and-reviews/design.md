@@ -30,7 +30,7 @@ flowchart TB
     
     subgraph Storage
         DB[(PostgreSQL)]
-        FS[/data/ Markdown Files]
+        FS[/memory/ Markdown Files]
     end
     
     subgraph API
