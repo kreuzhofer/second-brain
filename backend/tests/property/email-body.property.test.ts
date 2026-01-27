@@ -338,6 +338,11 @@ describe('EmailParser - Email Body Text Extraction Property Tests', () => {
           signatureDelimiterArbitrary,
           signatureContentArbitrary,
           (mainContent, quotedLine, moreContent, sigDelimiter, sigContent) => {
+            // Skip cases where signature content overlaps with main content
+            // (we can't verify signature removal if the content appears elsewhere)
+            const sigContentTrimmed = sigContent.trim();
+            fc.pre(!mainContent.includes(sigContentTrimmed) && !moreContent.includes(sigContentTrimmed));
+            
             // Build email with quotes, main content, and signature
             const fullText = `  ${mainContent}\n${quotedLine}\n${moreContent}\n${sigDelimiter}\n${sigContent}  `;
             const email = createParsedEmail({ text: fullText });
@@ -351,8 +356,8 @@ describe('EmailParser - Email Body Text Extraction Property Tests', () => {
             expect(result).toContain(moreContent.trim());
             // Should NOT contain quoted content
             expect(result).not.toMatch(/^>/m);
-            // Should NOT contain signature
-            expect(result).not.toContain(sigContent);
+            // Should NOT contain signature content (only verifiable when distinct from main content)
+            expect(result).not.toContain(sigContentTrimmed);
           }
         ),
         { numRuns: 10 }

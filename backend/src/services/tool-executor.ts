@@ -21,7 +21,9 @@ import {
   CreatePeopleInput,
   CreateProjectsInput,
   CreateIdeasInput,
-  CreateAdminInput
+  CreateAdminInput,
+  BodyContentUpdate,
+  BodyContentMode
 } from '../types/entry.types';
 import { ContextWindow, ClassificationResult } from '../types/chat.types';
 
@@ -95,6 +97,8 @@ export interface DigestResult {
 export interface UpdateEntryResult {
   path: string;
   updatedFields: string[];
+  bodyUpdated?: boolean;
+  bodyMode?: BodyContentMode;
 }
 
 /**
@@ -114,6 +118,16 @@ export interface MoveEntryResult {
 export interface SearchResult {
   entries: SearchHit[];
   total: number;
+}
+
+/**
+ * Result from delete_entry tool
+ * Requirements 3.2, 3.3: Delete entry and return path/name
+ */
+export interface DeleteEntryResult {
+  path: string;
+  name: string;
+  category: Category;
 }
 
 // ============================================
@@ -196,6 +210,9 @@ export class ToolExecutor {
         case 'search_entries':
           return await this.handleSearchEntries(args);
         
+        case 'delete_entry':
+          return await this.handleDeleteEntry(args);
+        
         default:
           return {
             success: false,
@@ -250,11 +267,17 @@ export class ToolExecutor {
     const useInbox = classificationResult.confidence < CONFIDENCE_THRESHOLD;
     const targetCategory: Category = useInbox ? 'inbox' : classificationResult.category;
 
-    // 4. Create entry using entryService.create()
+    // 4. Extract bodyContent from classification result
+    // Requirement 1.1: Classification Agent generates body content
+    const bodyContent = classificationResult.bodyContent;
+
+    // 5. Create entry using entryService.create()
+    // Requirement 1.6: Pass bodyContent to EntryService.create()
     let createdEntry: EntryWithPath;
 
     if (useInbox) {
       // Create inbox entry with original text and suggested classification
+      // Note: Inbox entries don't get body content since they need review
       createdEntry = await this.entryService.create('inbox', {
         original_text: text,
         suggested_category: classificationResult.category,
@@ -263,12 +286,12 @@ export class ToolExecutor {
         source_channel: 'api'
       }, 'api');
     } else {
-      // Create entry in the classified category with appropriate fields
+      // Create entry in the classified category with appropriate fields and body content
       const entryData = this.buildEntryData(classificationResult);
-      createdEntry = await this.entryService.create(targetCategory, entryData, 'api');
+      createdEntry = await this.entryService.create(targetCategory, entryData, 'api', bodyContent);
     }
 
-    // 5. Return CaptureResult
+    // 6. Return CaptureResult
     const captureResult: CaptureResult = {
       path: createdEntry.path,
       category: targetCategory,
@@ -420,22 +443,57 @@ export class ToolExecutor {
   /**
    * Handle update_entry tool
    * Requirement 3.5: Update entry using EntryService.update()
+   * Requirement 2.1: Accept body_content parameter for modifying entry body
    * 
-   * @param args - Tool arguments { path: string, updates: object }
+   * @param args - Tool arguments { path: string, updates?: object, body_content?: object }
    * @returns ToolResult with UpdateEntryResult data
    */
   private async handleUpdateEntry(args: Record<string, unknown>): Promise<ToolResult> {
     const path = args.path as string;
-    const updates = args.updates as Record<string, unknown>;
+    const updates = (args.updates as Record<string, unknown>) || {};
+    const bodyContentArg = args.body_content as { content: string; mode: string; section?: string } | undefined;
 
-    // 1. Call entryService.update() with path and updates
-    await this.entryService.update(path, updates, 'api');
+    // Parse body_content into BodyContentUpdate if provided
+    let bodyUpdate: BodyContentUpdate | undefined;
+    if (bodyContentArg) {
+      // Validate mode is a valid BodyContentMode
+      const mode = bodyContentArg.mode as BodyContentMode;
+      if (!['append', 'replace', 'section'].includes(mode)) {
+        return {
+          success: false,
+          error: `Invalid body_content mode: ${bodyContentArg.mode}. Must be 'append', 'replace', or 'section'.`
+        };
+      }
 
-    // 2. Return UpdateEntryResult with path and updated fields
+      // Validate section is provided when mode is 'section'
+      if (mode === 'section' && !bodyContentArg.section) {
+        return {
+          success: false,
+          error: 'Section name required for section mode'
+        };
+      }
+
+      bodyUpdate = {
+        content: bodyContentArg.content,
+        mode,
+        section: bodyContentArg.section
+      };
+    }
+
+    // 1. Call entryService.update() with path, updates, and bodyUpdate
+    await this.entryService.update(path, updates, 'api', bodyUpdate);
+
+    // 2. Return UpdateEntryResult with path, updated fields, and body update info
     const result: UpdateEntryResult = {
       path,
       updatedFields: Object.keys(updates)
     };
+
+    // Include body update info in response if body was updated
+    if (bodyUpdate) {
+      result.bodyUpdated = true;
+      result.bodyMode = bodyUpdate.mode;
+    }
 
     return {
       success: true,
@@ -577,6 +635,44 @@ export class ToolExecutor {
     const result: SearchResult = {
       entries: searchResult.entries,
       total: searchResult.total
+    };
+
+    return {
+      success: true,
+      data: result
+    };
+  }
+
+  /**
+   * Handle delete_entry tool
+   * Requirements 3.2, 3.3, 3.4, 3.5: Delete entry using EntryService.delete()
+   * 
+   * @param args - Tool arguments { path: string }
+   * @returns ToolResult with DeleteEntryResult data
+   */
+  private async handleDeleteEntry(args: Record<string, unknown>): Promise<ToolResult> {
+    const path = args.path as string;
+
+    // 1. Read entry first to get name for response (Requirement 3.3)
+    // This will throw EntryNotFoundError if entry doesn't exist (Requirement 3.4)
+    const existing = await this.entryService.read(path);
+    const category = existing.category;
+    
+    // Get name based on category type
+    // Inbox entries use suggested_name, other categories use name
+    const name = category === 'inbox'
+      ? (existing.entry as import('../types/entry.types').InboxEntry).suggested_name
+      : (existing.entry as import('../types/entry.types').BaseEntry).name;
+
+    // 2. Delete the entry (Requirement 3.2)
+    // EntryService.delete() handles index regeneration and git commit (Requirement 3.5)
+    await this.entryService.delete(path, 'api');
+
+    // 3. Return DeleteEntryResult with path and name (Requirement 3.3)
+    const result: DeleteEntryResult = {
+      path,
+      name,
+      category
     };
 
     return {

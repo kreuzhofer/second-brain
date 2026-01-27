@@ -29,6 +29,7 @@ export interface ClassificationResult {
   fields: CategoryFields;
   relatedEntries: string[];
   reasoning: string;
+  bodyContent: string;  // Generated markdown body content
 }
 
 /**

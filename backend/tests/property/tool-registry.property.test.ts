@@ -19,7 +19,8 @@ const MVP_TOOL_NAMES = [
   'generate_digest',
   'update_entry',
   'move_entry',
-  'search_entries'
+  'search_entries',
+  'delete_entry'
 ] as const;
 
 // ============================================
@@ -93,11 +94,11 @@ describe('ToolRegistry - Tool Schema Properties', () => {
       );
     });
 
-    it('should have all 7 MVP tools registered', () => {
+    it('should have all 8 registered tools', () => {
       const allTools = toolRegistry.getAllTools();
       
-      // Should have exactly 7 tools
-      expect(allTools.length).toBe(7);
+      // Should have exactly 8 tools
+      expect(allTools.length).toBe(8);
       
       // All MVP tool names should be present
       const registeredNames = allTools.map(t => t.function.name);

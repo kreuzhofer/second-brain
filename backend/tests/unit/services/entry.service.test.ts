@@ -260,6 +260,186 @@ describe('EntryService', () => {
 
       expect(result.content).toContain('Some important notes here');
     });
+
+    describe('body content updates', () => {
+      it('should append content to existing body', async () => {
+        // Create entry with initial body content
+        await entryService.create('people', {
+          name: 'Append Test',
+          context: '',
+          source_channel: 'api',
+          confidence: 0.9
+        }, 'api', '## Notes\n\nOriginal content.');
+
+        // Append new content
+        const result = await entryService.update('people/append-test.md', {}, 'api', {
+          content: 'New appended content.',
+          mode: 'append'
+        });
+
+        expect(result.content).toContain('Original content.');
+        expect(result.content).toContain('New appended content.');
+        // Original should come before appended
+        expect(result.content.indexOf('Original')).toBeLessThan(result.content.indexOf('New appended'));
+      });
+
+      it('should append content to empty body', async () => {
+        await entryService.create('people', {
+          name: 'Append Empty Test',
+          context: '',
+          source_channel: 'api',
+          confidence: 0.9
+        });
+
+        const result = await entryService.update('people/append-empty-test.md', {}, 'api', {
+          content: 'First content.',
+          mode: 'append'
+        });
+
+        expect(result.content).toBe('First content.');
+      });
+
+      it('should replace entire body content', async () => {
+        // Create entry with initial body content
+        await entryService.create('people', {
+          name: 'Replace Test',
+          context: '',
+          source_channel: 'api',
+          confidence: 0.9
+        }, 'api', '## Notes\n\nOriginal content to be replaced.');
+
+        // Replace content
+        const result = await entryService.update('people/replace-test.md', {}, 'api', {
+          content: '## New Section\n\nCompletely new content.',
+          mode: 'replace'
+        });
+
+        expect(result.content).not.toContain('Original content');
+        expect(result.content).toContain('Completely new content.');
+      });
+
+      it('should append to existing section', async () => {
+        // Create entry with Notes section
+        await entryService.create('people', {
+          name: 'Section Append Test',
+          context: '',
+          source_channel: 'api',
+          confidence: 0.9
+        }, 'api', '## Notes\n\n- First note');
+
+        // Append to Notes section
+        const result = await entryService.update('people/section-append-test.md', {}, 'api', {
+          content: '- Second note',
+          mode: 'section',
+          section: 'Notes'
+        });
+
+        expect(result.content).toContain('- First note');
+        expect(result.content).toContain('- Second note');
+      });
+
+      it('should create section if it does not exist', async () => {
+        // Create entry without Log section
+        await entryService.create('people', {
+          name: 'Section Create Test',
+          context: '',
+          source_channel: 'api',
+          confidence: 0.9
+        }, 'api', '## Notes\n\nSome notes here.');
+
+        // Append to non-existent Log section
+        const result = await entryService.update('people/section-create-test.md', {}, 'api', {
+          content: 'First log entry',
+          mode: 'section',
+          section: 'Log'
+        });
+
+        expect(result.content).toContain('## Notes');
+        expect(result.content).toContain('## Log');
+        // Log section should contain date prefix
+        expect(result.content).toMatch(/\d{4}-\d{2}-\d{2}: First log entry/);
+      });
+
+      it('should prepend date to Log section entries', async () => {
+        // Create entry with Log section
+        await entryService.create('people', {
+          name: 'Log Date Test',
+          context: '',
+          source_channel: 'api',
+          confidence: 0.9
+        }, 'api', '## Log\n\n- 2026-01-01: Previous entry');
+
+        // Append to Log section
+        const result = await entryService.update('people/log-date-test.md', {}, 'api', {
+          content: 'New log entry',
+          mode: 'section',
+          section: 'Log'
+        });
+
+        // Should have date prefix in YYYY-MM-DD format
+        const today = new Date().toISOString().split('T')[0];
+        expect(result.content).toContain(`- ${today}: New log entry`);
+        expect(result.content).toContain('- 2026-01-01: Previous entry');
+      });
+
+      it('should preserve frontmatter when updating body', async () => {
+        await entryService.create('people', {
+          name: 'Frontmatter Preserve Test',
+          context: 'Important context',
+          source_channel: 'api',
+          confidence: 0.9
+        }, 'api', '## Notes\n\nOriginal notes.');
+
+        const result = await entryService.update('people/frontmatter-preserve-test.md', {}, 'api', {
+          content: 'Additional notes.',
+          mode: 'append'
+        });
+
+        // Frontmatter should be preserved
+        expect((result.entry as any).name).toBe('Frontmatter Preserve Test');
+        expect((result.entry as any).context).toBe('Important context');
+        expect((result.entry as any).confidence).toBe(0.9);
+      });
+
+      it('should throw error for section mode without section name', async () => {
+        await entryService.create('people', {
+          name: 'Section Error Test',
+          context: '',
+          source_channel: 'api',
+          confidence: 0.9
+        });
+
+        await expect(
+          entryService.update('people/section-error-test.md', {}, 'api', {
+            content: 'Some content',
+            mode: 'section'
+            // Missing section name
+          })
+        ).rejects.toThrow('Section name required for section mode');
+      });
+
+      it('should handle section append with multiple sections', async () => {
+        // Create entry with multiple sections
+        await entryService.create('projects', {
+          name: 'Multi Section Test',
+          next_action: 'Test',
+          source_channel: 'api',
+          confidence: 0.9
+        }, 'api', '## Notes\n\nProject notes.\n\n## Log\n\n- 2026-01-01: Started');
+
+        // Append to Notes section (not Log)
+        const result = await entryService.update('projects/multi-section-test.md', {}, 'api', {
+          content: 'More project notes.',
+          mode: 'section',
+          section: 'Notes'
+        });
+
+        expect(result.content).toContain('Project notes.');
+        expect(result.content).toContain('More project notes.');
+        expect(result.content).toContain('## Log');
+        expect(result.content).toContain('- 2026-01-01: Started');
+      });
+    });
   });
 
   describe('delete', () => {

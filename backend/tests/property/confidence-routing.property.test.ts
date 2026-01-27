@@ -48,7 +48,8 @@ const createMockClassificationAgent = (
       slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       fields: getCategoryFields(category),
       relatedEntries: [],
-      reasoning: 'Test classification'
+      reasoning: 'Test classification',
+      bodyContent: ''
     } as ClassificationResult)
   };
 };

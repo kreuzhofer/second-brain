@@ -15,9 +15,9 @@ describe('ToolRegistry', () => {
   });
 
   describe('getAllTools', () => {
-    it('should return all 7 MVP tools', () => {
+    it('should return all 8 registered tools', () => {
       const tools = registry.getAllTools();
-      expect(tools.length).toBe(7);
+      expect(tools.length).toBe(8);
     });
 
     it('should return tools with correct names', () => {
@@ -31,6 +31,7 @@ describe('ToolRegistry', () => {
       expect(toolNames).toContain('update_entry');
       expect(toolNames).toContain('move_entry');
       expect(toolNames).toContain('search_entries');
+      expect(toolNames).toContain('delete_entry');
     });
 
     it('should return tools in OpenAI function calling format', () => {
@@ -107,8 +108,26 @@ describe('ToolRegistry', () => {
       
       expect(tool?.function.parameters.properties.path).toBeDefined();
       expect(tool?.function.parameters.properties.updates).toBeDefined();
+      expect(tool?.function.parameters.properties.body_content).toBeDefined();
       expect(tool?.function.parameters.required).toContain('path');
-      expect(tool?.function.parameters.required).toContain('updates');
+      // updates is no longer required since body_content can be used alone
+      expect(tool?.function.parameters.required).not.toContain('updates');
+    });
+
+    it('should return tool with correct body_content schema for update_entry', () => {
+      const tool = registry.getTool('update_entry');
+      const bodyContent = tool?.function.parameters.properties.body_content;
+      
+      expect(bodyContent).toBeDefined();
+      expect(bodyContent?.type).toBe('object');
+      expect(bodyContent?.properties?.content).toBeDefined();
+      expect(bodyContent?.properties?.content?.type).toBe('string');
+      expect(bodyContent?.properties?.mode).toBeDefined();
+      expect(bodyContent?.properties?.mode?.type).toBe('string');
+      expect(bodyContent?.properties?.mode?.enum).toEqual(['append', 'replace', 'section']);
+      expect(bodyContent?.properties?.section).toBeDefined();
+      expect(bodyContent?.properties?.section?.type).toBe('string');
+      expect(bodyContent?.required).toEqual(['content', 'mode']);
     });
 
     it('should return tool with correct schema for move_entry', () => {
@@ -270,6 +289,52 @@ describe('ToolRegistry', () => {
         expect(result.valid).toBe(true);
       });
 
+      it('should validate update_entry with only path (no updates or body_content)', () => {
+        const result = registry.validateArguments('update_entry', {
+          path: 'projects/test.md'
+        });
+        
+        expect(result.valid).toBe(true);
+      });
+
+      it('should validate update_entry with body_content', () => {
+        const result = registry.validateArguments('update_entry', {
+          path: 'projects/test.md',
+          body_content: {
+            content: 'New note content',
+            mode: 'append'
+          }
+        });
+        
+        expect(result.valid).toBe(true);
+      });
+
+      it('should validate update_entry with body_content section mode', () => {
+        const result = registry.validateArguments('update_entry', {
+          path: 'projects/test.md',
+          body_content: {
+            content: 'Log entry',
+            mode: 'section',
+            section: 'Log'
+          }
+        });
+        
+        expect(result.valid).toBe(true);
+      });
+
+      it('should reject update_entry with invalid body_content mode', () => {
+        const result = registry.validateArguments('update_entry', {
+          path: 'projects/test.md',
+          body_content: {
+            content: 'Some content',
+            mode: 'invalid_mode'
+          }
+        });
+        
+        expect(result.valid).toBe(false);
+        expect(result.errors?.[0]).toContain("must be one of: append, replace, section");
+      });
+
       it('should validate search_entries with all parameters', () => {
         const result = registry.validateArguments('search_entries', {
           query: 'test search',
@@ -312,7 +377,36 @@ describe('ToolRegistry', () => {
       
       const retrieved = registry.getTool('custom_tool');
       expect(retrieved).toEqual(customTool);
-      expect(registry.getAllTools().length).toBe(8);
+      expect(registry.getAllTools().length).toBe(9);
+    });
+  });
+
+  describe('delete_entry tool', () => {
+    it('should return tool with correct schema for delete_entry', () => {
+      const tool = registry.getTool('delete_entry');
+      
+      expect(tool).toBeDefined();
+      expect(tool?.function.name).toBe('delete_entry');
+      expect(tool?.function.description).toContain('Delete an entry');
+      expect(tool?.function.parameters.properties.path).toBeDefined();
+      expect(tool?.function.parameters.properties.path.type).toBe('string');
+      expect(tool?.function.parameters.required).toContain('path');
+    });
+
+    it('should validate delete_entry arguments correctly', () => {
+      const validResult = registry.validateArguments('delete_entry', {
+        path: 'admin/grocery-shopping.md'
+      });
+      expect(validResult.valid).toBe(true);
+
+      const missingPathResult = registry.validateArguments('delete_entry', {});
+      expect(missingPathResult.valid).toBe(false);
+      expect(missingPathResult.errors).toContain('Missing required field: path');
+
+      const wrongTypeResult = registry.validateArguments('delete_entry', {
+        path: 123
+      });
+      expect(wrongTypeResult.valid).toBe(false);
     });
   });
 

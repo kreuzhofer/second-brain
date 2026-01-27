@@ -222,3 +222,24 @@ export type UpdateEntryInput =
   | UpdateIdeasInput 
   | UpdateAdminInput 
   | UpdateInboxInput;
+
+// ============================================
+// Body Content Update Types
+// ============================================
+
+/**
+ * Body content update modes:
+ * - append: Add content to end of existing body
+ * - replace: Replace entire body with new content
+ * - section: Append to a specific section (creates section if missing)
+ */
+export type BodyContentMode = 'append' | 'replace' | 'section';
+
+/**
+ * Body content update specification for EntryService.update()
+ */
+export interface BodyContentUpdate {
+  content: string;
+  mode: BodyContentMode;
+  section?: string;  // Required when mode is 'section'
+}

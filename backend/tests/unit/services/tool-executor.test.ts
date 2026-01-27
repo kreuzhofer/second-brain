@@ -11,6 +11,7 @@ import {
   GetEntryResult,
   DigestResult,
   UpdateEntryResult,
+  DeleteEntryResult,
   getToolExecutor,
   resetToolExecutor
 } from '../../../src/services/tool-executor';
@@ -154,7 +155,8 @@ describe('ToolExecutor', () => {
           dueDate: undefined
         },
         relatedEntries: [],
-        reasoning: 'This is clearly a project'
+        reasoning: 'This is clearly a project',
+        bodyContent: ''
       };
       mockClassificationAgent.classify.mockResolvedValue(mockClassificationResult);
 
@@ -206,7 +208,7 @@ describe('ToolExecutor', () => {
         })
       );
 
-      // Verify entry was created in the classified category (not inbox)
+      // Verify entry was created in the classified category (not inbox) with bodyContent
       expect(mockEntryService.create).toHaveBeenCalledWith(
         'projects',
         expect.objectContaining({
@@ -214,7 +216,8 @@ describe('ToolExecutor', () => {
           confidence: 0.85,
           source_channel: 'api'
         }),
-        'api'
+        'api',
+        '' // bodyContent from classification result
       );
     });
 
@@ -230,7 +233,8 @@ describe('ToolExecutor', () => {
           relatedProjects: []
         },
         relatedEntries: [],
-        reasoning: 'Not sure what this is'
+        reasoning: 'Not sure what this is',
+        bodyContent: ''
       };
       mockClassificationAgent.classify.mockResolvedValue(mockClassificationResult);
 
@@ -292,7 +296,8 @@ describe('ToolExecutor', () => {
           relatedProjects: []
         },
         relatedEntries: [],
-        reasoning: 'Hint indicated person'
+        reasoning: 'Hint indicated person',
+        bodyContent: ''
       };
       mockClassificationAgent.classify.mockResolvedValue(mockClassificationResult);
 
@@ -347,6 +352,81 @@ describe('ToolExecutor', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Classification failed');
+    });
+
+    // Integration test for classify_and_capture with body content (Task 6.2)
+    // Requirements: 1.1, 1.6
+    it('should pass body content from ClassificationAgent to EntryService.create()', async () => {
+      // Mock classification result with non-empty body content
+      const mockBodyContent = `## Notes
+
+- Met at the tech conference in Seattle
+- Works on AI/ML projects
+- Interested in collaboration opportunities`;
+
+      const mockClassificationResult: ClassificationResult = {
+        category: 'people',
+        confidence: 0.92,
+        name: 'Sarah Chen',
+        slug: 'sarah-chen',
+        fields: {
+          context: 'Met at tech conference',
+          followUps: ['Schedule follow-up call'],
+          relatedProjects: []
+        },
+        relatedEntries: [],
+        reasoning: 'Input describes meeting a person with professional context',
+        bodyContent: mockBodyContent
+      };
+      mockClassificationAgent.classify.mockResolvedValue(mockClassificationResult);
+
+      // Mock entry creation with body content
+      const mockCreatedEntry: EntryWithPath = {
+        path: 'people/sarah-chen.md',
+        category: 'people',
+        entry: {
+          id: 'test-id',
+          name: 'Sarah Chen',
+          tags: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          source_channel: 'api',
+          confidence: 0.92,
+          context: 'Met at tech conference',
+          follow_ups: ['Schedule follow-up call'],
+          related_projects: [],
+          last_touched: new Date().toISOString().split('T')[0]
+        },
+        content: mockBodyContent
+      };
+      mockEntryService.create.mockResolvedValue(mockCreatedEntry);
+
+      const toolCall: ToolCall = {
+        name: 'classify_and_capture',
+        arguments: { text: 'Met Sarah Chen at the tech conference in Seattle. She works on AI/ML projects and is interested in collaboration.' }
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      // Verify successful capture
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      const captureResult = result.data as CaptureResult;
+      expect(captureResult.path).toBe('people/sarah-chen.md');
+      expect(captureResult.category).toBe('people');
+      expect(captureResult.name).toBe('Sarah Chen');
+
+      // Verify body content was passed to EntryService.create()
+      expect(mockEntryService.create).toHaveBeenCalledWith(
+        'people',
+        expect.objectContaining({
+          name: 'Sarah Chen',
+          confidence: 0.92,
+          source_channel: 'api'
+        }),
+        'api',
+        mockBodyContent // Verify body content is passed as 4th argument
+      );
     });
   });
 
@@ -729,7 +809,7 @@ Reply with thoughts or adjustments.`;
       const updateResult = result.data as UpdateEntryResult;
       expect(updateResult.path).toBe('projects/test-project.md');
       expect(updateResult.updatedFields).toEqual(['status']);
-      expect(mockEntryService.update).toHaveBeenCalledWith('projects/test-project.md', { status: 'done' }, 'api');
+      expect(mockEntryService.update).toHaveBeenCalledWith('projects/test-project.md', { status: 'done' }, 'api', undefined);
     });
 
     it('should handle EntryNotFoundError gracefully', async () => {
@@ -744,7 +824,7 @@ Reply with thoughts or adjustments.`;
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Entry not found');
-      expect(mockEntryService.update).toHaveBeenCalledWith('projects/non-existent.md', { status: 'done' }, 'api');
+      expect(mockEntryService.update).toHaveBeenCalledWith('projects/non-existent.md', { status: 'done' }, 'api', undefined);
     });
 
     it('should handle multiple field updates', async () => {
@@ -786,7 +866,7 @@ Reply with thoughts or adjustments.`;
       const updateResult = result.data as UpdateEntryResult;
       expect(updateResult.path).toBe('projects/test-project.md');
       expect(updateResult.updatedFields).toEqual(['status', 'next_action', 'due_date']);
-      expect(mockEntryService.update).toHaveBeenCalledWith('projects/test-project.md', updates, 'api');
+      expect(mockEntryService.update).toHaveBeenCalledWith('projects/test-project.md', updates, 'api', undefined);
     });
 
     it('should handle EntryService errors gracefully', async () => {
@@ -801,6 +881,345 @@ Reply with thoughts or adjustments.`;
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('File system error');
+    });
+
+    // Unit tests for update_entry body content (Task 5.3)
+    // Requirements: 2.1, 2.2, 2.3, 2.4
+
+    it('should pass body_content with append mode to EntryService', async () => {
+      const mockUpdatedEntry: EntryWithPath = {
+        path: 'projects/test-project.md',
+        category: 'projects',
+        entry: {
+          id: 'test-id',
+          name: 'Test Project',
+          tags: [],
+          created_at: '2024-01-01T12:00:00Z',
+          updated_at: '2024-01-02T12:00:00Z',
+          source_channel: 'api',
+          confidence: 0.9,
+          status: 'active',
+          next_action: 'Review requirements',
+          related_people: []
+        },
+        content: 'Existing content\n\nNew appended content'
+      };
+      mockEntryService.update.mockResolvedValue(mockUpdatedEntry);
+
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: {
+          path: 'projects/test-project.md',
+          body_content: {
+            content: 'New appended content',
+            mode: 'append'
+          }
+        }
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      const updateResult = result.data as UpdateEntryResult;
+      expect(updateResult.path).toBe('projects/test-project.md');
+      expect(updateResult.bodyUpdated).toBe(true);
+      expect(updateResult.bodyMode).toBe('append');
+      expect(mockEntryService.update).toHaveBeenCalledWith(
+        'projects/test-project.md',
+        {},
+        'api',
+        { content: 'New appended content', mode: 'append', section: undefined }
+      );
+    });
+
+    it('should pass body_content with replace mode to EntryService', async () => {
+      const mockUpdatedEntry: EntryWithPath = {
+        path: 'ideas/test-idea.md',
+        category: 'ideas',
+        entry: {
+          id: 'test-id',
+          name: 'Test Idea',
+          tags: [],
+          created_at: '2024-01-01T12:00:00Z',
+          updated_at: '2024-01-02T12:00:00Z',
+          source_channel: 'api',
+          confidence: 0.85,
+          one_liner: 'A great idea',
+          related_projects: []
+        },
+        content: 'Completely new content'
+      };
+      mockEntryService.update.mockResolvedValue(mockUpdatedEntry);
+
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: {
+          path: 'ideas/test-idea.md',
+          body_content: {
+            content: 'Completely new content',
+            mode: 'replace'
+          }
+        }
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      const updateResult = result.data as UpdateEntryResult;
+      expect(updateResult.path).toBe('ideas/test-idea.md');
+      expect(updateResult.bodyUpdated).toBe(true);
+      expect(updateResult.bodyMode).toBe('replace');
+      expect(mockEntryService.update).toHaveBeenCalledWith(
+        'ideas/test-idea.md',
+        {},
+        'api',
+        { content: 'Completely new content', mode: 'replace', section: undefined }
+      );
+    });
+
+    it('should pass body_content with section mode to EntryService', async () => {
+      const mockUpdatedEntry: EntryWithPath = {
+        path: 'people/john-doe.md',
+        category: 'people',
+        entry: {
+          id: 'test-id',
+          name: 'John Doe',
+          tags: [],
+          created_at: '2024-01-01T12:00:00Z',
+          updated_at: '2024-01-02T12:00:00Z',
+          source_channel: 'api',
+          confidence: 0.9,
+          context: 'Met at conference',
+          follow_ups: [],
+          related_projects: [],
+          last_touched: '2024-01-02'
+        },
+        content: '## Notes\n\nExisting notes\n\nNew note about John'
+      };
+      mockEntryService.update.mockResolvedValue(mockUpdatedEntry);
+
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: {
+          path: 'people/john-doe.md',
+          body_content: {
+            content: 'New note about John',
+            mode: 'section',
+            section: 'Notes'
+          }
+        }
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      const updateResult = result.data as UpdateEntryResult;
+      expect(updateResult.path).toBe('people/john-doe.md');
+      expect(updateResult.bodyUpdated).toBe(true);
+      expect(updateResult.bodyMode).toBe('section');
+      expect(mockEntryService.update).toHaveBeenCalledWith(
+        'people/john-doe.md',
+        {},
+        'api',
+        { content: 'New note about John', mode: 'section', section: 'Notes' }
+      );
+    });
+
+    it('should return error when section mode is used without section name', async () => {
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: {
+          path: 'projects/test-project.md',
+          body_content: {
+            content: 'Some content',
+            mode: 'section'
+            // Missing section name
+          }
+        }
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Section name required for section mode');
+      expect(mockEntryService.update).not.toHaveBeenCalled();
+    });
+
+    it('should return error for invalid body_content mode', async () => {
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: {
+          path: 'projects/test-project.md',
+          body_content: {
+            content: 'Some content',
+            mode: 'invalid_mode'
+          }
+        }
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      expect(result.success).toBe(false);
+      // Schema validation catches invalid mode before handler code
+      expect(result.error).toContain('body_content.mode');
+      expect(result.error).toContain('append, replace, section');
+      expect(mockEntryService.update).not.toHaveBeenCalled();
+    });
+
+    it('should allow combining frontmatter updates with body_content updates', async () => {
+      const mockUpdatedEntry: EntryWithPath = {
+        path: 'projects/test-project.md',
+        category: 'projects',
+        entry: {
+          id: 'test-id',
+          name: 'Test Project',
+          tags: [],
+          created_at: '2024-01-01T12:00:00Z',
+          updated_at: '2024-01-02T12:00:00Z',
+          source_channel: 'api',
+          confidence: 0.9,
+          status: 'done',
+          next_action: 'Wrap up',
+          related_people: []
+        },
+        content: '## Log\n\n- 2024-01-02: Project completed'
+      };
+      mockEntryService.update.mockResolvedValue(mockUpdatedEntry);
+
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: {
+          path: 'projects/test-project.md',
+          updates: { status: 'done' },
+          body_content: {
+            content: 'Project completed',
+            mode: 'section',
+            section: 'Log'
+          }
+        }
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      const updateResult = result.data as UpdateEntryResult;
+      expect(updateResult.path).toBe('projects/test-project.md');
+      expect(updateResult.updatedFields).toEqual(['status']);
+      expect(updateResult.bodyUpdated).toBe(true);
+      expect(updateResult.bodyMode).toBe('section');
+      expect(mockEntryService.update).toHaveBeenCalledWith(
+        'projects/test-project.md',
+        { status: 'done' },
+        'api',
+        { content: 'Project completed', mode: 'section', section: 'Log' }
+      );
+    });
+  });
+
+  describe('delete_entry handler', () => {
+    it('should return path and name on successful deletion', async () => {
+      // Mock reading existing entry to get name
+      const mockExistingEntry: EntryWithPath = {
+        path: 'admin/grocery-shopping.md',
+        category: 'admin',
+        entry: {
+          id: 'test-id',
+          name: 'Grocery Shopping',
+          tags: [],
+          created_at: '2024-01-01T12:00:00Z',
+          updated_at: '2024-01-02T12:00:00Z',
+          source_channel: 'api',
+          confidence: 0.9,
+          status: 'pending'
+        },
+        content: ''
+      };
+      mockEntryService.read.mockResolvedValue(mockExistingEntry);
+      mockEntryService.delete.mockResolvedValue(undefined);
+
+      const toolCall: ToolCall = {
+        name: 'delete_entry',
+        arguments: { path: 'admin/grocery-shopping.md' }
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      const deleteResult = result.data as DeleteEntryResult;
+      expect(deleteResult.path).toBe('admin/grocery-shopping.md');
+      expect(deleteResult.name).toBe('Grocery Shopping');
+      expect(deleteResult.category).toBe('admin');
+      expect(mockEntryService.read).toHaveBeenCalledWith('admin/grocery-shopping.md');
+      expect(mockEntryService.delete).toHaveBeenCalledWith('admin/grocery-shopping.md', 'api');
+    });
+
+    it('should return error for non-existent entry', async () => {
+      mockEntryService.read.mockRejectedValue(new Error('Entry not found: projects/non-existent.md'));
+
+      const toolCall: ToolCall = {
+        name: 'delete_entry',
+        arguments: { path: 'projects/non-existent.md' }
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Entry not found');
+      expect(mockEntryService.read).toHaveBeenCalledWith('projects/non-existent.md');
+      expect(mockEntryService.delete).not.toHaveBeenCalled();
+    });
+
+    it('should use suggested_name for inbox entries', async () => {
+      // Mock reading existing inbox entry
+      const mockInboxEntry: EntryWithPath = {
+        path: 'inbox/20240101120000-unclear-thought.md',
+        category: 'inbox',
+        entry: {
+          id: 'test-id',
+          original_text: 'Some unclear thought',
+          suggested_category: 'ideas',
+          suggested_name: 'Unclear Thought',
+          confidence: 0.45,
+          status: 'needs_review',
+          source_channel: 'api',
+          created_at: '2024-01-01T12:00:00Z'
+        },
+        content: ''
+      };
+      mockEntryService.read.mockResolvedValue(mockInboxEntry);
+      mockEntryService.delete.mockResolvedValue(undefined);
+
+      const toolCall: ToolCall = {
+        name: 'delete_entry',
+        arguments: { path: 'inbox/20240101120000-unclear-thought.md' }
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      const deleteResult = result.data as DeleteEntryResult;
+      expect(deleteResult.path).toBe('inbox/20240101120000-unclear-thought.md');
+      expect(deleteResult.name).toBe('Unclear Thought');
+      expect(deleteResult.category).toBe('inbox');
+    });
+
+    it('should validate required path argument', async () => {
+      const toolCall: ToolCall = {
+        name: 'delete_entry',
+        arguments: {} // Missing required 'path'
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Invalid arguments');
+      expect(result.error).toContain('path');
     });
   });
 
@@ -1250,7 +1669,7 @@ Reply with thoughts or adjustments.`;
       const result = await toolExecutor.execute(toolCall);
 
       expect(result.success).toBe(true);
-      expect(mockEntryService.update).toHaveBeenCalledWith('projects/test.md', { status: 'done' }, 'api');
+      expect(mockEntryService.update).toHaveBeenCalledWith('projects/test.md', { status: 'done' }, 'api', undefined);
     });
 
     it('should dispatch to move_entry handler', async () => {
@@ -1366,19 +1785,6 @@ Reply with thoughts or adjustments.`;
       expect(result.success).toBe(false);
       expect(result.error).toContain('Invalid arguments');
       expect(result.error).toContain('path');
-    });
-
-    it('should validate required fields for update_entry', async () => {
-      const toolCall: ToolCall = {
-        name: 'update_entry',
-        arguments: { path: 'test.md' } // Missing required 'updates'
-      };
-
-      const result = await toolExecutor.execute(toolCall);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Invalid arguments');
-      expect(result.error).toContain('updates');
     });
 
     it('should validate required fields for move_entry', async () => {

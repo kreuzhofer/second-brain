@@ -12,6 +12,7 @@ import {
   EntryFilters,
   CreateEntryInput,
   UpdateEntryInput,
+  BodyContentUpdate,
   PeopleEntry,
   ProjectsEntry,
   IdeasEntry,
@@ -110,6 +111,95 @@ function getCurrentDate(): string {
 }
 
 /**
+ * Find a section in markdown content and return its position
+ * Returns the index after the section header, or -1 if not found
+ */
+function findSectionPosition(content: string, sectionName: string): { start: number; end: number } | null {
+  // Match section header (## Section Name)
+  const sectionRegex = new RegExp(`^##\\s+${escapeRegExp(sectionName)}\\s*$`, 'im');
+  const match = content.match(sectionRegex);
+  
+  if (!match || match.index === undefined) {
+    return null;
+  }
+  
+  const start = match.index + match[0].length;
+  
+  // Find the next section header or end of content
+  const nextSectionRegex = /^##\s+/m;
+  const remainingContent = content.slice(start);
+  const nextMatch = remainingContent.match(nextSectionRegex);
+  
+  const end = nextMatch && nextMatch.index !== undefined 
+    ? start + nextMatch.index 
+    : content.length;
+  
+  return { start, end };
+}
+
+/**
+ * Escape special regex characters in a string
+ */
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Apply body content update to existing content
+ */
+function applyBodyUpdate(existingContent: string, update: BodyContentUpdate): string {
+  const { content, mode, section } = update;
+  
+  switch (mode) {
+    case 'replace':
+      return content;
+      
+    case 'append':
+      if (!existingContent.trim()) {
+        return content;
+      }
+      return existingContent.trimEnd() + '\n\n' + content;
+      
+    case 'section': {
+      if (!section) {
+        throw new InvalidEntryDataError('Section name required for section mode');
+      }
+      
+      // Format content for Log section with date prefix
+      const formattedContent = section.toLowerCase() === 'log'
+        ? `- ${getCurrentDate()}: ${content}`
+        : content;
+      
+      const sectionPos = findSectionPosition(existingContent, section);
+      
+      if (sectionPos) {
+        // Section exists - append to it
+        const beforeSection = existingContent.slice(0, sectionPos.start);
+        const sectionContent = existingContent.slice(sectionPos.start, sectionPos.end);
+        const afterSection = existingContent.slice(sectionPos.end);
+        
+        // Append content to section
+        const updatedSection = sectionContent.trimEnd() + '\n' + formattedContent + '\n';
+        
+        return beforeSection + updatedSection + afterSection;
+      } else {
+        // Section doesn't exist - create it at the end
+        const newSection = `\n## ${section}\n\n${formattedContent}\n`;
+        
+        if (!existingContent.trim()) {
+          return `## ${section}\n\n${formattedContent}`;
+        }
+        
+        return existingContent.trimEnd() + newSection;
+      }
+    }
+      
+    default:
+      throw new InvalidEntryDataError(`Invalid body update mode: ${mode}`);
+  }
+}
+
+/**
  * Format timestamp for inbox file naming
  */
 function getInboxTimestamp(): string {
@@ -141,7 +231,7 @@ export class EntryService {
   /**
    * Create a new entry
    */
-  async create(category: Category, data: CreateEntryInput, channel?: Channel): Promise<EntryWithPath> {
+  async create(category: Category, data: CreateEntryInput, channel?: Channel, bodyContent?: string): Promise<EntryWithPath> {
     const now = getCurrentTimestamp();
     const id = uuidv4();
     const sourceChannel = channel || (data as any).source_channel || 'api';
@@ -247,8 +337,8 @@ export class EntryService {
       }
     }
 
-    // Serialize to markdown with frontmatter
-    const content = matter.stringify('', entry);
+    // Serialize to markdown with frontmatter and optional body content
+    const content = matter.stringify(bodyContent || '', entry);
     await writeFile(fullPath, content, 'utf-8');
 
     // Regenerate index
@@ -265,7 +355,7 @@ export class EntryService {
       path: entryPath,
       category,
       entry,
-      content: ''
+      content: bodyContent || ''
     };
   }
 
@@ -297,7 +387,7 @@ export class EntryService {
   /**
    * Update an existing entry
    */
-  async update(path: string, updates: UpdateEntryInput, channel: Channel = 'api'): Promise<EntryWithPath> {
+  async update(path: string, updates: UpdateEntryInput, channel: Channel = 'api', bodyUpdate?: BodyContentUpdate): Promise<EntryWithPath> {
     // Read existing entry
     const existing = await this.read(path);
     const category = existing.category;
@@ -315,8 +405,14 @@ export class EntryService {
       (updatedEntry as PeopleEntry).last_touched = getCurrentDate();
     }
 
-    // Serialize to markdown, preserving content section
-    const content = matter.stringify(existing.content || '', updatedEntry);
+    // Apply body content update if provided
+    let finalContent = existing.content || '';
+    if (bodyUpdate) {
+      finalContent = applyBodyUpdate(finalContent, bodyUpdate);
+    }
+
+    // Serialize to markdown with frontmatter and body content
+    const content = matter.stringify(finalContent, updatedEntry);
     const fullPath = getFullPath(this.dataPath, path);
     await writeFile(fullPath, content, 'utf-8');
 
@@ -327,7 +423,17 @@ export class EntryService {
     const entryName = category === 'inbox'
       ? (updatedEntry as InboxEntry).suggested_name
       : (updatedEntry as any).name;
-    const changeSummary = Object.keys(updates).join(', ') + ' updated';
+    
+    // Build change summary
+    const changes: string[] = [];
+    if (Object.keys(updates).length > 0) {
+      changes.push(Object.keys(updates).join(', ') + ' updated');
+    }
+    if (bodyUpdate) {
+      changes.push(`body ${bodyUpdate.mode}${bodyUpdate.section ? ` (${bodyUpdate.section})` : ''}`);
+    }
+    const changeSummary = changes.join('; ') || 'updated';
+    
     const commitMessage = formatUpdateCommit(category, entryName, changeSummary, channel);
     await this.gitService.commit(commitMessage, [path, 'index.md']);
 
@@ -335,7 +441,7 @@ export class EntryService {
       path,
       category,
       entry: updatedEntry as Entry,
-      content: existing.content
+      content: finalContent
     };
   }
 

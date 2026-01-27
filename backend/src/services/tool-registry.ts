@@ -169,7 +169,7 @@ export class ToolRegistry {
       type: 'function',
       function: {
         name: 'update_entry',
-        description: 'Update fields of an existing entry. Use when the user wants to modify an entry, change its status, update notes, or add information.',
+        description: 'Update fields or body content of an existing entry. Use when the user wants to modify an entry, change its status, update notes, add information, or append content to the entry body.',
         parameters: {
           type: 'object',
           properties: {
@@ -179,11 +179,31 @@ export class ToolRegistry {
             },
             updates: {
               type: 'object',
-              description: 'Fields to update (e.g., status, next_action, due_date, context)',
+              description: 'Frontmatter fields to update (e.g., status, next_action, due_date, context)',
               additionalProperties: true
+            },
+            body_content: {
+              type: 'object',
+              description: 'Body content modification',
+              properties: {
+                content: {
+                  type: 'string',
+                  description: 'Content to add/replace'
+                },
+                mode: {
+                  type: 'string',
+                  enum: ['append', 'replace', 'section'],
+                  description: 'How to apply the content'
+                },
+                section: {
+                  type: 'string',
+                  description: 'Section name for section mode (e.g., Notes, Log)'
+                }
+              },
+              required: ['content', 'mode']
             }
           },
-          required: ['path', 'updates']
+          required: ['path']
         }
       }
     });
@@ -237,6 +257,25 @@ export class ToolRegistry {
             }
           },
           required: ['query']
+        }
+      }
+    });
+
+    // delete_entry
+    this.registerTool({
+      type: 'function',
+      function: {
+        name: 'delete_entry',
+        description: 'Delete an entry from the knowledge base. Use when the user explicitly asks to remove, delete, or get rid of an entry.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'The entry path to delete (e.g., admin/grocery-shopping.md)'
+            }
+          },
+          required: ['path']
         }
       }
     });

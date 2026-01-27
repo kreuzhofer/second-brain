@@ -49,8 +49,25 @@ const CLASSIFICATION_SCHEMA = `{
     // For admin: { "status": "pending", "dueDate"?: string }
   },
   "related_entries": ["slug1", "slug2"],
-  "reasoning": "Brief explanation of classification decision"
+  "reasoning": "Brief explanation of classification decision",
+  "body_content": "Markdown body content with appropriate sections"
 }`;
+
+/**
+ * Body content generation guidelines by category
+ * Used to instruct the LLM on how to generate body content for each category
+ */
+const BODY_CONTENT_GUIDELINES = `
+Body Content Generation Guidelines:
+Generate appropriate markdown body content based on the category. Extract and organize information intelligently - do NOT simply copy the raw input text verbatim.
+
+- people: Generate a "## Notes" section with observations about the person, their preferences, communication style, or any relevant context from the input.
+- projects: Generate a "## Notes" section for project context and background. Optionally include a "## Log" section for timeline entries if the input mentions specific events or milestones.
+- ideas: Generate a "## Elaboration" section that expands on the concept, explores implications, or adds structure to the idea.
+- admin: Generate a "## Notes" section ONLY if the input contains additional context beyond the task itself. If the input is just a simple task with no extra context, return an empty string for body_content.
+
+If the input text contains no additional context worth capturing in the body, return an empty string for body_content.
+`;
 
 // ============================================
 // Custom Errors
@@ -180,6 +197,8 @@ Extract structured fields based on the category. Return JSON only.
 Schema:
 ${CLASSIFICATION_SCHEMA}
 
+${BODY_CONTENT_GUIDELINES}
+
 If the input is ambiguous or lacks context, set confidence below 0.6 and explain in reasoning.
 
 Current index for context:
@@ -307,6 +326,7 @@ ${context.indexContent || '(No existing entries)'}
       fields: this.normalizeFields(parsed.category, parsed.fields),
       relatedEntries: this.normalizeRelatedEntries(parsed.related_entries),
       reasoning: String(parsed.reasoning || ''),
+      bodyContent: this.normalizeBodyContent(parsed.body_content),
     };
 
     return result;
@@ -325,6 +345,7 @@ ${context.indexContent || '(No existing entries)'}
     fields: Record<string, unknown>;
     related_entries?: string[];
     reasoning?: string;
+    body_content?: string;
   } {
     if (typeof response !== 'object' || response === null) {
       return false;
@@ -467,6 +488,18 @@ ${context.indexContent || '(No existing entries)'}
    */
   private normalizeRelatedEntries(value: unknown): string[] {
     return this.normalizeStringArray(value);
+  }
+
+  /**
+   * Normalize body content to a string.
+   * Ensures the body content is a valid string, trimmed of excess whitespace.
+   * Returns empty string if body_content is not provided or is not a string.
+   */
+  private normalizeBodyContent(value: unknown): string {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+    return '';
   }
 }
 
