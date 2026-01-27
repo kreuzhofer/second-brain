@@ -7,7 +7,7 @@ import { entriesRouter } from './routes/entries';
 import { indexRouter } from './routes/index-route';
 import { chatRouter } from './routes/chat';
 import { digestRouter } from './routes/digest';
-import { initializeDataFolder } from './services/init.service';
+import { initializeDataFolder, initializeEmailChannel, shutdownEmailChannel } from './services/init.service';
 import { getCronService, resetCronService } from './services/cron.service';
 
 // Validate environment variables before starting
@@ -65,13 +65,17 @@ async function start() {
     // Initialize data folder structure
     await initializeDataFolder();
     
+    // Initialize email channel (verifies connectivity, starts polling if enabled)
+    await initializeEmailChannel();
+    
     // Start cron scheduler for digests and reviews
     const cronService = getCronService();
     cronService.start();
     
     // Graceful shutdown handler
-    const shutdown = () => {
+    const shutdown = async () => {
       console.log('Shutting down gracefully...');
+      await shutdownEmailChannel();
       resetCronService();
       process.exit(0);
     };

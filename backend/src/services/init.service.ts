@@ -1,8 +1,10 @@
 import { mkdir, readdir, access, constants } from 'fs/promises';
 import { join } from 'path';
 import { getConfig } from '../config/env';
+import { getEmailConfig } from '../config/email';
 import { GitService, getGitService, formatInitCommit } from './git.service';
 import { IndexService, getIndexService } from './index.service';
+import { getEmailService, EmailService } from './email.service';
 import { Category } from '../types/entry.types';
 
 const CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'admin', 'inbox'];
@@ -116,4 +118,79 @@ export async function verifyDataFolder(dataPath?: string): Promise<boolean> {
   }
 
   return true;
+}
+
+
+/**
+ * Initialize the email channel
+ * Loads email configuration, verifies connectivity, and starts IMAP polling if enabled
+ * 
+ * Requirements: 10.1, 10.2, 10.5
+ */
+export async function initializeEmailChannel(): Promise<void> {
+  const emailConfig = getEmailConfig();
+  
+  // Log email channel status (Requirement 10.2)
+  if (emailConfig.enabled) {
+    console.log('Email channel: enabled');
+    
+    // Log and verify SMTP
+    if (emailConfig.smtp) {
+      const secureMode = emailConfig.smtp.secure ? 'TLS' : 'STARTTLS';
+      console.log(`  SMTP: ${emailConfig.smtp.host}:${emailConfig.smtp.port} (${secureMode})`);
+      console.log(`  SMTP user: ${emailConfig.smtp.user}`);
+      
+      // Verify SMTP connection
+      const { getSmtpSender } = await import('./smtp-sender');
+      const smtpSender = getSmtpSender();
+      const smtpResult = await smtpSender.verify();
+      if (smtpResult.success) {
+        console.log('  SMTP: connection verified ✓');
+      } else {
+        console.error(`  SMTP: connection failed - ${smtpResult.error}`);
+      }
+    }
+    
+    // Log and verify IMAP
+    if (emailConfig.imap) {
+      const tlsMode = emailConfig.imap.tls ? 'TLS' : 'plain';
+      console.log(`  IMAP: ${emailConfig.imap.host}:${emailConfig.imap.port} (${tlsMode})`);
+      console.log(`  IMAP user: ${emailConfig.imap.user}`);
+      console.log(`  Poll interval: ${emailConfig.pollInterval}s`);
+      
+      // Verify IMAP connection
+      const { getImapPoller } = await import('./imap-poller');
+      const imapPoller = getImapPoller();
+      const imapResult = await imapPoller.testConnection();
+      if (imapResult.success) {
+        console.log('  IMAP: connection verified ✓');
+      } else {
+        console.error(`  IMAP: connection failed - ${imapResult.error}`);
+      }
+    }
+    
+    // Start IMAP polling if email is enabled (Requirement 10.5)
+    const emailService = getEmailService();
+    if (emailService.isEnabled()) {
+      emailService.startPolling();
+      console.log('  IMAP polling: started');
+    }
+  } else {
+    // Log disabled status (Requirement 10.1)
+    console.log('Email channel: disabled (missing configuration)');
+  }
+}
+
+/**
+ * Shutdown the email channel
+ * Stops IMAP polling gracefully
+ */
+export async function shutdownEmailChannel(): Promise<void> {
+  const emailConfig = getEmailConfig();
+  
+  if (emailConfig.enabled) {
+    const emailService = getEmailService();
+    emailService.stopPolling();
+    console.log('Email channel: stopped');
+  }
 }

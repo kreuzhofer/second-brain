@@ -33,6 +33,44 @@ export interface EnvConfig {
   INACTIVITY_NUDGE_TIME: string;
 }
 
+/**
+ * Email Channel Environment Variables (all optional)
+ * 
+ * The email channel is completely optional. When not configured, the application
+ * functions normally without email capabilities.
+ * 
+ * SMTP Configuration (for sending emails):
+ * - SMTP_HOST: SMTP server hostname (e.g., "smtp.gmail.com")
+ * - SMTP_PORT: SMTP server port (default: 587)
+ *   - Port 465: Uses implicit TLS (connection encrypted from start)
+ *   - Port 587: Uses STARTTLS (starts unencrypted, upgrades to TLS)
+ * - SMTP_USER: SMTP authentication username (usually email address)
+ * - SMTP_PASS: SMTP authentication password or app-specific password
+ * - SMTP_SECURE: Override TLS mode (optional, auto-detected from port)
+ *   - "true"/"yes"/"1": Force implicit TLS (like port 465)
+ *   - "false"/"no"/"0": Force STARTTLS upgrade (like port 587)
+ *   - Not set: Auto-detect based on port (465=TLS, others=STARTTLS)
+ * 
+ * IMAP Configuration (for receiving emails):
+ * - IMAP_HOST: IMAP server hostname (e.g., "imap.gmail.com")
+ * - IMAP_PORT: IMAP server port (default: 993 for TLS)
+ * - IMAP_USER: IMAP authentication username (usually email address)
+ * - IMAP_PASS: IMAP authentication password or app-specific password
+ * 
+ * Polling Configuration:
+ * - EMAIL_POLL_INTERVAL: Seconds between IMAP polls (default: 60)
+ * 
+ * Email channel is enabled only when ALL of the following are set:
+ * - SMTP_HOST, SMTP_USER, SMTP_PASS (for sending)
+ * - IMAP_HOST, IMAP_USER, IMAP_PASS (for receiving)
+ * 
+ * At startup, the application verifies connectivity to both SMTP and IMAP
+ * servers and logs the results. Check logs for "connection verified ✓" or
+ * error messages if email is not working.
+ * 
+ * See backend/src/config/email.ts for detailed configuration handling.
+ */
+
 export class MissingEnvVarError extends Error {
   constructor(varName: string) {
     super(`Required environment variable not set: ${varName}`);

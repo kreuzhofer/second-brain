@@ -4,11 +4,14 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
 
 ## Features
 
-- **Frictionless Capture**: Capture thoughts via chat UI or REST API
+- **Frictionless Capture**: Capture thoughts via chat UI, REST API, or email
 - **Automatic Classification**: AI classifies entries into people, projects, ideas, or admin tasks
 - **Markdown Storage**: All data stored as plain markdown files with YAML frontmatter
 - **Git Version Control**: Every change creates a git commit for full audit trail
 - **Auto-Generated Index**: Always up-to-date index.md summarizing all entries
+- **Email Channel**: Bidirectional email integration for capture and notifications (optional)
+- **Daily Digests**: Morning summaries of top priorities and stale items
+- **Weekly Reviews**: End-of-week activity summaries and suggestions
 - **Self-Hosted**: Your data stays on your machine
 
 ## Prerequisites
@@ -55,6 +58,35 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
 | `TIMEZONE` | No | `Europe/Berlin` | Timezone for timestamps |
 | `CONFIDENCE_THRESHOLD` | No | `0.6` | Classification confidence threshold |
 | `PORT` | No | `3000` | Server port |
+
+### Email Channel (Optional)
+
+The email channel enables bidirectional email integration. When configured, you can:
+- Capture thoughts by sending emails to your Second Brain
+- Receive confirmation emails when entries are created
+- Get daily digest and weekly review emails
+
+At startup, the application verifies connectivity to both SMTP and IMAP servers and logs the results. Check logs for "connection verified ✓" or error messages.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `SMTP_HOST` | No | - | SMTP server hostname |
+| `SMTP_PORT` | No | `587` | SMTP server port (465 for implicit TLS, 587 for STARTTLS) |
+| `SMTP_USER` | No | - | SMTP username (email address) |
+| `SMTP_PASS` | No | - | SMTP password or app-specific password |
+| `SMTP_SECURE` | No | auto | TLS mode: `true`=implicit TLS, `false`=STARTTLS (auto-detected from port) |
+| `IMAP_HOST` | No | - | IMAP server hostname |
+| `IMAP_PORT` | No | `993` | IMAP server port |
+| `IMAP_USER` | No | - | IMAP username (email address) |
+| `IMAP_PASS` | No | - | IMAP password or app-specific password |
+| `EMAIL_POLL_INTERVAL` | No | `60` | Seconds between IMAP polls |
+
+**Note**: Email is enabled only when ALL SMTP variables (HOST, USER, PASS) AND all IMAP variables (HOST, USER, PASS) are configured. The application works normally without email.
+
+**TLS/SSL modes**:
+- Port 465: Implicit TLS (connection encrypted from start)
+- Port 587: STARTTLS (starts unencrypted, upgrades to TLS)
+- `SMTP_SECURE` auto-detects based on port, or set explicitly to override
 
 ## Development Setup
 

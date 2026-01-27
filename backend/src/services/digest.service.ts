@@ -8,6 +8,7 @@ import { getConfig } from '../config/env';
 import { EntryService, getEntryService } from './entry.service';
 import { IndexService, getIndexService } from './index.service';
 import { ConversationService, getConversationService } from './conversation.service';
+import { DigestMailer, getDigestMailer } from './digest-mailer';
 import { getPrismaClient } from '../lib/prisma';
 import { EntrySummary } from '../types/entry.types';
 
@@ -59,17 +60,20 @@ export class DigestService {
   private entryService: EntryService | null;
   private indexService: IndexService | null;
   private conversationService: ConversationService | null;
+  private digestMailer: DigestMailer | null;
   private prisma = getPrismaClient();
 
   constructor(
     entryService?: EntryService | null,
     indexService?: IndexService | null,
-    conversationService?: ConversationService | null
+    conversationService?: ConversationService | null,
+    digestMailer?: DigestMailer | null
   ) {
     // Allow null services for testing formatting methods
     this.entryService = entryService === null ? null : (entryService || getEntryService());
     this.indexService = indexService === null ? null : (indexService || getIndexService());
     this.conversationService = conversationService === null ? null : (conversationService || getConversationService());
+    this.digestMailer = digestMailer === null ? null : (digestMailer || getDigestMailer());
   }
 
   /**
@@ -548,6 +552,55 @@ export class DigestService {
       'assistant',
       content
     );
+  }
+
+  /**
+   * Deliver daily digest via email
+   * Skips silently if email is not configured (Requirement 6.5)
+   * Does not block digest generation on email delivery
+   * 
+   * @param recipientEmail - Email address to send digest to
+   * @param content - Digest content (markdown)
+   */
+  async deliverDailyDigestToEmail(recipientEmail: string, content: string): Promise<void> {
+    if (!this.digestMailer) {
+      return; // Skip silently
+    }
+
+    try {
+      await this.digestMailer.sendDailyDigest(recipientEmail, content);
+    } catch (error) {
+      // Log but don't throw - email delivery shouldn't block digest generation
+      console.error('DigestService: Failed to send daily digest email:', error);
+    }
+  }
+
+  /**
+   * Deliver weekly review via email
+   * Skips silently if email is not configured (Requirement 6.5)
+   * Does not block digest generation on email delivery
+   * 
+   * @param recipientEmail - Email address to send review to
+   * @param content - Review content (markdown)
+   * @param startDate - Start of the week
+   * @param endDate - End of the week
+   */
+  async deliverWeeklyReviewToEmail(
+    recipientEmail: string,
+    content: string,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<void> {
+    if (!this.digestMailer) {
+      return; // Skip silently
+    }
+
+    try {
+      await this.digestMailer.sendWeeklyReview(recipientEmail, content, startDate, endDate);
+    } catch (error) {
+      // Log but don't throw - email delivery shouldn't block digest generation
+      console.error('DigestService: Failed to send weekly review email:', error);
+    }
   }
 
   /**
