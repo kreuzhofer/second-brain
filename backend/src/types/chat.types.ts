@@ -153,6 +153,7 @@ export interface ChatResponse {
     confidence: number;
   };
   clarificationNeeded: boolean;
+  toolsUsed?: string[];
 }
 
 // ============================================
@@ -216,6 +217,7 @@ export interface ChatApiResponse {
     confidence: number;
   };
   clarificationNeeded: boolean;
+  toolsUsed?: string[];
 }
 
 /**

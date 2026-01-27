@@ -211,7 +211,7 @@ confidence: 0.97
 - Book exam slot by mid-February
 ```
 
-**Inbox** (`/data/inbox/{timestamp}-{slug}.md`)
+**Inbox** (`/data/inbox/{YYYYMMDD-HHMMSS}-{slug}.md`)
 ```yaml
 ---
 id: uuid
@@ -421,70 +421,125 @@ enum Operation {
 
 ## 5. LLM Tools
 
-The agent has access to these tools, orchestrated via function calling:
+The agent uses OpenAI function calling to select and execute tools. The LLM decides which tool(s) to invoke based on user intent – it is not hardcoded.
 
-### 5.1 MVP Tools
+### 5.1 Tool Selection Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Chat Orchestrator                             │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  User Message                                                        │
+│       │                                                              │
+│       ▼                                                              │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                    OpenAI Chat Completion                    │    │
+│  │                    (with function calling)                   │    │
+│  │                                                              │    │
+│  │  System Prompt:                                              │    │
+│  │  - Role: Personal knowledge assistant                        │    │
+│  │  - Available tools (JSON schemas)                            │    │
+│  │  - Current index.md for context                              │    │
+│  │  - Conversation history                                      │    │
+│  │                                                              │    │
+│  │  LLM decides:                                                │    │
+│  │  1. Which tool(s) to call (or none for conversation)         │    │
+│  │  2. Tool arguments                                           │    │
+│  │  3. Response to user                                         │    │
+│  └──────────────────────────┬──────────────────────────────────┘    │
+│                             │                                        │
+│              ┌──────────────┼──────────────┐                        │
+│              ▼              ▼              ▼                        │
+│         Tool Call      Tool Call      No Tool                       │
+│              │              │              │                        │
+│              ▼              ▼              ▼                        │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │                    Tool Executor                              │   │
+│  │  - Validates tool call                                        │   │
+│  │  - Executes against services (EntryService, DigestService)    │   │
+│  │  - Returns result to LLM for response generation              │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Principle:** The LLM is the router. Code does not decide intent – the LLM does via tool selection.
+
+### 5.2 MVP Tools
 
 | Tool | Input | Output | Side Effects |
 |------|-------|--------|--------------|
-| `classify_thought` | `{ text: string, hints?: string }` | `{ category, name, fields, confidence, reasoning }` | None (pure inference) |
-| `create_entry` | `{ category, name, fields, content? }` | `{ path, commitHash }` | Writes .md file, git commit |
+| `classify_and_capture` | `{ text: string, hints?: string }` | `{ category, name, path, confidence, reasoning }` | Writes .md file, git commit |
 | `update_entry` | `{ path, updates }` | `{ path, commitHash }` | Modifies .md file, git commit |
+| `move_entry` | `{ path, targetCategory }` | `{ newPath, commitHash }` | Moves file, git commit |
 | `search_entries` | `{ query, category?, limit? }` | `{ results: Entry[] }` | None |
 | `get_entry` | `{ path }` | `{ entry: Entry }` | None |
 | `list_entries` | `{ category?, status?, limit? }` | `{ entries: EntrySummary[] }` | None |
-| `generate_digest` | `{ type: 'daily' \| 'weekly' }` | `{ digest: string }` | None |
-| `request_clarification` | `{ originalText, possibleInterpretations }` | `{ message: string }` | None |
-| `send_response` | `{ channel, content, threadId? }` | `{ sent: boolean }` | Sends email or chat response |
+| `generate_digest` | `{ type: 'daily' \| 'weekly' }` | `{ content: string }` | None |
 
-### 5.2 Tool Execution Flow
+**Note:** `classify_and_capture` combines classification + entry creation. The LLM calls this when the user shares a new thought. For queries, corrections, or conversation, the LLM uses other tools or responds directly.
+
+### 5.3 Intent Examples
+
+| User Says | LLM Tool Selection | Why |
+|-----------|-------------------|-----|
+| "Sarah mentioned the Q2 launch is delayed" | `classify_and_capture` | New information to capture |
+| "Show me my active projects" | `list_entries({ category: 'projects', status: 'active' })` | Query, not capture |
+| "What's in my inbox?" | `list_entries({ category: 'inbox' })` | Query |
+| "Give me my daily digest" | `generate_digest({ type: 'daily' })` | Explicit request |
+| "Actually, file that as a project" | `move_entry({ path: lastEntry, targetCategory: 'projects' })` | Course correction |
+| "Tell me about the ClientCo project" | `get_entry({ path: 'projects/clientco-integration.md' })` | Retrieval |
+| "How are you?" | (no tool) | Conversation, no action needed |
+| "Search for anything about AWS" | `search_entries({ query: 'AWS' })` | Search query |
+
+### 5.4 Tool Execution Flow (Capture Path)
+
+When the LLM determines the user is sharing a new thought:
 
 ```
-User Input → classify_thought
-                  │
-                  ├─ confidence >= 0.6 → create_entry → send_response (confirmation)
-                  │
-                  └─ confidence < 0.6 → create_entry (inbox/) → request_clarification
-                                                                      │
-                                                            send_response (asks user)
+User Input → LLM selects classify_and_capture
+                       │
+                       ▼
+              Classification (internal)
+                       │
+        ┌──────────────┴──────────────┐
+        │                             │
+   confidence >= 0.6             confidence < 0.6
+        │                             │
+        ▼                             ▼
+   Create entry in              Create entry in
+   target category              inbox/ folder
+        │                             │
+        ▼                             ▼
+   LLM generates               LLM generates
+   confirmation                clarification request
 ```
 
-### 5.3 Classification Prompt (Structured Output)
+### 5.5 System Prompt Structure
 
 ```
-You are a classification agent for a personal knowledge management system.
+You are a personal knowledge management assistant. You help the user capture thoughts, 
+retrieve information, and stay organized.
 
-Given a raw thought, classify it into one of these categories:
-- people: Information about a specific person (contact, relationship, follow-ups)
-- projects: Something with multiple steps, a goal, and a timeline
-- ideas: A concept, insight, or potential future thing (no active commitment yet)
-- admin: A single task/errand with a due date
+You have access to these tools:
+{tool_definitions_as_json_schema}
 
-Extract structured fields based on the category. Return JSON only.
+Guidelines:
+- When the user shares a new thought, fact, or idea → use classify_and_capture
+- When the user asks to see, list, or find entries → use list_entries or search_entries
+- When the user asks for their digest → use generate_digest
+- When the user wants to correct a recent classification → use move_entry
+- When the user is just chatting → respond conversationally without tools
 
-Schema:
-{
-  "category": "people" | "projects" | "ideas" | "admin",
-  "confidence": 0.0-1.0,
-  "name": "Short descriptive title",
-  "slug": "url-safe-lowercase-slug",
-  "fields": {
-    // Category-specific fields...
-  },
-  "related_entries": ["slug1", "slug2"],  // If referencing known entries
-  "reasoning": "Brief explanation of classification decision"
-}
-
-If the input is ambiguous or lacks context, set confidence below 0.6 and explain in reasoning.
-
-Current index for context:
+Current knowledge base index:
 {index_content}
 
-User input: {input}
-Hints (if any): {hints}
+Recent conversation:
+{conversation_history}
 ```
 
-### 5.4 Extended Tools (Post-MVP)
+### 5.6 Extended Tools (Post-MVP)
 
 | Tool | Purpose |
 |------|---------|
@@ -494,6 +549,32 @@ Hints (if any): {hints}
 | `mark_stale` | Flag entries with no activity for N days |
 | `archive_entry` | Move completed/abandoned entries to archive |
 | `fetch_url_metadata` | Enrich links with title/summary |
+
+### 5.7 Classification Schema (Internal to classify_and_capture)
+
+When `classify_and_capture` is invoked, it internally uses this classification schema:
+
+```json
+{
+  "category": "people" | "projects" | "ideas" | "admin",
+  "confidence": 0.0-1.0,
+  "name": "Short descriptive title",
+  "slug": "url-safe-lowercase-slug",
+  "fields": {
+    // Category-specific fields...
+  },
+  "related_entries": ["slug1", "slug2"],
+  "reasoning": "Brief explanation of classification decision"
+}
+```
+
+**Category definitions:**
+- **people**: Information about a specific person (contact, relationship, follow-ups)
+- **projects**: Something with multiple steps, a goal, and a timeline
+- **ideas**: A concept, insight, or potential future thing (no active commitment yet)
+- **admin**: A single task/errand with a due date
+
+If confidence < 0.6, the entry goes to inbox with `status: needs_review`.
 
 ---
 
@@ -553,6 +634,14 @@ GET /api/index
 
 Bidirectional conversation via SMTP.
 
+**Thread Identification:**
+Email threads are tracked using a unique thread identifier embedded in both the subject line and email body:
+- Format: `[SB-{uuid}]` (e.g., `[SB-a1b2c3d4]`)
+- On first email: System generates ID and includes it in reply subject
+- On subsequent emails: User keeps the ID in subject when replying
+- Fallback: ID is also embedded at the bottom of email body for clients that strip subjects
+- Example subject: `Re: Filed as project: ClientCo Integration [SB-a1b2c3d4]`
+
 **Inbound Flow:**
 1. User sends email to configured address (or forwards to it)
 2. App polls IMAP or receives webhook (depending on email provider)
@@ -599,14 +688,46 @@ User Message
 
 Total context budget: ~8-10k tokens, leaving room for response.
 
+### 7.1.1 Index.md Scalability
+
+The index.md is always included in context so the LLM can resolve `related_entries` slugs and understand what exists. Token growth analysis:
+
+| Entries | Estimated Tokens | Status |
+|---------|------------------|--------|
+| 50 | ~1,750 | ✅ Comfortable |
+| 100 | ~3,500 | ✅ Within budget |
+| 250 | ~8,750 | ⚠️ Tight, may need pruning |
+| 500 | ~17,500 | ❌ Exceeds budget |
+
+**MVP approach (<500 entries):** Full index.md in context. This is sufficient for personal use.
+
+**Mitigation strategies for v2 (if needed):**
+1. **Compact index format:** Remove tables, use terse list format (~40% reduction)
+2. **Category filtering:** Only include categories relevant to current conversation
+3. **Recency pruning:** Only include entries touched in last 90 days in full; older entries as slug-only list
+4. **Two-phase lookup:** Include slug list only; LLM calls `get_entry` when it needs details
+5. **Vector search:** Replace index with semantic retrieval (adds complexity)
+
+**Decision:** Ship MVP with full index. Monitor token usage. Implement compact format if users hit 250+ entries.
+
 ### 7.2 Summarization Trigger
 
-When a conversation exceeds 20 messages since last summary:
+Summarization maintains a sliding window of readable context while preserving history.
 
-1. Take messages 1-20 (excluding last 15)
-2. Generate summary: key topics, decisions made, user preferences learned
-3. Store summary in `ConversationSummary` table
-4. Keep last 15 messages verbatim
+**Trigger:** When total messages in conversation exceeds `MAX_VERBATIM_MESSAGES + SUMMARIZE_BATCH_SIZE` (default: 15 + 10 = 25 messages).
+
+**Process:**
+1. Keep the most recent `MAX_VERBATIM_MESSAGES` (15) messages verbatim
+2. Take the oldest `SUMMARIZE_BATCH_SIZE` (10) messages not yet summarized
+3. Generate summary of those 10 messages
+4. Store summary in `ConversationSummary` table
+5. Summaries are prepended to context (oldest first) before verbatim messages
+
+**Example:** At 25 messages, messages 1-10 get summarized. At 35 messages, messages 11-20 get summarized. The user always sees their last 15 messages in full context.
+
+**Environment variables:**
+- `MAX_VERBATIM_MESSAGES=15` – Recent messages kept verbatim
+- `SUMMARIZE_BATCH_SIZE=10` – Messages per summary batch
 
 **Summarization Prompt:**
 ```
@@ -625,12 +746,12 @@ Be concise. This will be prepended to future conversations.
 
 | Job | Schedule | Action |
 |-----|----------|--------|
-| **Daily Digest** | 07:00 local | Generate digest, send to preferred channel (email/chat) |
-| **Weekly Review** | Sunday 16:00 | Comprehensive review of week, themes, suggestions |
+| **Daily Digest** | 07:00 local | Generate digest, send via email (requesting in chat does not cancel scheduled email) |
+| **Weekly Review** | Sunday 16:00 | Comprehensive review of week, send via email (requesting in chat does not cancel scheduled email) |
 | **Stale Check** | Daily 09:00 | Flag projects with no update in 14 days |
 | **Follow-up Reminder** | Daily 08:00 | Surface people entries with pending follow-ups |
 | **Inactivity Nudge** | Daily 20:00 | If no captures in 3 days, send gentle nudge |
-| **Index Regeneration** | On every entry change | Keep index.md fresh |
+| **Index Regeneration** | Synchronous on every entry change | Keep index.md fresh (queued to prevent race conditions) |
 
 ### 8.1 Daily Digest Format
 
@@ -752,7 +873,7 @@ INACTIVITY_DAYS=3
 
 # Conversation
 MAX_VERBATIM_MESSAGES=15
-SUMMARIZE_AFTER_MESSAGES=20
+SUMMARIZE_BATCH_SIZE=10
 ```
 
 ---
@@ -788,6 +909,12 @@ SUMMARIZE_AFTER_MESSAGES=20
 - [x] Auto-generate index.md
 - [x] Low-confidence → inbox + clarification request
 - [x] Course correction ("file that as project instead")
+
+**LLM Tool Routing:**
+- [ ] LLM-based intent detection (tool selection, not hardcoded)
+- [ ] Query tools: list_entries, get_entry via chat
+- [ ] Digest on demand via chat ("give me my daily digest")
+- [ ] Conversational responses when no tool needed
 
 **Conversation:**
 - [x] Persistent chat sessions
@@ -878,7 +1005,7 @@ How do we know this is working?
 ├── admin/
 │   └── renew-aws-cert.md
 └── inbox/
-    └── 20260126-143022-warehouse.md
+    └── 20260126-143022-warehouse.md   # Format: YYYYMMDD-HHMMSS-{slug}.md
 ```
 
 ---

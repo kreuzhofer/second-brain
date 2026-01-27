@@ -61,6 +61,7 @@ chatRouter.post('/', async (req: Request, res: Response) => {
         confidence: response.entry.confidence,
       } : undefined,
       clarificationNeeded: response.clarificationNeeded,
+      toolsUsed: response.toolsUsed,
     };
 
     res.status(201).json(apiResponse);

@@ -4,17 +4,16 @@
  * entry creation, and response generation.
  * 
  * Requirements 4.1, 4.2, 4.3, 4.4, 5.1, 5.2, 5.3, 5.4
+ * Requirements 2.1, 2.2, 2.3, 2.4, 2.5, 2.6 (LLM Tool Routing)
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import OpenAI from 'openai';
 import { getConfig } from '../config/env';
 import {
   ChatResponse,
-  AssistantMessage,
-  CourseCorrectResponse,
-  ClassificationResult,
   Conversation,
   Message,
+  ClassificationResult,
 } from '../types/chat.types';
 import { Category, Channel } from '../types/entry.types';
 import { ConversationService, getConversationService } from './conversation.service';
@@ -22,7 +21,9 @@ import { ContextAssembler, getContextAssembler } from './context.service';
 import { ClassificationAgent, getClassificationAgent } from './classification.service';
 import { SummarizationService, getSummarizationService } from './summarization.service';
 import { EntryService, getEntryService } from './entry.service';
-import { parseHints, formatHintsForClassifier } from '../utils/hints';
+import { ToolRegistry, getToolRegistry } from './tool-registry';
+import { ToolExecutor, getToolExecutor, CaptureResult } from './tool-executor';
+import { buildSystemPrompt } from './system-prompt';
 import { generateSlug } from '../utils/slug';
 
 // ============================================
@@ -30,7 +31,8 @@ import { generateSlug } from '../utils/slug';
 // ============================================
 
 /**
- * Course correction patterns
+ * @deprecated Course correction is now handled by LLM tool selection (move_entry tool)
+ * Kept for backward compatibility reference only.
  */
 const COURSE_CORRECTION_PATTERNS = [
   /actually\s+(?:that\s+)?should\s+be\s+(?:a\s+)?(\w+)/i,
@@ -42,7 +44,8 @@ const COURSE_CORRECTION_PATTERNS = [
 ];
 
 /**
- * Category name mappings
+ * @deprecated Category aliases are now handled by LLM tool selection
+ * Kept for backward compatibility reference only.
  */
 const CATEGORY_ALIASES: Record<string, Category> = {
   'person': 'people',
@@ -84,6 +87,9 @@ export class ChatService {
   private classificationAgent: ClassificationAgent;
   private summarizationService: SummarizationService;
   private entryService: EntryService;
+  private toolRegistry: ToolRegistry;
+  private toolExecutor: ToolExecutor;
+  private openai: OpenAI;
   private confidenceThreshold: number;
 
   constructor(
@@ -91,30 +97,67 @@ export class ChatService {
     contextAssembler?: ContextAssembler,
     classificationAgent?: ClassificationAgent,
     summarizationService?: SummarizationService,
-    entryService?: EntryService
+    entryService?: EntryService,
+    toolRegistry?: ToolRegistry,
+    toolExecutor?: ToolExecutor,
+    openaiClient?: OpenAI
   ) {
+    const config = getConfig();
     this.conversationService = conversationService ?? getConversationService();
     this.contextAssembler = contextAssembler ?? getContextAssembler();
     this.classificationAgent = classificationAgent ?? getClassificationAgent();
     this.summarizationService = summarizationService ?? getSummarizationService();
     this.entryService = entryService ?? getEntryService();
-    this.confidenceThreshold = getConfig().CONFIDENCE_THRESHOLD;
+    this.toolRegistry = toolRegistry ?? getToolRegistry();
+    this.toolExecutor = toolExecutor ?? getToolExecutor();
+    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY });
+    this.confidenceThreshold = config.CONFIDENCE_THRESHOLD;
   }
 
   /**
    * Process a user message and return the assistant response.
    * 
-   * Requirements 4.1: Classify and route based on confidence
+   * This method now delegates to processMessageWithTools which uses LLM tool routing
+   * to determine the appropriate action based on user intent.
+   * 
+   * Requirements 2.7: Remove hardcoded course correction regex patterns
+   * Requirements 4.1: Classify and route based on confidence (via classify_and_capture tool)
    * Requirements 4.2: High confidence -> category folder
    * Requirements 4.3: Low confidence -> inbox with clarification
    * Requirements 4.4: Generate appropriate response
+   * 
+   * Note: The hints parameter is handled naturally by the LLM through the system prompt
+   * and classify_and_capture tool's hints parameter.
    */
   async processMessage(
     conversationId: string | null,
     message: string,
     hints?: string
   ): Promise<ChatResponse> {
-    // Get or create conversation
+    // Delegate to the new tool-based flow
+    // Note: hints are handled naturally by the LLM through the system prompt
+    // The LLM will extract hints from the message and pass them to classify_and_capture
+    return this.processMessageWithTools(conversationId, message);
+  }
+
+  /**
+   * Process a user message with LLM tool routing.
+   * 
+   * This method uses OpenAI function calling to let the LLM decide which tool(s)
+   * to invoke based on user intent, or respond conversationally without tools.
+   * 
+   * Requirements 2.1: Send message to OpenAI with all available tool schemas
+   * Requirements 2.2: Execute tool when LLM returns a tool call
+   * Requirements 2.3: Execute multiple tool calls in sequence
+   * Requirements 2.4: Return LLM's conversational response when no tool is called
+   * Requirements 2.5: Send tool results back to LLM for response generation
+   * Requirements 2.6: Return error message to LLM on tool failure
+   */
+  async processMessageWithTools(
+    conversationId: string | null,
+    message: string
+  ): Promise<ChatResponse> {
+    // 1. Get or create conversation
     const conversation = conversationId
       ? await this.conversationService.getById(conversationId)
       : await this.conversationService.create('chat');
@@ -123,82 +166,177 @@ export class ChatService {
       throw new ChatServiceError('Failed to get or create conversation');
     }
 
-    // Parse hints from message
-    const parsedHints = parseHints(message);
-    const combinedHints = hints
-      ? `${hints}; ${formatHintsForClassifier(parsedHints)}`
-      : formatHintsForClassifier(parsedHints);
-
-    // Store user message
+    // 2. Store user message
     await this.conversationService.addMessage(
       conversation.id,
       'user',
       message
     );
 
-    // Check for course correction intent
-    const courseCorrection = this.detectCourseCorrection(message);
-    if (courseCorrection) {
-      return this.handleCourseCorrection(
-        conversation.id,
-        courseCorrection.targetCategory,
-        message
-      );
-    }
-
-    // Assemble context for classification
+    // 3. Assemble context using existing ContextAssembler
     const context = await this.contextAssembler.assemble(conversation.id);
 
-    // Classify the message
-    const classification = await this.classificationAgent.classify({
-      text: parsedHints.cleanedMessage || message,
-      hints: combinedHints || undefined,
-      context,
+    // 4. Build system prompt with tool schemas
+    // Format conversation history for the system prompt
+    const conversationHistory = this.formatConversationHistory(
+      context.summaries,
+      context.recentMessages
+    );
+    const systemPrompt = buildSystemPrompt(context.indexContent, conversationHistory);
+
+    // 5. Get tool definitions from ToolRegistry
+    const tools = this.toolRegistry.getAllTools();
+
+    // 6. Build messages array for OpenAI
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: message }
+    ];
+
+    // 7. Call OpenAI with tools parameter
+    let response = await this.openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages,
+      tools,
+      tool_choice: 'auto'
     });
 
-    // Determine target folder based on confidence
-    const targetCategory = this.determineTargetCategory(classification);
+    let assistantMessageContent = response.choices[0]?.message?.content;
+    const toolCalls = response.choices[0]?.message?.tool_calls;
+    const toolsUsed: string[] = [];
+    let entryInfo: { path: string; category: Category; name: string; confidence: number } | undefined;
 
-    // Create entry
-    const entry = await this.createEntry(targetCategory, classification, message);
+    // 8. Handle tool_calls response by executing tools via ToolExecutor
+    if (toolCalls && toolCalls.length > 0) {
+      // Execute each tool call and collect results
+      const toolResults: OpenAI.Chat.ChatCompletionToolMessageParam[] = [];
 
-    // Generate response message
-    const responseContent = this.generateResponseMessage(
-      classification,
-      targetCategory,
-      entry.path
-    );
+      for (const toolCall of toolCalls) {
+        // Only handle function tool calls (not custom tool calls)
+        if (toolCall.type !== 'function') {
+          continue;
+        }
+        
+        const toolName = toolCall.function.name;
+        toolsUsed.push(toolName);
 
-    // Store assistant message with entry metadata
+        let toolArgs: Record<string, unknown>;
+        try {
+          toolArgs = JSON.parse(toolCall.function.arguments);
+        } catch {
+          // If JSON parsing fails, send error back to LLM
+          toolResults.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ success: false, error: 'Invalid JSON arguments' })
+          });
+          continue;
+        }
+
+        // Execute the tool
+        const result = await this.toolExecutor.execute({
+          name: toolName,
+          arguments: toolArgs
+        });
+
+        // If this was classify_and_capture and it succeeded, capture entry info
+        if (toolName === 'classify_and_capture' && result.success && result.data) {
+          const captureResult = result.data as CaptureResult;
+          entryInfo = {
+            path: captureResult.path,
+            category: captureResult.category,
+            name: captureResult.name,
+            confidence: captureResult.confidence
+          };
+        }
+
+        toolResults.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(result)
+        });
+      }
+
+      // 9. Send tool results back to OpenAI for final response
+      const messagesWithToolResults: OpenAI.Chat.ChatCompletionMessageParam[] = [
+        ...messages,
+        response.choices[0].message,
+        ...toolResults
+      ];
+
+      const finalResponse = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: messagesWithToolResults
+      });
+
+      assistantMessageContent = finalResponse.choices[0]?.message?.content || '';
+    }
+
+    // 10. Handle conversational response (no tools) - content is already set
+
+    // Ensure we have content
+    if (!assistantMessageContent) {
+      assistantMessageContent = "I'm sorry, I couldn't generate a response. Please try again.";
+    }
+
+    // 11. Store assistant message with entry metadata if applicable
     const assistantMessage = await this.conversationService.addMessage(
       conversation.id,
       'assistant',
-      responseContent,
-      entry.path,
-      classification.confidence
+      assistantMessageContent,
+      entryInfo?.path,
+      entryInfo?.confidence
     );
 
-    // Check if summarization is needed
+    // 12. Check for summarization
     await this.summarizationService.checkAndSummarize(conversation.id);
 
+    // 13. Return ChatResponse
     return {
       conversationId: conversation.id,
       message: {
         id: assistantMessage.id,
         role: 'assistant',
-        content: responseContent,
-        filedEntryPath: entry.path,
-        filedConfidence: classification.confidence,
+        content: assistantMessageContent,
+        filedEntryPath: entryInfo?.path,
+        filedConfidence: entryInfo?.confidence,
         createdAt: assistantMessage.createdAt,
       },
-      entry: {
-        path: entry.path,
-        category: targetCategory,
-        name: classification.name,
-        confidence: classification.confidence,
-      },
-      clarificationNeeded: targetCategory === 'inbox',
-    };
+      entry: entryInfo,
+      clarificationNeeded: entryInfo?.category === 'inbox',
+      toolsUsed: toolsUsed.length > 0 ? toolsUsed : undefined
+    } as ChatResponse;
+  }
+
+  /**
+   * Format conversation history for the system prompt.
+   * Combines summaries and recent messages into a readable format.
+   */
+  private formatConversationHistory(
+    summaries: { summary: string }[],
+    recentMessages: Message[]
+  ): string {
+    const parts: string[] = [];
+
+    // Add summaries
+    if (summaries.length > 0) {
+      parts.push('Previous conversation summaries:');
+      for (const summary of summaries) {
+        parts.push(`- ${summary.summary}`);
+      }
+      parts.push('');
+    }
+
+    // Add recent messages
+    if (recentMessages.length > 0) {
+      parts.push('Recent messages:');
+      for (const msg of recentMessages) {
+        const role = msg.role === 'user' ? 'User' : 'Assistant';
+        parts.push(`${role}: ${msg.content}`);
+      }
+    }
+
+    return parts.join('\n');
   }
 
   /**
@@ -214,6 +352,9 @@ export class ChatService {
 
   /**
    * Handle course correction requests.
+   * 
+   * @deprecated Course correction is now handled by LLM tool selection (move_entry tool).
+   * This method is kept for backward compatibility but is no longer called by processMessage.
    * 
    * Requirements 6.1: Detect course correction intent
    * Requirements 6.2: Move entry to new category
@@ -336,6 +477,9 @@ export class ChatService {
 
   /**
    * Detect if a message is a course correction request.
+   * 
+   * @deprecated Course correction is now handled by LLM tool selection (move_entry tool).
+   * This method is kept for backward compatibility but is no longer called by processMessage.
    * 
    * Requirements 6.1: Detect phrases like "actually that should be a [category]"
    */

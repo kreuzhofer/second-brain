@@ -6,7 +6,9 @@ import { healthRouter } from './routes/health';
 import { entriesRouter } from './routes/entries';
 import { indexRouter } from './routes/index-route';
 import { chatRouter } from './routes/chat';
+import { digestRouter } from './routes/digest';
 import { initializeDataFolder } from './services/init.service';
+import { getCronService, resetCronService } from './services/cron.service';
 
 // Validate environment variables before starting
 validateRequiredEnvVars();
@@ -30,6 +32,7 @@ app.get('/api/auth/key', (req, res) => {
 app.use('/api/entries', authMiddleware, entriesRouter);
 app.use('/api/index', authMiddleware, indexRouter);
 app.use('/api/chat', authMiddleware, chatRouter);
+app.use('/api/digest', authMiddleware, digestRouter);
 
 // Serve frontend static files in production
 if (process.env.NODE_ENV === 'production') {
@@ -61,6 +64,20 @@ async function start() {
   try {
     // Initialize data folder structure
     await initializeDataFolder();
+    
+    // Start cron scheduler for digests and reviews
+    const cronService = getCronService();
+    cronService.start();
+    
+    // Graceful shutdown handler
+    const shutdown = () => {
+      console.log('Shutting down gracefully...');
+      resetCronService();
+      process.exit(0);
+    };
+    
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
     
     app.listen(config.PORT, () => {
       console.log(`Second Brain API running on port ${config.PORT}`);
