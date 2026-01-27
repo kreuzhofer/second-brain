@@ -6,7 +6,7 @@ This implementation adds body content support to entry creation and updates, plu
 
 ## Tasks
 
-- [ ] 1. Enhance ClassificationResult type and Classification Agent
+- [x] 1. Enhance ClassificationResult type and Classification Agent
   - [x] 1.1 Add bodyContent field to ClassificationResult interface
     - Update `backend/src/types/chat.types.ts`
     - Add `bodyContent: string` to ClassificationResult
@@ -19,7 +19,7 @@ This implementation adds body content support to entry creation and updates, plu
     - Parse and normalize bodyContent in parseClassificationResponse()
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 4.2_
 
-- [ ] 2. Enhance EntryService for body content
+- [x] 2. Enhance EntryService for body content
   - [x] 2.1 Update EntryService.create() to accept body content
     - Update `backend/src/services/entry.service.ts`
     - Add optional `bodyContent?: string` parameter to create()
@@ -50,7 +50,7 @@ This implementation adds body content support to entry creation and updates, plu
 - [x] 3. Checkpoint - Ensure EntryService tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Add delete_entry tool
+- [x] 4. Add delete_entry tool
   - [x] 4.1 Register delete_entry tool in ToolRegistry
     - Update `backend/src/services/tool-registry.ts`
     - Add delete_entry tool definition with path parameter
@@ -68,7 +68,7 @@ This implementation adds body content support to entry creation and updates, plu
     - Test non-existent entry returns error
     - _Requirements: 3.3, 3.4_
 
-- [ ] 5. Update update_entry tool for body content
+- [x] 5. Update update_entry tool for body content
   - [x] 5.1 Update update_entry schema in ToolRegistry
     - Add body_content parameter to update_entry tool schema
     - Include content, mode, and section properties
@@ -86,7 +86,7 @@ This implementation adds body content support to entry creation and updates, plu
     - Test section mode via tool
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-- [ ] 6. Update classify_and_capture tool for body content
+- [x] 6. Update classify_and_capture tool for body content
   - [x] 6.1 Update handleClassifyAndCapture in ToolExecutor
     - Extract bodyContent from ClassificationResult
     - Pass bodyContent to EntryService.create()

@@ -169,7 +169,7 @@ export class ToolRegistry {
       type: 'function',
       function: {
         name: 'update_entry',
-        description: 'Update fields or body content of an existing entry. Use when the user wants to modify an entry, change its status, update notes, add information, or append content to the entry body.',
+        description: 'Update an existing entry. Use "updates" to change metadata fields like status, due_date, next_action. Use "body_content" only to add notes or log entries to the body. To mark a task done, use updates: {status: "done"}. To add a note, use body_content with mode "section".',
         parameters: {
           type: 'object',
           properties: {
@@ -179,12 +179,12 @@ export class ToolRegistry {
             },
             updates: {
               type: 'object',
-              description: 'Frontmatter fields to update (e.g., status, next_action, due_date, context)',
+              description: 'Metadata fields to update. For admin/projects: status ("pending", "done", "active", "waiting", "blocked"). Also: next_action, due_date, context, tags.',
               additionalProperties: true
             },
             body_content: {
               type: 'object',
-              description: 'Body content modification',
+              description: 'Add notes or log entries to the body (not for status changes)',
               properties: {
                 content: {
                   type: 'string',
