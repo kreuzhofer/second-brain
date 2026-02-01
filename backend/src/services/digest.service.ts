@@ -561,17 +561,20 @@ export class DigestService {
    * 
    * @param recipientEmail - Email address to send digest to
    * @param content - Digest content (markdown)
+   * @returns true if email was sent, false if skipped or failed
    */
-  async deliverDailyDigestToEmail(recipientEmail: string, content: string): Promise<void> {
+  async deliverDailyDigestToEmail(recipientEmail: string, content: string): Promise<boolean> {
     if (!this.digestMailer) {
-      return; // Skip silently
+      return false; // Skip silently
     }
 
     try {
-      await this.digestMailer.sendDailyDigest(recipientEmail, content);
+      const result = await this.digestMailer.sendDailyDigest(recipientEmail, content);
+      return result.success && !result.skipped;
     } catch (error) {
       // Log but don't throw - email delivery shouldn't block digest generation
       console.error('DigestService: Failed to send daily digest email:', error);
+      return false;
     }
   }
 
@@ -584,22 +587,25 @@ export class DigestService {
    * @param content - Review content (markdown)
    * @param startDate - Start of the week
    * @param endDate - End of the week
+   * @returns true if email was sent, false if skipped or failed
    */
   async deliverWeeklyReviewToEmail(
     recipientEmail: string,
     content: string,
     startDate?: Date,
     endDate?: Date
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!this.digestMailer) {
-      return; // Skip silently
+      return false; // Skip silently
     }
 
     try {
-      await this.digestMailer.sendWeeklyReview(recipientEmail, content, startDate, endDate);
+      const result = await this.digestMailer.sendWeeklyReview(recipientEmail, content, startDate, endDate);
+      return result.success && !result.skipped;
     } catch (error) {
       // Log but don't throw - email delivery shouldn't block digest generation
       console.error('DigestService: Failed to send weekly review email:', error);
+      return false;
     }
   }
 

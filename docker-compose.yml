@@ -25,6 +25,8 @@ services:
       - IMAP_USER=${IMAP_USER:-}
       - IMAP_PASS=${IMAP_PASS:-}
       - EMAIL_POLL_INTERVAL=${EMAIL_POLL_INTERVAL:-60}
+      - DIGEST_RECIPIENT_EMAIL=${DIGEST_RECIPIENT_EMAIL:-}
+      - DIGEST_SKIP_CHAT_WHEN_EMAIL=${DIGEST_SKIP_CHAT_WHEN_EMAIL:-true}
     volumes:
       - ${DATA_PATH:-./memory}:/memory
     depends_on:

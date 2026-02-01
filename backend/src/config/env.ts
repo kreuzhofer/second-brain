@@ -31,6 +31,12 @@ export interface EnvConfig {
   STALE_CHECK_TIME: string;
   FOLLOWUP_REMINDER_TIME: string;
   INACTIVITY_NUDGE_TIME: string;
+  
+  // Digest email delivery (optional)
+  DIGEST_RECIPIENT_EMAIL?: string;
+  
+  // When true, skip chat delivery of digests when email is configured (default: true)
+  DIGEST_SKIP_CHAT_WHEN_EMAIL: boolean;
 }
 
 /**
@@ -208,7 +214,13 @@ export function loadEnvConfig(): EnvConfig {
     INACTIVITY_DAYS: inactivityDays,
     STALE_CHECK_TIME: staleCheckTime,
     FOLLOWUP_REMINDER_TIME: followupReminderTime,
-    INACTIVITY_NUDGE_TIME: inactivityNudgeTime
+    INACTIVITY_NUDGE_TIME: inactivityNudgeTime,
+    
+    // Digest email delivery
+    DIGEST_RECIPIENT_EMAIL: process.env.DIGEST_RECIPIENT_EMAIL || undefined,
+    
+    // Skip chat delivery when email is configured (default: true)
+    DIGEST_SKIP_CHAT_WHEN_EMAIL: process.env.DIGEST_SKIP_CHAT_WHEN_EMAIL !== 'false'
   };
 }
 

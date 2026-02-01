@@ -226,8 +226,22 @@ export class CronService {
       // Generate content
       const content = await generator();
       
-      // Deliver to chat
-      await this.digestService.deliverToChat(content);
+      // Deliver via email if configured
+      const recipientEmail = this.config.DIGEST_RECIPIENT_EMAIL;
+      let emailSent = false;
+      if (recipientEmail) {
+        if (jobName === 'daily_digest') {
+          emailSent = await this.digestService.deliverDailyDigestToEmail(recipientEmail, content);
+        } else if (jobName === 'weekly_review') {
+          emailSent = await this.digestService.deliverWeeklyReviewToEmail(recipientEmail, content);
+        }
+      }
+      
+      // Deliver to chat unless email was sent and skip is enabled
+      const skipChat = emailSent && this.config.DIGEST_SKIP_CHAT_WHEN_EMAIL;
+      if (!skipChat) {
+        await this.digestService.deliverToChat(content);
+      }
       
       // Update CronJobRun to success
       await this.prisma.cronJobRun.update({
