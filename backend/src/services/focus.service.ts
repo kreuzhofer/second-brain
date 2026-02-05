@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { getPrismaClient } from '../lib/prisma';
 import { EntryService, getEntryService } from './entry.service';
 import { getConfig } from '../config/env';
+import { requireUserId } from '../context/user-context';
 
 export interface FocusTrackCandidate {
   id: string;
@@ -64,6 +65,10 @@ export class FocusService {
   private fetcher: Fetcher;
   private random: () => number;
   private openai: OpenAI | null = null;
+
+  private getUserId(): string {
+    return requireUserId();
+  }
 
   constructor(
     prisma?: PrismaClient,
@@ -141,6 +146,7 @@ export class FocusService {
     const mode = options?.mode ?? 'auto';
     if (mode === 'auto') {
       const existing = await this.prisma.focusTrack.findMany({
+        where: { userId: this.getUserId() },
         orderBy: [{ lastPlayedAt: 'asc' }]
       });
 
@@ -160,6 +166,7 @@ export class FocusService {
     }
 
     const fallback = await this.prisma.focusTrack.findMany({
+      where: { userId: this.getUserId() },
       orderBy: [{ lastPlayedAt: 'asc' }]
     });
     const candidate = chooseTrackCandidate(fallback, {
@@ -179,7 +186,10 @@ export class FocusService {
     if (![1, 0, -1].includes(rating)) {
       throw new Error('Rating must be -1, 0, or 1');
     }
-    const existing = await this.prisma.focusTrack.findUnique({ where: { youtubeId } });
+    const userId = this.getUserId();
+    const existing = await this.prisma.focusTrack.findUnique({
+      where: { userId_youtubeId: { userId, youtubeId } }
+    });
     if (!existing) {
       throw new Error('Track not found');
     }
@@ -195,7 +205,7 @@ export class FocusService {
     }
 
     return this.prisma.focusTrack.update({
-      where: { youtubeId },
+      where: { userId_youtubeId: { userId, youtubeId } },
       data: updates
     });
   }
@@ -212,13 +222,17 @@ export class FocusService {
     const entry = await this.entryService.read(entryPath);
     const entryName = (entry.entry as any)?.name ?? null;
     const entryId = (entry.entry as any)?.id ?? null;
+    const userId = this.getUserId();
 
     const track = trackYoutubeId
-      ? await this.prisma.focusTrack.findUnique({ where: { youtubeId: trackYoutubeId } })
+      ? await this.prisma.focusTrack.findUnique({
+          where: { userId_youtubeId: { userId, youtubeId: trackYoutubeId } }
+        })
       : null;
 
     const session = await this.prisma.focusSession.create({
       data: {
+        userId,
         entryPath,
         entryId,
         entryName,
@@ -282,6 +296,7 @@ export class FocusService {
       return null;
     }
 
+    const userId = this.getUserId();
     const terms = this.config.FOCUS_MUSIC_SEARCH_TERMS;
     if (terms.length === 0) {
       return null;
@@ -294,7 +309,10 @@ export class FocusService {
     }
 
     const existingIds = await this.prisma.focusTrack.findMany({
-      where: { youtubeId: { in: results.map((item) => item.youtubeId) } },
+      where: {
+        userId,
+        youtubeId: { in: results.map((item) => item.youtubeId) }
+      },
       select: { youtubeId: true }
     });
     const existingSet = new Set(existingIds.map((item) => item.youtubeId));
@@ -309,6 +327,7 @@ export class FocusService {
 
     return this.prisma.focusTrack.create({
       data: {
+        userId,
         youtubeId: candidate.youtubeId,
         title: candidate.title,
         channelTitle: candidate.channelTitle,

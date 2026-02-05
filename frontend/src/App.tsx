@@ -12,61 +12,70 @@ import { api, EntryWithPath } from '@/services/api';
 import { EntriesProvider } from '@/state/entries';
 
 function App() {
-  const [apiKey, setApiKey] = useState<string>(() => 
-    localStorage.getItem('second-brain-api-key') || ''
+  const [authToken, setAuthToken] = useState<string>(() =>
+    localStorage.getItem('second-brain-auth-token') || ''
   );
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [selectedEntryPath, setSelectedEntryPath] = useState<string | null>(null);
   const [focusEntry, setFocusEntry] = useState<EntryWithPath | null>(null);
 
-  // Check health on mount and try to get API key from server
+  // Check authentication when token changes
   useEffect(() => {
-    // Try to fetch the API key from the server (for local dev convenience)
-    fetchApiKey();
-  }, []);
+    if (!authToken) {
+      api.setAuthToken('');
+      setIsAuthenticated(false);
+      return;
+    }
 
-  const fetchApiKey = async () => {
+    api.setAuthToken(authToken);
+    checkSession();
+  }, [authToken]);
+
+  const checkSession = async () => {
     try {
-      const response = await fetch('/api/auth/key');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.key) {
-          setApiKey(data.key);
-        }
-      }
-    } catch {
-      // Server doesn't expose key, that's fine - user will enter manually
+      await api.auth.me();
+      setIsAuthenticated(true);
+      setAuthError(null);
+    } catch (err) {
+      setIsAuthenticated(false);
+      localStorage.removeItem('second-brain-auth-token');
+      setAuthToken('');
+      setAuthError('Session expired. Please sign in again.');
     }
   };
 
-  // Check authentication when API key changes
-  useEffect(() => {
-    if (apiKey) {
-      localStorage.setItem('second-brain-api-key', apiKey);
-      api.setAuthToken(apiKey);
-      checkAuth();
-    } else {
-      setIsAuthenticated(false);
+  const handleAuthSubmit = async () => {
+    if (!authEmail || !authPassword) {
+      setAuthError('Email and password are required.');
+      return;
     }
-  }, [apiKey]);
+    if (authMode === 'register' && authPassword.length < 8) {
+      setAuthError('Password must be at least 8 characters.');
+      return;
+    }
 
-  const checkAuth = async () => {
+    setAuthBusy(true);
+    setAuthError(null);
     try {
-      const response = await fetch('/api/entries', {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`
-        }
-      });
-      setIsAuthenticated(response.ok);
-      if (!response.ok) {
-        setError('Invalid API key');
-      } else {
-        setError(null);
-      }
+      const response = authMode === 'login'
+        ? await api.auth.login({ email: authEmail, password: authPassword })
+        : await api.auth.register({ email: authEmail, password: authPassword, name: authName || undefined });
+
+      localStorage.setItem('second-brain-auth-token', response.token);
+      api.setAuthToken(response.token);
+      setAuthToken(response.token);
+      setIsAuthenticated(true);
     } catch (err) {
       setIsAuthenticated(false);
-      setError('Failed to connect to API');
+      setAuthError(err instanceof Error ? err.message : 'Authentication failed.');
+    } finally {
+      setAuthBusy(false);
     }
   };
 
@@ -117,25 +126,75 @@ function App() {
             <CardHeader>
               <CardTitle>Welcome to Second Brain</CardTitle>
               <CardDescription>
-                Enter your API key to get started
+                {authMode === 'login'
+                  ? 'Sign in to continue'
+                  : 'Create your account'}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div>
                   <Input
-                    type="password"
-                    placeholder="Enter your API key"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
+                    type="email"
+                    placeholder="Email"
+                    autoComplete="email"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
                   />
-                  {error && (
-                    <p className="text-sm text-destructive mt-2">{error}</p>
+                </div>
+                {authMode === 'register' && (
+                  <div>
+                    <Input
+                      type="text"
+                      placeholder="Name (optional)"
+                      autoComplete="name"
+                      value={authName}
+                      onChange={(e) => setAuthName(e.target.value)}
+                    />
+                  </div>
+                )}
+                <div>
+                  <Input
+                    type="password"
+                    placeholder="Password"
+                    autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                  />
+                  {authError && (
+                    <p className="text-sm text-destructive mt-2">{authError}</p>
                   )}
                 </div>
-                <Button onClick={checkAuth} className="w-full">
-                  Connect
+                <Button onClick={handleAuthSubmit} className="w-full" disabled={authBusy}>
+                  {authBusy ? 'Please wait…' : authMode === 'login' ? 'Sign in' : 'Create account'}
                 </Button>
+                <div className="text-sm text-muted-foreground text-center">
+                  {authMode === 'login' ? (
+                    <>
+                      Need an account?{' '}
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="px-1"
+                        onClick={() => setAuthMode('register')}
+                      >
+                        Register
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      Already have an account?{' '}
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="px-1"
+                        onClick={() => setAuthMode('login')}
+                      >
+                        Sign in
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -165,7 +224,7 @@ function App() {
       {/* Footer */}
       <footer className="border-t mt-auto">
         <div className="w-full px-4 py-1 text-center text-[10px] text-muted-foreground leading-none">
-          Second Brain v0.1.0 - Your AI-powered knowledge management system
+          Second Brain
         </div>
       </footer>
     </div>

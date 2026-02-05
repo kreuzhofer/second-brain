@@ -25,6 +25,7 @@ import { ToolRegistry, getToolRegistry } from './tool-registry';
 import { ToolExecutor, getToolExecutor, CaptureResult } from './tool-executor';
 import { buildSystemPrompt } from './system-prompt';
 import { generateSlug } from '../utils/slug';
+import { normalizeDueDate } from '../utils/date';
 
 // ============================================
 // Constants
@@ -537,7 +538,7 @@ export class ChatService {
     }
 
     // Create entry in the classified category
-    const entryData = this.buildEntryData(classification);
+    const entryData = this.buildEntryData(classification, originalText);
     const entry = await this.entryService.create(
       targetCategory,
       entryData,
@@ -550,7 +551,7 @@ export class ChatService {
   /**
    * Build entry data from classification result.
    */
-  private buildEntryData(classification: ClassificationResult): any {
+  private buildEntryData(classification: ClassificationResult, originalText: string): any {
     const baseData = {
       name: classification.name,
       tags: [],
@@ -558,6 +559,10 @@ export class ChatService {
     };
 
     const fields = classification.fields as any;
+    const normalizedDueDate = normalizeDueDate(
+      fields.dueDate || fields.due_date,
+      originalText
+    );
 
     switch (classification.category) {
       case 'people':
@@ -573,7 +578,7 @@ export class ChatService {
           status: fields.status || 'active',
           next_action: fields.nextAction || '',
           related_people: fields.relatedPeople || [],
-          due_date: fields.dueDate,
+          due_date: normalizedDueDate,
         };
       case 'ideas':
         return {
@@ -585,7 +590,7 @@ export class ChatService {
         return {
           ...baseData,
           status: fields.status || 'pending',
-          due_date: fields.dueDate,
+          due_date: normalizedDueDate,
         };
       default:
         return baseData;

@@ -18,6 +18,7 @@ import {
   ContextWindow,
 } from '../types/chat.types';
 import { CLASSIFICATION_SYSTEM_PROMPT } from './context.service';
+import { getCurrentDateString } from '../utils/date';
 
 // ============================================
 // Constants
@@ -183,6 +184,7 @@ export class ClassificationAgent {
    */
   private buildClassificationPrompt(input: ClassificationInput): string {
     const { text, hints, context } = input;
+    const today = getCurrentDateString();
 
     let prompt = `You are a classification agent for a personal knowledge management system.
 
@@ -193,6 +195,7 @@ Given a raw thought, classify it into one of these categories:
 - admin: A single task/errand with a due date
 
 Extract structured fields based on the category. Return JSON only.
+Today's date is ${today}. Convert relative dates (e.g. today, tomorrow, next week) to YYYY-MM-DD.
 
 Schema:
 ${CLASSIFICATION_SCHEMA}

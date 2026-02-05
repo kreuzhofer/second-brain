@@ -246,6 +246,64 @@ describe('ToolExecutor', () => {
       );
     });
 
+    it('should normalize relative due dates when capturing tasks', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-02-05T12:00:00Z'));
+
+      try {
+        const mockClassificationResult: ClassificationResult = {
+          category: 'admin',
+          confidence: 0.9,
+          name: 'Pay invoice',
+          slug: 'pay-invoice',
+          fields: {
+            status: 'pending',
+            dueDate: '2023-02-05'
+          },
+          relatedEntries: [],
+          reasoning: 'This is an admin task',
+          bodyContent: ''
+        };
+        mockClassificationAgent.classify.mockResolvedValue(mockClassificationResult);
+
+        const mockCreatedEntry: EntryWithPath = {
+          path: 'admin/pay-invoice.md',
+          category: 'admin',
+          entry: {
+            id: 'test-id',
+            name: 'Pay invoice',
+            tags: [],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            source_channel: 'api',
+            confidence: 0.9,
+            status: 'pending',
+            due_date: '2026-02-06'
+          },
+          content: ''
+        };
+        mockEntryService.create.mockResolvedValue(mockCreatedEntry);
+
+        const toolCall: ToolCall = {
+          name: 'classify_and_capture',
+          arguments: { text: 'Pay the invoice tomorrow' }
+        };
+
+        const result = await toolExecutor.execute(toolCall);
+
+        expect(result.success).toBe(true);
+        expect(mockEntryService.create).toHaveBeenCalledWith(
+          'admin',
+          expect.objectContaining({
+            due_date: '2026-02-06'
+          }),
+          'api',
+          ''
+        );
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('should route to inbox when confidence is low', async () => {
       // Mock classification result with low confidence (< 0.6)
       const mockClassificationResult: ClassificationResult = {

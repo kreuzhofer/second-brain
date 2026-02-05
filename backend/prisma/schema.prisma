@@ -58,8 +58,32 @@ enum Operation {
   move
 }
 
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  passwordHash String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversations      Conversation[]
+  messages           Message[]
+  summaries          ConversationSummary[]
+  emailThreads       EmailThread[]
+  entries            Entry[]
+  tags               Tag[]
+  auditLogs          EntryAuditLog[]
+  focusTracks        FocusTrack[]
+  focusSessions      FocusSession[]
+  digestPreferences  DigestPreference[]
+  dailyTipStates     DailyTipState[]
+  offlineQueueItems  OfflineQueueItem[]
+}
+
 model Conversation {
   id         String    @id @default(uuid())
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel    Channel
   externalId String?
   createdAt  DateTime  @default(now())
@@ -68,11 +92,13 @@ model Conversation {
   messages   Message[]
   summaries  ConversationSummary[]
   
-  @@index([channel, externalId])
+  @@index([userId, channel, externalId])
 }
 
 model Message {
   id              String       @id @default(uuid())
+  userId          String?
+  user            User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   conversationId  String
   conversation    Conversation @relation(fields: [conversationId], references: [id])
   role            Role
@@ -81,11 +107,14 @@ model Message {
   filedConfidence Float?
   createdAt       DateTime     @default(now())
   
+  @@index([userId, createdAt])
   @@index([conversationId, createdAt])
 }
 
 model ConversationSummary {
   id              String       @id @default(uuid())
+  userId          String?
+  user            User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   conversationId  String
   conversation    Conversation @relation(fields: [conversationId], references: [id])
   summary         String
@@ -94,11 +123,14 @@ model ConversationSummary {
   endMessageId    String
   createdAt       DateTime     @default(now())
   
+  @@index([userId, createdAt])
   @@index([conversationId, createdAt])
 }
 
 model EmailThread {
   id             String   @id @default(uuid())
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   messageId      String   @unique
   threadId       String
   inReplyTo      String?
@@ -107,8 +139,8 @@ model EmailThread {
   conversationId String
   createdAt      DateTime @default(now())
   
-  @@index([threadId])
-  @@index([conversationId])
+  @@index([userId, threadId])
+  @@index([userId, conversationId])
 }
 
 model CronJobRun {
@@ -124,6 +156,8 @@ model CronJobRun {
 
 model EntryAuditLog {
   id            String    @id @default(uuid())
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   entryPath     String
   entryId       String?
   entry         Entry?    @relation(fields: [entryId], references: [id])
@@ -133,13 +167,15 @@ model EntryAuditLog {
   messageId     String?
   createdAt     DateTime  @default(now())
   
-  @@index([entryPath, createdAt])
+  @@index([userId, entryPath, createdAt])
   @@index([entryId, createdAt])
 }
 
 model FocusTrack {
   id           String    @id @default(uuid())
-  youtubeId    String    @unique
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  youtubeId    String
   title        String?
   channelTitle String?
   searchTerm   String?
@@ -152,10 +188,15 @@ model FocusTrack {
   updatedAt    DateTime  @updatedAt
 
   sessions     FocusSession[]
+
+  @@unique([userId, youtubeId])
+  @@index([userId, rating])
 }
 
 model FocusSession {
   id              String     @id @default(uuid())
+  userId          String?
+  user            User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
   entryPath       String
   entryId         String?
   entry           Entry?     @relation(fields: [entryId], references: [id])
@@ -169,6 +210,7 @@ model FocusSession {
   track           FocusTrack? @relation(fields: [trackId], references: [id])
   createdAt       DateTime   @default(now())
 
+  @@index([userId, startedAt])
   @@index([entryPath, startedAt])
   @@index([entryId, startedAt])
   @@index([trackId])
@@ -176,6 +218,8 @@ model FocusSession {
 
 model Entry {
   id                String         @id @default(uuid())
+  userId            String?
+  user              User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
   category          EntryCategory
   slug              String
   title             String
@@ -200,8 +244,8 @@ model Entry {
   auditLogs         EntryAuditLog[]
   focusSessions     FocusSession[]
 
-  @@unique([category, slug])
-  @@index([category])
+  @@unique([userId, category, slug])
+  @@index([userId, category])
 }
 
 model ProjectDetails {
@@ -275,8 +319,12 @@ model EntryLog {
 
 model Tag {
   id    String     @id @default(uuid())
-  name  String     @unique
+  userId String?
+  user   User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name  String
   entries EntryTag[]
+
+  @@unique([userId, name])
 }
 
 model EntryTag {
@@ -312,6 +360,8 @@ model EntryEmbedding {
 
 model DigestPreference {
   id                 String         @id @default(uuid())
+  userId             String?
+  user               User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
   focusCategories    EntryCategory[]
   maxItems           Int
   maxOpenLoops       Int
@@ -324,18 +374,26 @@ model DigestPreference {
   includeTheme       Boolean        @default(true)
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
+
+  @@unique([userId])
 }
 
 model DailyTipState {
   id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   order     Int[]
   cursor    Int
   lastTip   String?
   updatedAt DateTime?
+
+  @@unique([userId])
 }
 
 model OfflineQueueItem {
   id                 String   @id
+  userId             String?
+  user               User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   tool               String
   args               Json
   channel            Channel
@@ -347,5 +405,5 @@ model OfflineQueueItem {
   processingStartedAt DateTime?
   status             String   @default("pending")
 
-  @@index([status, createdAt])
+  @@index([userId, status, createdAt])
 }

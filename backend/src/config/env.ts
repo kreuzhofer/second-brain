@@ -7,8 +7,11 @@ export interface EnvConfig {
   // Required
   OPENAI_API_KEY: string;
   DATABASE_URL: string;
-  API_KEY: string;
-  DATA_PATH: string;
+  JWT_SECRET: string;
+  DEFAULT_USER_EMAIL: string;
+  DEFAULT_USER_PASSWORD: string;
+  DEFAULT_USER_NAME?: string;
+  JWT_EXPIRES_IN: string;
   
   // Optional with defaults
   TIMEZONE: string;
@@ -104,8 +107,9 @@ export class MissingEnvVarError extends Error {
 const REQUIRED_ENV_VARS = [
   'OPENAI_API_KEY',
   'DATABASE_URL',
-  'API_KEY',
-  // DATA_PATH is optional now that entries are database-backed
+  'JWT_SECRET',
+  'DEFAULT_USER_EMAIL',
+  'DEFAULT_USER_PASSWORD',
 ] as const;
 
 /**
@@ -273,8 +277,11 @@ export function loadEnvConfig(): EnvConfig {
   return {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
     DATABASE_URL: process.env.DATABASE_URL || '',
-    API_KEY: process.env.API_KEY || '',
-    DATA_PATH: process.env.DATA_PATH || '/memory',
+    JWT_SECRET: process.env.JWT_SECRET || '',
+    DEFAULT_USER_EMAIL: process.env.DEFAULT_USER_EMAIL || '',
+    DEFAULT_USER_PASSWORD: process.env.DEFAULT_USER_PASSWORD || '',
+    DEFAULT_USER_NAME: process.env.DEFAULT_USER_NAME || undefined,
+    JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '30d',
     TIMEZONE: process.env.TIMEZONE || 'Europe/Berlin',
     PORT: parseInt(process.env.PORT || '3000', 10),
     

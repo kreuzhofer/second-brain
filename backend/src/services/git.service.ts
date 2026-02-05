@@ -1,7 +1,6 @@
 import simpleGit, { SimpleGit } from 'simple-git';
 import { access, constants } from 'fs/promises';
-import { join } from 'path';
-import { getConfig } from '../config/env';
+import { join, resolve } from 'path';
 import { Category, Channel } from '../types/entry.types';
 
 /**
@@ -29,7 +28,7 @@ export class GitService {
   private dataPath: string;
 
   constructor(dataPath?: string) {
-    this.dataPath = dataPath || getConfig().DATA_PATH;
+    this.dataPath = dataPath || resolve(process.cwd(), '..', 'memory');
     this.git = simpleGit(this.dataPath);
   }
 

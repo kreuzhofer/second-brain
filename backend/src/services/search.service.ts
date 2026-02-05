@@ -10,6 +10,7 @@ import { EntryService, getEntryService } from './entry.service';
 import { Category } from '../types/entry.types';
 import { getConfig } from '../config/env';
 import { EmbeddingService, OpenAIEmbeddingService } from './embedding.service';
+import { requireUserId } from '../context/user-context';
 
 // ============================================
 // Types
@@ -94,6 +95,7 @@ export class SearchService {
       return { entries: [], total: 0 };
     }
 
+    const userId = requireUserId();
     const trimmedQuery = query.trim();
     const normalizedQuery = trimmedQuery.toLowerCase();
     const category = options?.category;
@@ -134,7 +136,7 @@ export class SearchService {
     }
 
     const semanticScores = queryEmbedding
-      ? await this.fetchSemanticScores(queryEmbedding, category)
+      ? await this.fetchSemanticScores(queryEmbedding, userId, category)
       : new Map<string, number>();
 
     for (const item of prepared) {
@@ -194,7 +196,11 @@ export class SearchService {
     };
   }
 
-  private async fetchSemanticScores(queryEmbedding: number[], category?: Category): Promise<Map<string, number>> {
+  private async fetchSemanticScores(
+    queryEmbedding: number[],
+    userId: string,
+    category?: Category
+  ): Promise<Map<string, number>> {
     if (!this.enableSemantic) return new Map();
 
     const embeddingLiteral = `[${queryEmbedding.join(',')}]`;
@@ -204,7 +210,9 @@ export class SearchService {
       SELECT e.id as "entryId", (1 - (emb."vector" <=> ${embeddingLiteral}::vector)) as score
       FROM "EntryEmbedding" emb
       JOIN "Entry" e ON e.id = emb."entryId"
-      ${category ? Prisma.sql`WHERE e.category = ${category}::"EntryCategory"` : Prisma.empty}
+      ${category
+        ? Prisma.sql`WHERE e."userId" = ${userId} AND e.category = ${category}::"EntryCategory"`
+        : Prisma.sql`WHERE e."userId" = ${userId}`}
       ORDER BY emb."vector" <=> ${embeddingLiteral}::vector
       LIMIT ${limit}
     `);

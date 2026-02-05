@@ -9,11 +9,13 @@ import { getConfig } from '../config/env';
 import { Channel } from '../types/entry.types';
 import { ContextWindow } from '../types/chat.types';
 import { getPrismaClient } from '../lib/prisma';
+import { getCurrentUserId, requireUserId, runWithUserId } from '../context/user-context';
 
 export type OfflineQueueTool = 'classify_and_capture';
 
 export interface OfflineQueueItem {
   id: string;
+  userId?: string;
   tool: OfflineQueueTool;
   args: Record<string, unknown>;
   channel: Channel;
@@ -76,9 +78,10 @@ export class OfflineQueueService {
     context?: ContextWindow
   ): Promise<OfflineQueueItem | null> {
     if (!this.config.enabled) return null;
+    const userId = requireUserId();
 
-    const id = this.computeHash(text, hints, channel);
-    const existing = await this.findExistingItem(id);
+    const id = this.computeHash(userId, text, hints, channel);
+    const existing = await this.findExistingItem(id, userId);
     if (existing) {
       return existing;
     }
@@ -86,6 +89,7 @@ export class OfflineQueueService {
     const created = await this.prisma.offlineQueueItem.create({
       data: {
         id,
+        userId,
         tool: 'classify_and_capture',
         args: { text, hints },
         channel,
@@ -100,17 +104,19 @@ export class OfflineQueueService {
   }
 
   async getStatus(): Promise<OfflineQueueStatus> {
+    const userId = requireUserId();
     const [pending, processing, failed] = await Promise.all([
-      this.prisma.offlineQueueItem.count({ where: { status: 'pending' } }),
-      this.prisma.offlineQueueItem.count({ where: { status: 'processing' } }),
-      this.prisma.offlineQueueItem.count({ where: { status: 'failed' } })
+      this.prisma.offlineQueueItem.count({ where: { status: 'pending', userId } }),
+      this.prisma.offlineQueueItem.count({ where: { status: 'processing', userId } }),
+      this.prisma.offlineQueueItem.count({ where: { status: 'failed', userId } })
     ]);
     return { pending, processing, failed };
   }
 
   async listFailed(): Promise<OfflineQueueItem[]> {
+    const userId = requireUserId();
     const items = await this.prisma.offlineQueueItem.findMany({
-      where: { status: 'failed' },
+      where: { status: 'failed', userId },
       orderBy: { createdAt: 'asc' }
     });
     return items.map((item) => this.toQueueItem(item));
@@ -165,7 +171,13 @@ export class OfflineQueueService {
 
       let result: OfflineQueueProcessResult;
       try {
-        result = await processor(this.toQueueItem(updated));
+        const updatedItem = this.toQueueItem(updated);
+        const resolvedUserId = updatedItem.userId ?? getCurrentUserId();
+        if (resolvedUserId) {
+          result = await runWithUserId(resolvedUserId, () => processor(updatedItem));
+        } else {
+          result = await processor(updatedItem);
+        }
       } catch (error) {
         result = { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
       }
@@ -250,11 +262,12 @@ export class OfflineQueueService {
     });
   }
 
-  private async findExistingItem(id: string): Promise<OfflineQueueItem | null> {
+  private async findExistingItem(id: string, userId: string): Promise<OfflineQueueItem | null> {
     const cutoff = new Date(Date.now() - this.config.dedupeTtlHours * 60 * 60 * 1000);
     const existing = await this.prisma.offlineQueueItem.findFirst({
       where: {
         id,
+        userId,
         createdAt: { gte: cutoff },
         status: { in: ['pending', 'processing', 'failed'] }
       }
@@ -262,8 +275,9 @@ export class OfflineQueueService {
     return existing ? this.toQueueItem(existing) : null;
   }
 
-  private computeHash(text: string, hints: string | undefined, channel: Channel): string {
+  private computeHash(userId: string, text: string, hints: string | undefined, channel: Channel): string {
     const hash = createHash('sha256');
+    hash.update(userId);
     hash.update(text);
     hash.update(hints || '');
     hash.update(channel);
@@ -273,6 +287,7 @@ export class OfflineQueueService {
   private toQueueItem(record: any): OfflineQueueItem {
     return {
       id: record.id,
+      userId: record.userId ?? undefined,
       tool: record.tool as OfflineQueueTool,
       args: record.args as Record<string, unknown>,
       channel: record.channel,

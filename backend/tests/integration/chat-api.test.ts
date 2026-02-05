@@ -14,6 +14,7 @@ import { resetConversationService } from '../../src/services/conversation.servic
 import { resetChatService } from '../../src/services/chat.service';
 import { resetContextAssembler } from '../../src/services/context.service';
 import { resetSummarizationService } from '../../src/services/summarization.service';
+import { resetDatabase, TEST_USER_ID } from '../setup';
 
 // Create test app
 const createTestApp = () => {
@@ -33,15 +34,6 @@ describe('Chat API Integration Tests', () => {
   const prisma = getPrismaClient();
   let app: express.Application;
 
-  // Helper function to clean up test data
-  async function cleanupTestData() {
-    await prisma.$transaction(async (tx) => {
-      await tx.message.deleteMany({});
-      await tx.conversationSummary.deleteMany({});
-      await tx.conversation.deleteMany({});
-    });
-  }
-
   beforeAll(async () => {
     await prisma.$connect();
     app = createTestApp();
@@ -54,12 +46,11 @@ describe('Chat API Integration Tests', () => {
     resetContextAssembler();
     resetSummarizationService();
     
-    // Clean up test data
-    await cleanupTestData();
+    await resetDatabase();
   });
 
   afterAll(async () => {
-    await cleanupTestData();
+    await resetDatabase();
     await disconnectPrisma();
   });
 
@@ -108,6 +99,7 @@ describe('Chat API Integration Tests', () => {
       // Create a conversation directly in the database
       const conversation = await prisma.conversation.create({
         data: {
+          userId: TEST_USER_ID,
           channel: 'chat',
         },
       });
@@ -115,8 +107,8 @@ describe('Chat API Integration Tests', () => {
       // Add some messages
       await prisma.message.createMany({
         data: [
-          { conversationId: conversation.id, role: 'user', content: 'Hello' },
-          { conversationId: conversation.id, role: 'assistant', content: 'Hi there!' },
+          { conversationId: conversation.id, userId: TEST_USER_ID, role: 'user', content: 'Hello' },
+          { conversationId: conversation.id, userId: TEST_USER_ID, role: 'assistant', content: 'Hi there!' },
         ],
       });
 
@@ -134,9 +126,9 @@ describe('Chat API Integration Tests', () => {
       // Create multiple conversations
       await prisma.conversation.createMany({
         data: [
-          { channel: 'chat' },
-          { channel: 'chat' },
-          { channel: 'chat' },
+          { userId: TEST_USER_ID, channel: 'chat' },
+          { userId: TEST_USER_ID, channel: 'chat' },
+          { userId: TEST_USER_ID, channel: 'chat' },
         ],
       });
 
@@ -162,14 +154,15 @@ describe('Chat API Integration Tests', () => {
       // Create a conversation with messages
       const conversation = await prisma.conversation.create({
         data: {
+          userId: TEST_USER_ID,
           channel: 'chat',
         },
       });
 
       await prisma.message.createMany({
         data: [
-          { conversationId: conversation.id, role: 'user', content: 'Hello' },
-          { conversationId: conversation.id, role: 'assistant', content: 'Hi there!' },
+          { conversationId: conversation.id, userId: TEST_USER_ID, role: 'user', content: 'Hello' },
+          { conversationId: conversation.id, userId: TEST_USER_ID, role: 'assistant', content: 'Hi there!' },
         ],
       });
 
@@ -187,12 +180,14 @@ describe('Chat API Integration Tests', () => {
     it('includes filed entry metadata in messages', async () => {
       const conversation = await prisma.conversation.create({
         data: {
+          userId: TEST_USER_ID,
           channel: 'chat',
         },
       });
 
       await prisma.message.create({
         data: {
+          userId: TEST_USER_ID,
           conversationId: conversation.id,
           role: 'assistant',
           content: 'Filed your entry',
@@ -222,15 +217,16 @@ describe('Chat API Integration Tests', () => {
     it('returns conversation details with message count', async () => {
       const conversation = await prisma.conversation.create({
         data: {
+          userId: TEST_USER_ID,
           channel: 'email',
         },
       });
 
       await prisma.message.createMany({
         data: [
-          { conversationId: conversation.id, role: 'user', content: 'Test 1' },
-          { conversationId: conversation.id, role: 'assistant', content: 'Test 2' },
-          { conversationId: conversation.id, role: 'user', content: 'Test 3' },
+          { conversationId: conversation.id, userId: TEST_USER_ID, role: 'user', content: 'Test 1' },
+          { conversationId: conversation.id, userId: TEST_USER_ID, role: 'assistant', content: 'Test 2' },
+          { conversationId: conversation.id, userId: TEST_USER_ID, role: 'user', content: 'Test 3' },
         ],
       });
 

@@ -14,6 +14,7 @@ import { getConfig } from '../config/env';
 import { ProjectStatus } from '../types/entry.types';
 import { getPrismaClient } from '../lib/prisma';
 import { PrismaClient } from '@prisma/client';
+import { requireUserId } from '../context/user-context';
 
 // ============================================
 // Types
@@ -320,6 +321,7 @@ export class ProactiveService {
   async checkUserActivity(inactivityDays?: number): Promise<boolean> {
     const config = getConfig();
     const threshold = inactivityDays ?? config.INACTIVITY_DAYS;
+    const userId = requireUserId();
     
     // Calculate threshold date (now - INACTIVITY_DAYS)
     const thresholdDate = new Date();
@@ -328,6 +330,7 @@ export class ProactiveService {
     // Query Message table for user messages since threshold
     const userMessageCount = await this.prisma.message.count({
       where: {
+        userId,
         createdAt: {
           gte: thresholdDate
         },

@@ -57,10 +57,6 @@ describe('Property Tests: Context Assembler', () => {
       MAX_VERBATIM_MESSAGES
     );
 
-    // Clean up test data before each test using TRUNCATE to avoid FK conflicts
-    await prisma.$executeRawUnsafe(
-      'TRUNCATE "Message", "ConversationSummary", "Conversation" RESTART IDENTITY CASCADE;'
-    );
     await resetDatabase();
 
     // Create a fresh index.md
@@ -68,12 +64,8 @@ describe('Property Tests: Context Assembler', () => {
   });
 
   afterAll(async () => {
-    // Clean up all test data using TRUNCATE to avoid FK conflicts
-    await prisma.$executeRawUnsafe(
-      'TRUNCATE "Message", "ConversationSummary", "Conversation" RESTART IDENTITY CASCADE;'
-    );
-    await disconnectPrisma();
     await resetDatabase();
+    await disconnectPrisma();
   });
 
   // ============================================

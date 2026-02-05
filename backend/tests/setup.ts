@@ -1,10 +1,10 @@
 // Jest setup file
 import { config } from 'dotenv';
 import { join } from 'path';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { getPrismaClient } from '../src/lib/prisma';
-
-// Load environment variables from .env file at the root
-config({ path: join(__dirname, '../../.env') });
+import { setDefaultUserId } from '../src/context/user-context';
 
 // Ensure git is available in test PATH (some environments strip PATH)
 if (!process.env.PATH || !process.env.PATH.includes('/usr/bin')) {
@@ -14,35 +14,48 @@ if (!process.env.PATH || !process.env.PATH.includes('/usr/bin')) {
   process.env.PATH = merged.join(':');
 }
 
+export const TEST_USER_ID = '00000000-0000-4000-8000-000000000001';
+export const TEST_USER_EMAIL = 'test@example.com';
+export const TEST_USER_PASSWORD = 'test-password-123';
+export const TEST_JWT_SECRET = 'test-jwt-secret';
+
+// Load environment variables from .env file at the root
+config({ path: join(__dirname, '../../.env') });
+
+process.env.JWT_SECRET = process.env.JWT_SECRET || TEST_JWT_SECRET;
+process.env.DEFAULT_USER_EMAIL = process.env.DEFAULT_USER_EMAIL || TEST_USER_EMAIL;
+process.env.DEFAULT_USER_PASSWORD = process.env.DEFAULT_USER_PASSWORD || TEST_USER_PASSWORD;
+
+export function createTestJwt(userId: string = TEST_USER_ID, email: string = TEST_USER_EMAIL): string {
+  return jwt.sign({ email }, TEST_JWT_SECRET, {
+    subject: userId,
+    expiresIn: '1h'
+  });
+}
+
 const prisma = getPrismaClient();
 
+async function ensureTestUser(): Promise<void> {
+  await prisma.user.upsert({
+    where: { id: TEST_USER_ID },
+    create: {
+      id: TEST_USER_ID,
+      email: TEST_USER_EMAIL,
+      name: 'Test User',
+      passwordHash: await bcrypt.hash(TEST_USER_PASSWORD, 10)
+    },
+    update: {
+      email: TEST_USER_EMAIL,
+      name: 'Test User'
+    }
+  });
+
+  setDefaultUserId(TEST_USER_ID);
+}
+
 export async function resetDatabase(): Promise<void> {
-  await prisma.entryRevision.deleteMany({});
-  await prisma.entryEmbedding.deleteMany({});
-  await prisma.entrySection.deleteMany({});
-  await prisma.entryLog.deleteMany({});
-  await prisma.entryTag.deleteMany({});
-  await prisma.tag.deleteMany({});
-  await prisma.projectDetails.deleteMany({});
-  await prisma.adminTaskDetails.deleteMany({});
-  await prisma.ideaDetails.deleteMany({});
-  await prisma.personDetails.deleteMany({});
-  await prisma.inboxDetails.deleteMany({});
-  await prisma.entryAuditLog.deleteMany({});
-  await prisma.entry.deleteMany({});
-
-  await prisma.focusSession.deleteMany({});
-  await prisma.focusTrack.deleteMany({});
-
-  await prisma.offlineQueueItem.deleteMany({});
-  await prisma.digestPreference.deleteMany({});
-  await prisma.dailyTipState.deleteMany({});
-
-  await prisma.message.deleteMany({});
-  await prisma.conversationSummary.deleteMany({});
-  await prisma.conversation.deleteMany({});
-  await prisma.emailThread.deleteMany({});
-  await prisma.cronJobRun.deleteMany({});
+  await prisma.user.deleteMany({ where: { id: TEST_USER_ID } });
+  await ensureTestUser();
 }
 
 beforeAll(async () => {

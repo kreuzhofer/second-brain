@@ -6,6 +6,7 @@
 import OpenAI from 'openai';
 import { getPrismaClient } from '../lib/prisma';
 import { getConfig } from '../config/env';
+import { requireUserId } from '../context/user-context';
 
 export interface DailyTipState {
   order: number[];
@@ -14,7 +15,6 @@ export interface DailyTipState {
   updatedAt?: string;
 }
 
-const DEFAULT_ID = 'default';
 const FALLBACK_TIP = 'Pick the smallest next action and do it for two minutes to start momentum.';
 
 export class DailyTipService {
@@ -91,7 +91,8 @@ export class DailyTipService {
   }
 
   private async loadState(): Promise<DailyTipState> {
-    const record = await this.prisma.dailyTipState.findUnique({ where: { id: DEFAULT_ID } });
+    const userId = requireUserId();
+    const record = await this.prisma.dailyTipState.findUnique({ where: { userId } });
     if (!record) {
       return { order: [], cursor: 0 };
     }
@@ -105,10 +106,11 @@ export class DailyTipService {
   }
 
   private async saveState(state: DailyTipState): Promise<void> {
+    const userId = requireUserId();
     await this.prisma.dailyTipState.upsert({
-      where: { id: DEFAULT_ID },
+      where: { userId },
       create: {
-        id: DEFAULT_ID,
+        userId,
         order: state.order,
         cursor: state.cursor,
         lastTip: state.lastTip ?? null,

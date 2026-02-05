@@ -158,6 +158,16 @@ describe('ClassificationAgent', () => {
       expect(userContent).toContain('My specific thought to classify');
     });
 
+    it('should include the current date in the prompt for relative due dates', async () => {
+      const input = createClassificationInput('Follow up tomorrow');
+
+      await classificationAgent.classify(input);
+
+      const callArgs = mockCreate.mock.calls[0][0];
+      const userContent = callArgs.messages[1].content;
+      expect(userContent).toMatch(/Today's date is \d{4}-\d{2}-\d{2}/);
+    });
+
     it('should include hints in the prompt when provided', async () => {
       const input = createClassificationInput(
         'Meeting with John about the project',

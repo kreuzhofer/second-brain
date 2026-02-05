@@ -8,8 +8,11 @@ services:
     environment:
       - DATABASE_URL=postgresql://secondbrain:secondbrain@db:5432/secondbrain
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - API_KEY=${API_KEY}
-      - DATA_PATH=/memory
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-30d}
+      - DEFAULT_USER_EMAIL=${DEFAULT_USER_EMAIL}
+      - DEFAULT_USER_PASSWORD=${DEFAULT_USER_PASSWORD}
+      - DEFAULT_USER_NAME=${DEFAULT_USER_NAME:-Second Brain}
       - TIMEZONE=${TIMEZONE:-Europe/Berlin}
       - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD:-0.6}
       - PORT=3000
@@ -30,8 +33,6 @@ services:
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
       - FOCUS_MUSIC_SEARCH_TERMS=${FOCUS_MUSIC_SEARCH_TERMS:-}
       - FOCUS_MUSIC_RESULTS_LIMIT=${FOCUS_MUSIC_RESULTS_LIMIT:-}
-    volumes:
-      - ${DATA_PATH:-./memory}:/memory
     depends_on:
       db:
         condition: service_healthy

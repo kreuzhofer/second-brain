@@ -14,6 +14,7 @@ import {
   ConversationService,
   resetConversationService,
 } from '../../src/services/conversation.service';
+import { TEST_USER_ID } from '../setup';
 
 describe('Property Tests: Message Chronological Ordering', () => {
   let conversationService: ConversationService;
@@ -22,9 +23,9 @@ describe('Property Tests: Message Chronological Ordering', () => {
   // Helper function to clean up test data
   async function cleanupTestData() {
     await prisma.$transaction(async (tx) => {
-      await tx.message.deleteMany({});
-      await tx.conversationSummary.deleteMany({});
-      await tx.conversation.deleteMany({});
+      await tx.message.deleteMany({ where: { userId: TEST_USER_ID } });
+      await tx.conversationSummary.deleteMany({ where: { userId: TEST_USER_ID } });
+      await tx.conversation.deleteMany({ where: { userId: TEST_USER_ID } });
     });
   }
 

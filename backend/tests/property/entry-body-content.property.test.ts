@@ -284,12 +284,13 @@ describe('Property Tests: Entry Body Content', () => {
             // Verify the section header was created
             expect(updated.content).toContain(`## ${sectionName}`);
             
-            // Verify the content appears under the section
-            expect(updated.content).toContain(sectionContent);
+            // Verify the content appears under the section (rendering trims whitespace)
+            const normalizedContent = sectionContent.trim();
+            expect(updated.content).toContain(normalizedContent);
             
             // Verify content comes after section header
             const headerIndex = updated.content.indexOf(`## ${sectionName}`);
-            const contentIndex = updated.content.indexOf(sectionContent);
+            const contentIndex = updated.content.indexOf(normalizedContent);
             expect(headerIndex).toBeLessThan(contentIndex);
           }
         ),

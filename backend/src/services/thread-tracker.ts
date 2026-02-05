@@ -13,6 +13,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { getPrismaClient } from '../lib/prisma';
+import { requireUserId } from '../context/user-context';
 
 // ============================================
 // Types and Interfaces
@@ -84,6 +85,10 @@ export interface IThreadTracker {
 export class ThreadTracker implements IThreadTracker {
   private prisma = getPrismaClient();
 
+  private getUserId(): string {
+    return requireUserId();
+  }
+
   /**
    * Generate a new thread ID
    * 
@@ -132,8 +137,10 @@ export class ThreadTracker implements IThreadTracker {
    * @returns The created EmailThread record
    */
   async createThread(params: CreateThreadParams): Promise<EmailThread> {
+    const userId = this.getUserId();
     const thread = await this.prisma.emailThread.create({
       data: {
+        userId,
         messageId: params.messageId,
         threadId: params.threadId,
         inReplyTo: params.inReplyTo,
@@ -160,8 +167,9 @@ export class ThreadTracker implements IThreadTracker {
    * @returns The conversationId if found, null otherwise
    */
   async findConversation(threadId: string): Promise<string | null> {
+    const userId = this.getUserId();
     const thread = await this.prisma.emailThread.findFirst({
-      where: { threadId },
+      where: { threadId, userId },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -180,8 +188,9 @@ export class ThreadTracker implements IThreadTracker {
    * @returns The EmailThread record if found, null otherwise
    */
   async getByMessageId(messageId: string): Promise<EmailThread | null> {
-    const thread = await this.prisma.emailThread.findUnique({
-      where: { messageId },
+    const userId = this.getUserId();
+    const thread = await this.prisma.emailThread.findFirst({
+      where: { messageId, userId },
     });
 
     if (!thread) {
@@ -201,8 +210,9 @@ export class ThreadTracker implements IThreadTracker {
    * @returns The EmailThread record if found, null otherwise
    */
   async findByThreadId(threadId: string): Promise<EmailThread | null> {
+    const userId = this.getUserId();
     const thread = await this.prisma.emailThread.findFirst({
-      where: { threadId },
+      where: { threadId, userId },
       orderBy: { createdAt: 'desc' },
     });
 

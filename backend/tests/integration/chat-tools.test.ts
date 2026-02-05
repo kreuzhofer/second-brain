@@ -16,6 +16,7 @@ import { ToolExecutor, CaptureResult, ListEntriesResult, GetEntryResult } from '
 import { Category } from '../../src/types/entry.types';
 import { getPrismaClient, disconnectPrisma } from '../../src/lib/prisma';
 import OpenAI from 'openai';
+import { resetDatabase } from '../setup';
 
 // ============================================
 // Mock Factories
@@ -87,21 +88,11 @@ describe('Chat Tools Integration', () => {
     
     conversationService = new ConversationService();
 
-    // Clean up test data before each test
-    await prisma.$transaction(async (tx) => {
-      await tx.message.deleteMany({});
-      await tx.conversationSummary.deleteMany({});
-      await tx.conversation.deleteMany({});
-    });
+    await resetDatabase();
   });
 
   afterAll(async () => {
-    // Clean up all test data
-    await prisma.$transaction(async (tx) => {
-      await tx.message.deleteMany({});
-      await tx.conversationSummary.deleteMany({});
-      await tx.conversation.deleteMany({});
-    });
+    await resetDatabase();
     await disconnectPrisma();
   });
 

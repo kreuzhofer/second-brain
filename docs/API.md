@@ -2,13 +2,62 @@
 
 ## Authentication
 
-All API endpoints (except `/api/health`) require authentication using a Bearer token.
+All API endpoints (except `/api/health` and `/api/auth/*`) require authentication using a Bearer token.
 
-Include the token in the `Authorization` header:
+Obtain a JWT via `POST /api/auth/login` (or `POST /api/auth/register` for new users), then include it in the `Authorization` header:
 
 ```
-Authorization: Bearer your-api-key-here
+Authorization: Bearer <jwt>
 ```
+
+### Login
+
+```
+POST /api/auth/login
+```
+
+**Request Body**:
+```json
+{
+  "email": "you@example.com",
+  "password": "your-password"
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "token": "<jwt>",
+  "user": {
+    "id": "uuid",
+    "email": "you@example.com",
+    "name": "Your Name"
+  }
+}
+```
+
+### Register
+
+```
+POST /api/auth/register
+```
+
+**Request Body**:
+```json
+{
+  "email": "you@example.com",
+  "password": "your-password",
+  "name": "Your Name"
+}
+```
+
+### Current User
+
+```
+GET /api/auth/me
+```
+
+Returns the authenticated user profile.
 
 ### Error Response (401 Unauthorized)
 
@@ -322,10 +371,6 @@ GET /api/search?query=design&category=projects&limit=10
 **Embedding Backfill (Startup Behavior)**:
 - The app auto-backfills missing embeddings on startup when `EMBEDDING_BACKFILL_ENABLED` is not `false`.
 - Optional env flags: `EMBEDDING_BACKFILL_CATEGORY`, `EMBEDDING_BACKFILL_LIMIT`, `EMBEDDING_BACKFILL_BATCH_SIZE`, `EMBEDDING_BACKFILL_SLEEP_MS`, `EMBEDDING_MAX_CHARS`.
-
-**Memory Migration (Startup Behavior)**:
-- The app auto-migrates legacy `memory/` markdown data into PostgreSQL when the database is empty.
-- Optional env flags: `MEMORY_MIGRATION_ENABLED`, `MEMORY_MIGRATION_FORCE`.
 
 **Query Parameters**:
 | Parameter | Type | Description |

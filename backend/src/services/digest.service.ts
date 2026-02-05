@@ -13,6 +13,7 @@ import { DailyTipService, getDailyTipService } from './daily-tip.service';
 import { getPrismaClient } from '../lib/prisma';
 import { EntrySummary, Category } from '../types/entry.types';
 import { DigestPreferences, DigestPreferencesService, getDigestPreferencesService } from './digest-preferences.service';
+import { requireUserId } from '../context/user-context';
 
 // ============================================
 // Types
@@ -158,10 +159,12 @@ export class DigestService {
     if (!this.entryService) {
       throw new Error('EntryService not available');
     }
+    const userId = requireUserId();
     
     // Count user messages in date range
     const messagesCount = await this.prisma.message.count({
       where: {
+        userId,
         createdAt: {
           gte: startDate,
           lt: endDate

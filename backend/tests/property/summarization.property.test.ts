@@ -32,6 +32,7 @@ import {
   resetContextAssembler,
 } from '../../src/services/context.service';
 import { Channel } from '../../src/types/entry.types';
+import { TEST_USER_ID } from '../setup';
 import OpenAI from 'openai';
 
 // Mock OpenAI client
@@ -73,18 +74,18 @@ describe('Property Tests: Summarization Service', () => {
 
     // Clean up test data before each test using transaction
     await prisma.$transaction(async (tx) => {
-      await tx.message.deleteMany({});
-      await tx.conversationSummary.deleteMany({});
-      await tx.conversation.deleteMany({});
+      await tx.message.deleteMany({ where: { userId: TEST_USER_ID } });
+      await tx.conversationSummary.deleteMany({ where: { userId: TEST_USER_ID } });
+      await tx.conversation.deleteMany({ where: { userId: TEST_USER_ID } });
     });
   });
 
   afterAll(async () => {
     // Clean up all test data using transaction
     await prisma.$transaction(async (tx) => {
-      await tx.message.deleteMany({});
-      await tx.conversationSummary.deleteMany({});
-      await tx.conversation.deleteMany({});
+      await tx.message.deleteMany({ where: { userId: TEST_USER_ID } });
+      await tx.conversationSummary.deleteMany({ where: { userId: TEST_USER_ID } });
+      await tx.conversation.deleteMany({ where: { userId: TEST_USER_ID } });
     });
     await disconnectPrisma();
   });

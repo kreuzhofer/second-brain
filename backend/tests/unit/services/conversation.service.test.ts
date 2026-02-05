@@ -13,6 +13,7 @@ import {
   resetConversationService,
 } from '../../../src/services/conversation.service';
 import { Channel } from '../../../src/types/entry.types';
+import { TEST_USER_ID } from '../../setup';
 
 describe('ConversationService', () => {
   let conversationService: ConversationService;
@@ -22,9 +23,9 @@ describe('ConversationService', () => {
   async function cleanupTestData() {
     // Use a transaction to ensure proper cleanup order
     await prisma.$transaction(async (tx) => {
-      await tx.message.deleteMany({});
-      await tx.conversationSummary.deleteMany({});
-      await tx.conversation.deleteMany({});
+      await tx.message.deleteMany({ where: { userId: TEST_USER_ID } });
+      await tx.conversationSummary.deleteMany({ where: { userId: TEST_USER_ID } });
+      await tx.conversation.deleteMany({ where: { userId: TEST_USER_ID } });
     });
   }
 

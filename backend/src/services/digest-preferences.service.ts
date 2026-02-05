@@ -5,6 +5,7 @@
 
 import { Category } from '../types/entry.types';
 import { getPrismaClient } from '../lib/prisma';
+import { requireUserId } from '../context/user-context';
 
 export interface DigestPreferences {
   focusCategories?: Category[];
@@ -30,13 +31,12 @@ const DEFAULT_PREFERENCES: DigestPreferences = {
   includeTheme: true
 };
 
-const DEFAULT_ID = 'default';
-
 export class DigestPreferencesService {
   private prisma = getPrismaClient();
 
   async getPreferences(): Promise<DigestPreferences> {
-    const record = await this.prisma.digestPreference.findUnique({ where: { id: DEFAULT_ID } });
+    const userId = requireUserId();
+    const record = await this.prisma.digestPreference.findUnique({ where: { userId } });
     if (!record) {
       return { ...DEFAULT_PREFERENCES };
     }
@@ -57,11 +57,12 @@ export class DigestPreferencesService {
   }
 
   async savePreferences(preferences: DigestPreferences): Promise<DigestPreferences> {
+    const userId = requireUserId();
     const merged = { ...DEFAULT_PREFERENCES, ...preferences };
     await this.prisma.digestPreference.upsert({
-      where: { id: DEFAULT_ID },
+      where: { userId },
       create: {
-        id: DEFAULT_ID,
+        userId,
         focusCategories: merged.focusCategories || [],
         maxItems: merged.maxItems || DEFAULT_PREFERENCES.maxItems!,
         maxOpenLoops: merged.maxOpenLoops || DEFAULT_PREFERENCES.maxOpenLoops!,

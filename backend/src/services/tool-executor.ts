@@ -38,6 +38,7 @@ import {
 } from '../types/entry.types';
 import { ContextWindow, ClassificationResult } from '../types/chat.types';
 import { getConfig } from '../config/env';
+import { normalizeDueDate } from '../utils/date';
 
 // ============================================
 // Tool Call Types
@@ -385,7 +386,7 @@ export class ToolExecutor {
       }, channel, agentNote);
     } else {
       // Create entry in the classified category with appropriate fields and body content
-      let entryData = this.buildEntryData(classificationResult, channel);
+      let entryData = this.buildEntryData(classificationResult, channel, text);
 
       // Action extraction to enrich next actions for projects/admin
       const actionResult = await this.getActionExtractionService().extractActions(text, targetCategory);
@@ -420,7 +421,8 @@ export class ToolExecutor {
    */
   private buildEntryData(
     result: ClassificationResult,
-    channel: Channel
+    channel: Channel,
+    sourceText: string
   ): CreatePeopleInput | CreateProjectsInput | CreateIdeasInput | CreateAdminInput {
     const baseData = {
       name: result.name,
@@ -431,6 +433,8 @@ export class ToolExecutor {
 
     // Cast fields to unknown first, then to Record to access category-specific properties
     const fields = result.fields as unknown as Record<string, unknown>;
+    const rawDueDate = (fields.dueDate ?? fields.due_date) as string | undefined;
+    const normalizedDueDate = normalizeDueDate(rawDueDate, sourceText);
 
     switch (result.category) {
       case 'people':
@@ -446,7 +450,7 @@ export class ToolExecutor {
           status: (fields.status as 'active' | 'waiting' | 'blocked' | 'someday') || 'active',
           next_action: (fields.nextAction as string) || '',
           related_people: (fields.relatedPeople as string[]) || [],
-          due_date: fields.dueDate as string | undefined
+          due_date: normalizedDueDate
         };
       case 'ideas':
         return {
@@ -458,7 +462,7 @@ export class ToolExecutor {
         return {
           ...baseData,
           status: 'pending' as const,
-          due_date: fields.dueDate as string | undefined
+          due_date: normalizedDueDate
         };
     }
   }

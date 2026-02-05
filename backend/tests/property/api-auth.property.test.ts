@@ -14,11 +14,14 @@ import express from 'express';
 import { authMiddleware } from '../../src/middleware/auth';
 import { chatRouter } from '../../src/routes/chat';
 
-const TEST_API_KEY = 'test-api-key-12345';
+import { createTestJwt, TEST_JWT_SECRET } from '../setup';
 
 jest.mock('../../src/config/env', () => ({
   getConfig: () => ({
-    API_KEY: 'test-api-key-12345'
+    JWT_SECRET: TEST_JWT_SECRET,
+    DEFAULT_USER_EMAIL: 'test@example.com',
+    DEFAULT_USER_PASSWORD: 'test-password-123',
+    JWT_EXPIRES_IN: '1h'
   })
 }));
 
@@ -82,7 +85,7 @@ describe('Property Tests: API Authentication', () => {
       
       for (const wrongToken of wrongTokens) {
         // Skip if it happens to match the actual token
-        if (wrongToken === TEST_API_KEY) continue;
+        if (wrongToken === TEST_JWT_SECRET) continue;
         
         for (const endpoint of protectedEndpoints) {
           const req = endpoint.method === 'post'
@@ -109,9 +112,10 @@ describe('Property Tests: API Authentication', () => {
     it('allows requests with valid Bearer token', async () => {
       // POST /api/chat should not return 401 with valid token
       // (it may return other errors due to missing services, but not 401)
+      const token = createTestJwt();
       const response = await request(app)
         .post('/api/chat')
-        .set('Authorization', `Bearer ${TEST_API_KEY}`)
+        .set('Authorization', `Bearer ${token}`)
         .send({ message: 'test' });
 
       expect(response.status).not.toBe(401);

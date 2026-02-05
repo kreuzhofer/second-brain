@@ -4,7 +4,7 @@
 - Root workspace uses npm workspaces for `backend/` and `frontend/`.
 - `backend/src/` contains Express API, services, and types; `backend/tests/` holds unit, integration, and property tests.
 - `frontend/src/` contains React components, pages, and client utilities.
-- `memory/` stores user data as Markdown with YAML frontmatter and is treated as a Git-tracked data store.
+- PostgreSQL stores entries, revisions, embeddings, and user data; no filesystem-backed memory store.
 - `docs/` contains product and API documentation; `second-brain-product-vision.md` is the product vision.
 
 ## Build, Test, and Development Commands
@@ -35,5 +35,5 @@
 - PRs should include: summary of changes, test commands run, and screenshots for UI changes.
 
 ## Security & Configuration Tips
-- Copy `.env.example` to `.env` and set `OPENAI_API_KEY`, `DATABASE_URL`, `API_KEY`, and `DATA_PATH`.
+- Copy `.env.example` to `.env` and set `OPENAI_API_KEY`, `DATABASE_URL`, `JWT_SECRET`, `DEFAULT_USER_EMAIL`, and `DEFAULT_USER_PASSWORD`.
 - Email integration is optional and only enabled when all SMTP/IMAP vars are set.

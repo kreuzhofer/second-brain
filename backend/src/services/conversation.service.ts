@@ -11,6 +11,7 @@ import {
   ConversationSummary,
 } from '../types/chat.types';
 import { Channel } from '../types/entry.types';
+import { requireUserId } from '../context/user-context';
 
 // Role type matching Prisma enum
 export type Role = 'user' | 'assistant';
@@ -40,6 +41,10 @@ export class MessageNotFoundError extends Error {
 export class ConversationService {
   private prisma = getPrismaClient();
 
+  private getUserId(): string {
+    return requireUserId();
+  }
+
   /**
    * Create a new conversation
    * @param channel - The channel for the conversation (chat, email, api)
@@ -47,8 +52,10 @@ export class ConversationService {
    * @returns The created conversation
    */
   async create(channel: Channel, externalId?: string): Promise<Conversation> {
+    const userId = this.getUserId();
     const conversation = await this.prisma.conversation.create({
       data: {
+        userId,
         channel,
         externalId,
       },
@@ -63,8 +70,9 @@ export class ConversationService {
    * @returns The conversation or null if not found
    */
   async getById(id: string): Promise<Conversation | null> {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
+    const userId = this.getUserId();
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id, userId },
     });
 
     if (!conversation) {
@@ -80,8 +88,9 @@ export class ConversationService {
    * @returns The most recent conversation or null if none exists
    */
   async getMostRecent(channel: Channel): Promise<Conversation | null> {
+    const userId = this.getUserId();
     const conversation = await this.prisma.conversation.findFirst({
-      where: { channel },
+      where: { channel, userId },
       orderBy: { updatedAt: 'desc' },
     });
 
@@ -99,7 +108,9 @@ export class ConversationService {
    * @returns Array of conversations ordered by most recent first
    */
   async list(limit: number = 20, offset: number = 0): Promise<Conversation[]> {
+    const userId = this.getUserId();
     const conversations = await this.prisma.conversation.findMany({
+      where: { userId },
       orderBy: { updatedAt: 'desc' },
       take: limit,
       skip: offset,
@@ -130,9 +141,10 @@ export class ConversationService {
     filedEntryPath?: string,
     filedConfidence?: number
   ): Promise<Message> {
+    const userId = this.getUserId();
     // Verify conversation exists
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id: conversationId },
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, userId },
     });
 
     if (!conversation) {
@@ -141,6 +153,7 @@ export class ConversationService {
 
     const message = await this.prisma.message.create({
       data: {
+        userId,
         conversationId,
         role,
         content,
@@ -165,8 +178,9 @@ export class ConversationService {
    * @returns Array of messages in chronological order
    */
   async getMessages(conversationId: string, limit?: number): Promise<Message[]> {
+    const userId = this.getUserId();
     const messages = await this.prisma.message.findMany({
-      where: { conversationId },
+      where: { conversationId, userId },
       orderBy: { createdAt: 'asc' },
       take: limit,
     });
@@ -188,8 +202,9 @@ export class ConversationService {
    * @returns The number of messages in the conversation
    */
   async getMessageCount(conversationId: string): Promise<number> {
+    const userId = this.getUserId();
     return this.prisma.message.count({
-      where: { conversationId },
+      where: { conversationId, userId },
     });
   }
 
@@ -199,8 +214,9 @@ export class ConversationService {
    * @returns Array of summaries in chronological order
    */
   async getSummaries(conversationId: string): Promise<ConversationSummary[]> {
+    const userId = this.getUserId();
     const summaries = await this.prisma.conversationSummary.findMany({
-      where: { conversationId },
+      where: { conversationId, userId },
       orderBy: { createdAt: 'asc' },
     });
 
@@ -231,9 +247,10 @@ export class ConversationService {
     startMessageId: string,
     endMessageId: string
   ): Promise<ConversationSummary> {
+    const userId = this.getUserId();
     // Verify conversation exists
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id: conversationId },
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, userId },
     });
 
     if (!conversation) {
@@ -242,6 +259,7 @@ export class ConversationService {
 
     const conversationSummary = await this.prisma.conversationSummary.create({
       data: {
+        userId,
         conversationId,
         summary,
         messageCount,

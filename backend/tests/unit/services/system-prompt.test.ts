@@ -150,6 +150,11 @@ User: Tell me more about ClientCo`;
       expect(result).not.toContain('{indexContent}');
       expect(result).not.toContain('{conversationHistory}');
     });
+
+    it('should include the current date for resolving relative dates', () => {
+      const result = buildSystemPrompt('', '');
+      expect(result).toMatch(/Today's date is \d{4}-\d{2}-\d{2}/);
+    });
   });
 
   describe('SYSTEM_PROMPT_TEMPLATE_FOR_TESTING', () => {

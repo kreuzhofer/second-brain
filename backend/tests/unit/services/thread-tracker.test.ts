@@ -11,6 +11,7 @@ import {
   EmailThread,
   resetThreadTracker,
 } from '../../../src/services/thread-tracker';
+import { TEST_USER_ID } from '../../setup';
 
 // Mock the Prisma client
 jest.mock('../../../src/lib/prisma', () => {
@@ -77,6 +78,7 @@ describe('ThreadTracker - Database Operations', () => {
       // Verify Prisma was called with correct data
       expect(mockPrisma.emailThread.create).toHaveBeenCalledWith({
         data: {
+          userId: TEST_USER_ID,
           messageId: params.messageId,
           threadId: params.threadId,
           inReplyTo: undefined,
@@ -124,6 +126,7 @@ describe('ThreadTracker - Database Operations', () => {
       // Verify In-Reply-To was passed to Prisma
       expect(mockPrisma.emailThread.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
+          userId: TEST_USER_ID,
           inReplyTo: '<original123@example.com>',
         }),
       });
@@ -216,7 +219,7 @@ describe('ThreadTracker - Database Operations', () => {
 
       expect(result).toBe(expectedConversationId);
       expect(mockPrisma.emailThread.findFirst).toHaveBeenCalledWith({
-        where: { threadId },
+        where: { threadId, userId: TEST_USER_ID },
         orderBy: { createdAt: 'desc' },
       });
     });
@@ -230,7 +233,7 @@ describe('ThreadTracker - Database Operations', () => {
 
       expect(result).toBeNull();
       expect(mockPrisma.emailThread.findFirst).toHaveBeenCalledWith({
-        where: { threadId: 'nonexistent' },
+        where: { threadId: 'nonexistent', userId: TEST_USER_ID },
         orderBy: { createdAt: 'desc' },
       });
     });
@@ -253,7 +256,7 @@ describe('ThreadTracker - Database Operations', () => {
 
       // Verify the query orders by createdAt descending
       expect(mockPrisma.emailThread.findFirst).toHaveBeenCalledWith({
-        where: { threadId },
+        where: { threadId, userId: TEST_USER_ID },
         orderBy: { createdAt: 'desc' },
       });
     });
@@ -265,7 +268,7 @@ describe('ThreadTracker - Database Operations', () => {
 
       expect(result).toBeNull();
       expect(mockPrisma.emailThread.findFirst).toHaveBeenCalledWith({
-        where: { threadId: '' },
+        where: { threadId: '', userId: TEST_USER_ID },
         orderBy: { createdAt: 'desc' },
       });
     });
@@ -292,7 +295,7 @@ describe('ThreadTracker - Database Operations', () => {
         createdAt: new Date('2024-01-10T09:00:00Z'),
       };
 
-      (mockPrisma.emailThread.findUnique as jest.Mock).mockResolvedValue(mockThread);
+      (mockPrisma.emailThread.findFirst as jest.Mock).mockResolvedValue(mockThread);
 
       const result = await tracker.getByMessageId(messageId);
 
@@ -303,21 +306,21 @@ describe('ThreadTracker - Database Operations', () => {
       expect(result!.subject).toBe('Existing Email');
       expect(result!.fromAddress).toBe('sender@example.com');
       expect(result!.conversationId).toBe('conv-uuid-existing');
-      expect(mockPrisma.emailThread.findUnique).toHaveBeenCalledWith({
-        where: { messageId },
+      expect(mockPrisma.emailThread.findFirst).toHaveBeenCalledWith({
+        where: { messageId, userId: TEST_USER_ID },
       });
     });
 
     it('should return null when message is not found (new email)', async () => {
       const messageId = '<new-email@example.com>';
 
-      (mockPrisma.emailThread.findUnique as jest.Mock).mockResolvedValue(null);
+      (mockPrisma.emailThread.findFirst as jest.Mock).mockResolvedValue(null);
 
       const result = await tracker.getByMessageId(messageId);
 
       expect(result).toBeNull();
-      expect(mockPrisma.emailThread.findUnique).toHaveBeenCalledWith({
-        where: { messageId: '<new-email@example.com>' },
+      expect(mockPrisma.emailThread.findFirst).toHaveBeenCalledWith({
+        where: { messageId: '<new-email@example.com>', userId: TEST_USER_ID },
       });
     });
 
@@ -335,7 +338,7 @@ describe('ThreadTracker - Database Operations', () => {
         createdAt: new Date(),
       };
 
-      (mockPrisma.emailThread.findUnique as jest.Mock).mockResolvedValue(mockThread);
+      (mockPrisma.emailThread.findFirst as jest.Mock).mockResolvedValue(mockThread);
 
       const result = await tracker.getByMessageId(messageId);
 
@@ -358,7 +361,7 @@ describe('ThreadTracker - Database Operations', () => {
         createdAt: new Date(),
       };
 
-      (mockPrisma.emailThread.findUnique as jest.Mock).mockResolvedValue(mockThread);
+      (mockPrisma.emailThread.findFirst as jest.Mock).mockResolvedValue(mockThread);
 
       const result = await tracker.getByMessageId(messageId);
 
@@ -366,17 +369,16 @@ describe('ThreadTracker - Database Operations', () => {
       expect(result!.inReplyTo).toBe(inReplyTo);
     });
 
-    it('should use findUnique for efficient lookup by unique messageId', async () => {
+    it('should query by messageId scoped to user', async () => {
       const messageId = '<unique-lookup@example.com>';
 
-      (mockPrisma.emailThread.findUnique as jest.Mock).mockResolvedValue(null);
+      (mockPrisma.emailThread.findFirst as jest.Mock).mockResolvedValue(null);
 
       await tracker.getByMessageId(messageId);
 
-      // Verify findUnique is used (not findFirst) for the unique messageId field
-      expect(mockPrisma.emailThread.findUnique).toHaveBeenCalledTimes(1);
-      expect(mockPrisma.emailThread.findUnique).toHaveBeenCalledWith({
-        where: { messageId },
+      expect(mockPrisma.emailThread.findFirst).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.emailThread.findFirst).toHaveBeenCalledWith({
+        where: { messageId, userId: TEST_USER_ID },
       });
     });
   });
@@ -439,8 +441,8 @@ describe('ThreadTracker - Database Operations', () => {
       // Mock create
       (mockPrisma.emailThread.create as jest.Mock).mockResolvedValue(mockThread);
 
-      // Mock findUnique to return the created thread
-      (mockPrisma.emailThread.findUnique as jest.Mock).mockResolvedValue(mockThread);
+      // Mock findFirst to return the created thread
+      (mockPrisma.emailThread.findFirst as jest.Mock).mockResolvedValue(mockThread);
 
       // Create the thread
       await tracker.createThread(params);

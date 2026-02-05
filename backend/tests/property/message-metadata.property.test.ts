@@ -20,6 +20,7 @@ import { SummarizationService, resetSummarizationService } from '../../src/servi
 import { ToolRegistry, getToolRegistry } from '../../src/services/tool-registry';
 import { ToolExecutor, CaptureResult } from '../../src/services/tool-executor';
 import { Category } from '../../src/types/entry.types';
+import { TEST_USER_ID } from '../setup';
 import OpenAI from 'openai';
 import path from 'path';
 import fs from 'fs';
@@ -205,18 +206,18 @@ describe('Property Tests: Message Metadata Persistence', () => {
 
     // Clean up test data before each test
     await prisma.$transaction(async (tx) => {
-      await tx.message.deleteMany({});
-      await tx.conversationSummary.deleteMany({});
-      await tx.conversation.deleteMany({});
+      await tx.message.deleteMany({ where: { userId: TEST_USER_ID } });
+      await tx.conversationSummary.deleteMany({ where: { userId: TEST_USER_ID } });
+      await tx.conversation.deleteMany({ where: { userId: TEST_USER_ID } });
     });
   });
 
   afterAll(async () => {
     // Clean up all test data
     await prisma.$transaction(async (tx) => {
-      await tx.message.deleteMany({});
-      await tx.conversationSummary.deleteMany({});
-      await tx.conversation.deleteMany({});
+      await tx.message.deleteMany({ where: { userId: TEST_USER_ID } });
+      await tx.conversationSummary.deleteMany({ where: { userId: TEST_USER_ID } });
+      await tx.conversation.deleteMany({ where: { userId: TEST_USER_ID } });
     });
     await disconnectPrisma();
   });

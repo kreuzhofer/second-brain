@@ -1,23 +1,25 @@
 import request from 'supertest';
 import express from 'express';
-import { resetDatabase } from '../setup';
+import { resetDatabase, createTestJwt, TEST_JWT_SECRET } from '../setup';
 import { authMiddleware } from '../../src/middleware/auth';
 import { inboxRouter } from '../../src/routes/inbox';
 import { entriesRouter } from '../../src/routes/entries';
 import { EntryService, EntryNotFoundError } from '../../src/services/entry.service';
 
-const TEST_API_KEY = 'test-api-key-12345';
-
 jest.mock('../../src/config/env', () => ({
   getConfig: () => ({
-    API_KEY: 'test-api-key-12345',
-    DATA_PATH: '/memory',
+    JWT_SECRET: TEST_JWT_SECRET,
+    DEFAULT_USER_EMAIL: 'test@example.com',
+    DEFAULT_USER_PASSWORD: 'test-password-123',
+    JWT_EXPIRES_IN: '1h',
     OPENAI_API_KEY: '',
     DATABASE_URL: process.env.DATABASE_URL || 'postgresql://user:pass@localhost:5432/second-brain'
   }),
   loadEnvConfig: () => ({
-    API_KEY: 'test-api-key-12345',
-    DATA_PATH: '/memory',
+    JWT_SECRET: TEST_JWT_SECRET,
+    DEFAULT_USER_EMAIL: 'test@example.com',
+    DEFAULT_USER_PASSWORD: 'test-password-123',
+    JWT_EXPIRES_IN: '1h',
     OPENAI_API_KEY: '',
     DATABASE_URL: process.env.DATABASE_URL || 'postgresql://user:pass@localhost:5432/second-brain'
   })
@@ -53,9 +55,10 @@ describe('Inbox Triage API Integration Tests', () => {
       source_channel: 'api'
     });
 
+    const token = createTestJwt();
     const response = await request(app)
       .post('/api/inbox/triage')
-      .set('Authorization', `Bearer ${TEST_API_KEY}`)
+      .set('Authorization', `Bearer ${token}`)
       .send({
         action: 'move',
         paths: [inboxEntry.path],
@@ -76,9 +79,10 @@ describe('Inbox Triage API Integration Tests', () => {
       source_channel: 'api'
     });
 
+    const token = createTestJwt();
     await request(app)
       .post('/api/inbox/triage')
-      .set('Authorization', `Bearer ${TEST_API_KEY}`)
+      .set('Authorization', `Bearer ${token}`)
       .send({
         action: 'resolve',
         paths: [inboxEntry.path]
@@ -104,9 +108,10 @@ describe('Inbox Triage API Integration Tests', () => {
       source_channel: 'api'
     });
 
+    const token = createTestJwt();
     const response = await request(app)
       .post('/api/inbox/triage')
-      .set('Authorization', `Bearer ${TEST_API_KEY}`)
+      .set('Authorization', `Bearer ${token}`)
       .send({
         action: 'merge',
         paths: [inboxEntry.path],

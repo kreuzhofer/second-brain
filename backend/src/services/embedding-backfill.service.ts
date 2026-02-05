@@ -5,6 +5,7 @@ import { getPrismaClient } from '../lib/prisma';
 import { EntryService } from './entry.service';
 import { OpenAIEmbeddingService } from './embedding.service';
 import { Category } from '../types/entry.types';
+import { requireUserId } from '../context/user-context';
 
 interface BackfillConfig {
   enabled: boolean;
@@ -106,9 +107,10 @@ export class EmbeddingBackfillService {
       return;
     }
 
+    const userId = requireUserId();
     const where = this.config.category ? { category: this.config.category } : {};
     const missingCount = await this.prisma.entry.count({
-      where: { ...where, embedding: null }
+      where: { ...where, embedding: null, userId }
     });
 
     if (missingCount === 0) {
@@ -144,6 +146,7 @@ export class EmbeddingBackfillService {
       const batch = await this.prisma.entry.findMany({
         where: {
           embedding: null,
+          userId: requireUserId(),
           ...(this.config.category ? { category: this.config.category } : {})
         },
         orderBy: { createdAt: 'asc' },

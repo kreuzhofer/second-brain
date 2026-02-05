@@ -6,6 +6,7 @@
 import OpenAI from 'openai';
 import { getConfig } from '../config/env';
 import { Category } from '../types/entry.types';
+import { getCurrentDateString } from '../utils/date';
 
 export interface ActionItem {
   text: string;
@@ -76,10 +77,12 @@ export class ActionExtractionService {
   }
 
   private async callOpenAIWithTimeout(text: string, category?: Category): Promise<string> {
+    const today = getCurrentDateString();
+    const systemPrompt = `${ACTION_SYSTEM_PROMPT}\nToday's date is ${today}. Convert relative due dates to YYYY-MM-DD.`;
     const request = this.openai.chat.completions.create({
       model: ACTION_MODEL,
       messages: [
-        { role: 'system', content: ACTION_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         {
           role: 'user',
           content: `Category: ${category || 'unknown'}\nText: ${text}`

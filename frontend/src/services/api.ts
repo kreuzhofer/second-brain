@@ -87,6 +87,17 @@ export interface HealthResponse {
   version: string;
 }
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  name?: string | null;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: AuthUser;
+}
+
 export interface ApiError {
   error: {
     code: string;
@@ -256,6 +267,27 @@ class ApiClient {
      */
     get: async (): Promise<string> => {
       return this.request<string>('/index');
+    },
+  };
+
+  /**
+   * Authentication operations
+   */
+  auth = {
+    register: async (payload: { email: string; password: string; name?: string }): Promise<AuthResponse> => {
+      return this.request<AuthResponse>('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+    login: async (payload: { email: string; password: string }): Promise<AuthResponse> => {
+      return this.request<AuthResponse>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+    me: async (): Promise<AuthUser> => {
+      return this.request<AuthUser>('/auth/me');
     },
   };
 

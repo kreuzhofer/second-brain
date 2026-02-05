@@ -11,6 +11,8 @@
 // System Prompt Template
 // ============================================
 
+import { getCurrentDateString } from '../utils/date';
+
 /**
  * The base system prompt template with placeholders for dynamic content.
  * 
@@ -47,6 +49,8 @@ Guidelines:
 - When the user wants to combine duplicates → use merge_entries
 - When the user is just chatting (greetings, questions about the system) → respond conversationally without tools
 
+Today's date is {currentDate}. Convert relative dates (e.g. today, tomorrow) to YYYY-MM-DD when setting due dates.
+
 Current knowledge base index:
 {indexContent}
 
@@ -73,9 +77,11 @@ export function buildSystemPrompt(
   
   // Handle empty conversation history
   const formattedConversationHistory = conversationHistory.trim() || '(No previous conversation)';
+  const currentDate = getCurrentDateString();
   
   // Replace placeholders with actual content
   return SYSTEM_PROMPT_TEMPLATE
+    .replace('{currentDate}', currentDate)
     .replace('{indexContent}', formattedIndexContent)
     .replace('{conversationHistory}', formattedConversationHistory);
 }

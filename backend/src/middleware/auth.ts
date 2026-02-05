@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
-import { getConfig } from '../config/env';
+import { getUserService } from '../services/user.service';
+import { getAuthService } from '../services/auth.service';
+import { runWithUserId } from '../context/user-context';
 
 /**
  * Authentication middleware
- * Validates Bearer token in Authorization header against API_KEY
+ * Validates Bearer token in Authorization header as a JWT
  */
-export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
+export async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
   
   if (!authHeader) {
@@ -31,17 +33,30 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   }
   
   const token = parts[1];
-  const config = getConfig();
-  
-  if (token !== config.API_KEY) {
+  const authService = getAuthService();
+  const userService = getUserService();
+
+  const payload = authService.verifyToken(token);
+  if (!payload) {
     res.status(401).json({
       error: {
         code: 'UNAUTHORIZED',
-        message: 'Invalid API key'
+        message: 'Invalid token'
       }
     });
     return;
   }
-  
-  next();
+
+  const user = await userService.getUserById(payload.userId);
+  if (!user) {
+    res.status(401).json({
+      error: {
+        code: 'UNAUTHORIZED',
+        message: 'Invalid token'
+      }
+    });
+    return;
+  }
+
+  runWithUserId(user.id, () => next());
 }

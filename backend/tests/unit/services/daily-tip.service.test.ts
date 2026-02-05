@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { resetDatabase } from '../../setup';
+import { resetDatabase, TEST_USER_ID } from '../../setup';
 import { DailyTipService } from '../../../src/services/daily-tip.service';
 import { getPrismaClient } from '../../../src/lib/prisma';
 
@@ -14,7 +14,7 @@ describe('DailyTipService', () => {
     const tip = await service.getNextTip();
 
     const prisma = getPrismaClient();
-    const record = await prisma.dailyTipState.findUnique({ where: { id: 'default' } });
+    const record = await prisma.dailyTipState.findUnique({ where: { userId: TEST_USER_ID } });
 
     expect(tip).toBe('Tip A');
     expect(record?.lastTip).toBe('Tip A');

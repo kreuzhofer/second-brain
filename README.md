@@ -36,8 +36,9 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
 3. **Configure environment variables**
    Edit `.env` and set:
    - `OPENAI_API_KEY`: Your OpenAI API key
-   - `API_KEY`: A secure random string for API authentication
-   - `DATA_PATH`: Optional legacy memory directory (used only for migration)
+   - `JWT_SECRET`: A secure random string for signing JWTs
+   - `DEFAULT_USER_EMAIL`: Email for the default local user
+   - `DEFAULT_USER_PASSWORD`: Password for the default local user
 
 4. **Start with Docker Compose**
    ```bash
@@ -47,24 +48,17 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
 5. **Access the application**
    Open http://localhost:3000 in your browser
 
-## Legacy Memory Migration (Optional)
-
-If you have legacy `memory/` markdown data, the app will auto-migrate it on startup when the database is empty.
-You can still run the manual migration after running migrations:
-
-```bash
-cd backend
-npm run migrate:memory
-```
-
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `OPENAI_API_KEY` | Yes | - | OpenAI API key for classification |
 | `DATABASE_URL` | Yes | - | PostgreSQL connection string |
-| `API_KEY` | Yes | - | API authentication key |
-| `DATA_PATH` | No | `./memory` | Legacy memory directory (migration/backups only) |
+| `JWT_SECRET` | Yes | - | JWT signing secret |
+| `DEFAULT_USER_EMAIL` | Yes | - | Default local user email |
+| `DEFAULT_USER_PASSWORD` | Yes | - | Default local user password |
+| `DEFAULT_USER_NAME` | No | `Second Brain` | Default local user name |
+| `JWT_EXPIRES_IN` | No | `30d` | JWT expiration (e.g. `30d`, `12h`) |
 | `TIMEZONE` | No | `Europe/Berlin` | Timezone for timestamps |
 | `CONFIDENCE_THRESHOLD` | No | `0.6` | Classification confidence threshold |
 | `PORT` | No | `3000` | Server port |
@@ -73,8 +67,6 @@ npm run migrate:memory
 | `EMBEDDING_BACKFILL_LIMIT` | No | - | Max embeddings to process per startup |
 | `EMBEDDING_BACKFILL_BATCH_SIZE` | No | `10` | Batch size for missing-embedding lookup |
 | `EMBEDDING_BACKFILL_SLEEP_MS` | No | `0` | Sleep between embedding requests |
-| `MEMORY_MIGRATION_ENABLED` | No | `true` | Auto-migrate legacy `memory/` entries on startup when DB is empty |
-| `MEMORY_MIGRATION_FORCE` | No | `false` | Force memory migration even if entries already exist |
 
 ### Email Channel (Optional)
 
@@ -155,9 +147,7 @@ second-brain/
 │   │   └── types/          # TypeScript types
 │   ├── prisma/             # Database schema
 │   └── tests/              # Test files
-└── memory/                 # Legacy memory directory (optional; migration only)
-    ├── .cache/             # Legacy embeddings cache (optional)
-    └── ...                 # Legacy markdown entries
+└── docs/                   # Product and API documentation
 ```
 
 ## API Endpoints
@@ -172,7 +162,7 @@ second-brain/
 | DELETE | `/api/entries/:path` | Delete entry |
 | GET | `/api/index` | Get index content |
 
-All endpoints except `/api/health` require authentication via Bearer token.
+All endpoints except `/api/health` and `/api/auth/*` require authentication via Bearer token.
 
 ## Running Tests
 

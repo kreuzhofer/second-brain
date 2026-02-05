@@ -1,24 +1,26 @@
 import request from 'supertest';
 import express from 'express';
-import { resetDatabase } from '../setup';
+import { resetDatabase, createTestJwt, TEST_JWT_SECRET } from '../setup';
 import { authMiddleware } from '../../src/middleware/auth';
 import { searchRouter } from '../../src/routes/search';
 import { entriesRouter } from '../../src/routes/entries';
 import { EntryService } from '../../src/services/entry.service';
 import { resetSearchService } from '../../src/services/search.service';
 
-const TEST_API_KEY = 'test-api-key-12345';
-
 jest.mock('../../src/config/env', () => ({
   getConfig: () => ({
-    API_KEY: 'test-api-key-12345',
-    DATA_PATH: '/memory',
+    JWT_SECRET: TEST_JWT_SECRET,
+    DEFAULT_USER_EMAIL: 'test@example.com',
+    DEFAULT_USER_PASSWORD: 'test-password-123',
+    JWT_EXPIRES_IN: '1h',
     OPENAI_API_KEY: '',
     DATABASE_URL: process.env.DATABASE_URL || 'postgresql://user:pass@localhost:5432/second-brain'
   }),
   loadEnvConfig: () => ({
-    API_KEY: 'test-api-key-12345',
-    DATA_PATH: '/memory',
+    JWT_SECRET: TEST_JWT_SECRET,
+    DEFAULT_USER_EMAIL: 'test@example.com',
+    DEFAULT_USER_PASSWORD: 'test-password-123',
+    JWT_EXPIRES_IN: '1h',
     OPENAI_API_KEY: '',
     DATABASE_URL: process.env.DATABASE_URL || 'postgresql://user:pass@localhost:5432/second-brain'
   })
@@ -55,9 +57,10 @@ describe('Search API Integration Tests', () => {
       confidence: 0.9
     });
 
+    const token = createTestJwt();
     const response = await request(app)
       .get('/api/search?query=search')
-      .set('Authorization', `Bearer ${TEST_API_KEY}`)
+      .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
     expect(response.body.entries.length).toBeGreaterThan(0);
@@ -65,9 +68,10 @@ describe('Search API Integration Tests', () => {
   });
 
   it('should return 400 for missing query', async () => {
+    const token = createTestJwt();
     const response = await request(app)
       .get('/api/search')
-      .set('Authorization', `Bearer ${TEST_API_KEY}`)
+      .set('Authorization', `Bearer ${token}`)
       .expect(400);
 
     expect(response.body.error.code).toBe('VALIDATION_ERROR');

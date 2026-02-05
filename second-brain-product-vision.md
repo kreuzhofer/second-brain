@@ -107,7 +107,7 @@ These principles are derived from the 12 engineering patterns for reliable AI sy
 
 ## 4. Data Models
 
-**Implementation update (Feb 5, 2026):** Entries are now stored in PostgreSQL with normalized detail tables, Markdown sections/logs, immutable revisions, and pgvector embeddings. The `/memory` markdown format below is retained only as a migration format (see `backend/src/scripts/migrate-memory-to-db.ts`).
+**Implementation update (Feb 5, 2026):** Entries are now stored in PostgreSQL with normalized detail tables, Markdown sections/logs, immutable revisions, and pgvector embeddings. The `/memory` markdown format below is deprecated.
 
 ### 4.1 Legacy Markdown Entry Schema (Migration Format)
 
@@ -1025,10 +1025,11 @@ services:
     environment:
       - DATABASE_URL=postgresql://secondbrain:secondbrain@db:5432/secondbrain
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - DEFAULT_USER_EMAIL=${DEFAULT_USER_EMAIL}
+      - DEFAULT_USER_PASSWORD=${DEFAULT_USER_PASSWORD}
       - TIMEZONE=${TIMEZONE:-Europe/Berlin}
       # ... other env vars
-    volumes:
-      - ${DATA_PATH:-./memory}:/memory
     depends_on:
       db:
         condition: service_healthy
@@ -1055,18 +1056,20 @@ volumes:
 
 ## Appendix C: API Authentication (MVP)
 
-For single-user self-hosted deployment, MVP uses a simple API key:
+For single-user self-hosted deployment, MVP uses JWT auth with a default local user configured via environment variables:
 
 ```env
-API_KEY=your-secret-key-here
+JWT_SECRET=your-jwt-secret-here
+DEFAULT_USER_EMAIL=you@example.com
+DEFAULT_USER_PASSWORD=change-me-now
 ```
 
-All API requests require header:
+Obtain a JWT via `POST /api/auth/login`, then include it in API requests:
 ```
-Authorization: Bearer your-secret-key-here
+Authorization: Bearer <jwt>
 ```
 
-Chat UI stores key in localStorage after initial setup.
+Chat UI stores the JWT in localStorage after sign-in.
 
 ---
 

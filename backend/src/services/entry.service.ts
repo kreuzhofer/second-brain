@@ -18,6 +18,7 @@ import {
 } from '../types/entry.types';
 import { WebhookService, getWebhookService } from './webhook.service';
 import { getConfig } from '../config/env';
+import { requireUserId } from '../context/user-context';
 import {
   BODY_SECTION,
   normalizeSectionKey,
@@ -108,12 +109,17 @@ export class EntryService {
     this.revisionMaxDays = config.ENTRY_REVISION_MAX_DAYS ?? null;
   }
 
+  private getUserId(): string {
+    return requireUserId();
+  }
+
   async create(
     category: Category,
     data: CreateEntryInput,
     channel?: Channel,
     bodyContent?: string
   ): Promise<EntryWithPath> {
+    const userId = this.getUserId();
     const now = new Date();
     const sourceChannel = channel || (data as any).source_channel || 'api';
 
@@ -138,7 +144,8 @@ export class EntryService {
 
     const existing = await this.prisma.entry.findUnique({
       where: {
-        category_slug: {
+        userId_category_slug: {
+          userId,
           category,
           slug
         }
@@ -154,6 +161,7 @@ export class EntryService {
     const created = await this.prisma.$transaction(async (tx) => {
       const entry = await tx.entry.create({
         data: {
+          userId,
           category,
           slug,
           title: entryTitle,
@@ -225,7 +233,7 @@ export class EntryService {
 
       const tags = (data as any).tags || [];
       if (tags.length > 0) {
-        await this.attachTags(tx, entry.id, tags);
+        await this.attachTags(tx, entry.id, tags, userId);
       }
 
       if (sections.length > 0) {
@@ -272,9 +280,11 @@ export class EntryService {
 
   async read(path: string): Promise<EntryWithPath> {
     const { category, slug } = parseEntryPath(path);
+    const userId = this.getUserId();
     const entry = await this.prisma.entry.findUnique({
       where: {
-        category_slug: {
+        userId_category_slug: {
+          userId,
           category,
           slug
         }
@@ -314,8 +324,12 @@ export class EntryService {
   }
 
   async list(category?: Category, filters?: EntryFilters): Promise<EntrySummary[]> {
+    const userId = this.getUserId();
     const entries = await this.prisma.entry.findMany({
-      where: category ? { category } : undefined,
+      where: {
+        userId,
+        ...(category ? { category } : {})
+      },
       include: {
         projectDetails: true,
         adminDetails: true,
@@ -384,9 +398,10 @@ export class EntryService {
     bodyUpdate?: BodyContentUpdate,
     options?: { preserveUpdatedAt?: boolean }
   ): Promise<EntryWithPath> {
+    const userId = this.getUserId();
     const { category, slug } = parseEntryPath(path);
     const existing = await this.prisma.entry.findUnique({
-      where: { category_slug: { category, slug } },
+      where: { userId_category_slug: { userId, category, slug } },
       include: {
         projectDetails: true,
         adminDetails: true,
@@ -484,7 +499,7 @@ export class EntryService {
 
       if ((updates as any).tags) {
         await tx.entryTag.deleteMany({ where: { entryId: existing.id } });
-        await this.attachTags(tx, existing.id, (updates as any).tags || []);
+        await this.attachTags(tx, existing.id, (updates as any).tags || [], userId);
       }
 
       if (bodyUpdate) {
@@ -519,9 +534,10 @@ export class EntryService {
   }
 
   async delete(path: string, channel: Channel = 'api'): Promise<void> {
+    const userId = this.getUserId();
     const { category, slug } = parseEntryPath(path);
     const existing = await this.prisma.entry.findUnique({
-      where: { category_slug: { category, slug } }
+      where: { userId_category_slug: { userId, category, slug } }
     });
 
     if (!existing) {
@@ -544,6 +560,7 @@ export class EntryService {
   async move(path: string, targetCategory: Category, channel: Channel = 'api'): Promise<EntryWithPath> {
     const { category: sourceCategory, slug } = parseEntryPath(path);
     const existing = await this.read(path);
+    const userId = this.getUserId();
 
     if (sourceCategory === targetCategory) {
       return existing;
@@ -554,14 +571,14 @@ export class EntryService {
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const entryRecord = await tx.entry.findUnique({
-        where: { category_slug: { category: sourceCategory, slug } }
+        where: { userId_category_slug: { userId, category: sourceCategory, slug } }
       });
       if (!entryRecord) {
         throw new EntryNotFoundError(path);
       }
 
       const conflict = await tx.entry.findUnique({
-        where: { category_slug: { category: targetCategory, slug: newSlug } }
+        where: { userId_category_slug: { userId, category: targetCategory, slug: newSlug } }
       });
       if (conflict) {
         throw new EntryAlreadyExistsError(buildEntryPath(targetCategory, newSlug));
@@ -923,19 +940,19 @@ export class EntryService {
     return { entry: transformed, bodyContent };
   }
 
-  private async attachTags(tx: any, entryId: string, tags: string[]): Promise<void> {
+  private async attachTags(tx: any, entryId: string, tags: string[], userId: string): Promise<void> {
     const uniqueTags = Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)));
     if (uniqueTags.length === 0) return;
 
-    const existing = await tx.tag.findMany({ where: { name: { in: uniqueTags } } });
+    const existing = await tx.tag.findMany({ where: { userId, name: { in: uniqueTags } } });
     const existingNames = new Set(existing.map((tag: any) => tag.name));
     const toCreate = uniqueTags.filter((name) => !existingNames.has(name));
 
     if (toCreate.length > 0) {
-      await tx.tag.createMany({ data: toCreate.map((name) => ({ name })) });
+      await tx.tag.createMany({ data: toCreate.map((name) => ({ name, userId })) });
     }
 
-    const allTags = await tx.tag.findMany({ where: { name: { in: uniqueTags } } });
+    const allTags = await tx.tag.findMany({ where: { userId, name: { in: uniqueTags } } });
     await tx.entryTag.createMany({
       data: allTags.map((tag: any) => ({ entryId, tagId: tag.id }))
     });
@@ -1006,11 +1023,12 @@ export class EntryService {
       }
 
       if (update.section.toLowerCase() === 'log') {
+        const message = update.content.trim();
         await tx.entryLog.create({
           data: {
             entryId,
             channel,
-            message: update.content
+            message
           }
         });
         return;
@@ -1133,9 +1151,11 @@ export class EntryService {
     operation: 'create' | 'update' | 'delete' | 'move',
     channel: Channel
   ): Promise<void> {
+    const userId = this.getUserId();
     try {
       await this.prisma.entryAuditLog.create({
         data: {
+          userId,
           entryPath,
           entryId: entryId ?? null,
           operation,

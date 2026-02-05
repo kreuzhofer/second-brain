@@ -17,6 +17,7 @@ import {
   resetConversationService,
 } from '../../../src/services/conversation.service';
 import { Message } from '../../../src/types/chat.types';
+import { TEST_USER_ID } from '../../setup';
 
 // Mock OpenAI
 const mockCreate = jest.fn();
@@ -61,15 +62,15 @@ describe('SummarizationService', () => {
     });
 
     // Clean up test data (order matters due to foreign keys)
-    await prisma.message.deleteMany({});
-    await prisma.conversationSummary.deleteMany({});
-    await prisma.conversation.deleteMany({});
+    await prisma.message.deleteMany({ where: { userId: TEST_USER_ID } });
+    await prisma.conversationSummary.deleteMany({ where: { userId: TEST_USER_ID } });
+    await prisma.conversation.deleteMany({ where: { userId: TEST_USER_ID } });
   });
 
   afterAll(async () => {
-    await prisma.message.deleteMany({});
-    await prisma.conversationSummary.deleteMany({});
-    await prisma.conversation.deleteMany({});
+    await prisma.message.deleteMany({ where: { userId: TEST_USER_ID } });
+    await prisma.conversationSummary.deleteMany({ where: { userId: TEST_USER_ID } });
+    await prisma.conversation.deleteMany({ where: { userId: TEST_USER_ID } });
     await disconnectPrisma();
   });
 

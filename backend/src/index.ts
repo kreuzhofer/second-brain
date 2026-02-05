@@ -6,6 +6,7 @@ import { healthRouter } from './routes/health';
 import { entriesRouter } from './routes/entries';
 import { indexRouter } from './routes/index-route';
 import { chatRouter } from './routes/chat';
+import { authRouter } from './routes/auth';
 import { digestRouter } from './routes/digest';
 import { captureRouter } from './routes/capture';
 import { searchRouter } from './routes/search';
@@ -18,7 +19,7 @@ import { getCronService, resetCronService } from './services/cron.service';
 import { getOfflineQueueService } from './services/offline-queue.service';
 import { getToolExecutor } from './services/tool-executor';
 import { getEmbeddingBackfillService } from './services/embedding-backfill.service';
-import { getMemoryMigrationService } from './services/memory-migration.service';
+import { getUserService } from './services/user.service';
 
 // Validate environment variables before starting
 validateRequiredEnvVars();
@@ -31,12 +32,7 @@ app.use(express.json());
 
 // Public routes (no auth required)
 app.use('/api/health', healthRouter);
-
-// Convenience endpoint: expose API key for local single-user setup
-// This allows the frontend to auto-authenticate without manual key entry
-app.get('/api/auth/key', (req, res) => {
-  res.json({ key: config.API_KEY });
-});
+app.use('/api/auth', authRouter);
 
 // Protected routes
 app.use('/api/entries', authMiddleware, entriesRouter);
@@ -78,13 +74,13 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 // Start server
 async function start() {
   try {
+    const userService = getUserService();
+    const { userId } = await userService.ensureDefaultUser();
+    await userService.backfillUserIds(userId);
+
     // Initialize data folder structure
     await initializeDataFolder();
 
-    // Migrate legacy filesystem entries into the database (if needed)
-    const memoryMigration = getMemoryMigrationService();
-    await memoryMigration.runIfNeeded();
-    
     // Initialize email channel (verifies connectivity, starts polling if enabled)
     await initializeEmailChannel();
     
@@ -124,7 +120,6 @@ async function start() {
     
     app.listen(config.PORT, () => {
       console.log(`Second Brain API running on port ${config.PORT}`);
-      console.log(`Data directory: ${config.DATA_PATH}`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

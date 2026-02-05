@@ -61,10 +61,9 @@ This document tracks the next MVP scope and progress.
 - Keep API changes documented in `docs/API.md`.
 - UI refocus: Added Focus panel, compact inbox/recent lists, and fixed chat auto-scroll behavior.
 - Deep Focus: Adjusted timer-start music playback and notification permission request on start.
-- Data migration: Moving all legacy `memory/` content into PostgreSQL with normalized entry tables, sections/logs, revisions, and pgvector embeddings. Migration script lives at `backend/src/scripts/migrate-memory-to-db.ts`.
 
 ## Progress Log
 - 2026-02-05: DB-backed entries and pgvector embeddings in place; tests updated for EntrySummary ids and normalized content; all backend tests passing.
 - 2026-02-05: Added embedding backfill script (`npm run backfill:embeddings`) to populate missing vectors post-migration.
 - 2026-02-05: Added auto embedding backfill on app startup (no CLI required in prod).
-- 2026-02-05: Added auto memory migration on app startup when DB is empty (optional force flag for re-runs).
+- 2026-02-05: Added current-date context to classification/action prompts and normalized relative due dates on capture to prevent incorrect past years; tests updated and passing.

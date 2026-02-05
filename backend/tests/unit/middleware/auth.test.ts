@@ -1,10 +1,25 @@
 import { Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../../../src/middleware/auth';
 
-// Mock the config module
-jest.mock('../../../src/config/env', () => ({
-  getConfig: () => ({
-    API_KEY: 'test-api-key-12345'
+jest.mock('../../../src/services/user.service', () => ({
+  getUserService: () => ({
+    getUserById: jest.fn(async (id: string) => {
+      if (id === 'test-user') {
+        return { id: 'test-user' };
+      }
+      return null;
+    })
+  })
+}));
+
+jest.mock('../../../src/services/auth.service', () => ({
+  getAuthService: () => ({
+    verifyToken: jest.fn((token: string) => {
+      if (token === 'valid-token') {
+        return { userId: 'test-user', email: 'test@example.com' };
+      }
+      return null;
+    })
   })
 }));
 
@@ -29,21 +44,21 @@ describe('authMiddleware', () => {
     mockNext = jest.fn();
   });
 
-  it('should allow request with valid Bearer token', () => {
+  it('should allow request with valid Bearer token', async () => {
     mockReq.headers = {
-      authorization: 'Bearer test-api-key-12345'
+      authorization: 'Bearer valid-token'
     };
 
-    authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+    await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
     expect(mockNext).toHaveBeenCalled();
     expect(statusMock).not.toHaveBeenCalled();
   });
 
-  it('should return 401 when authorization header is missing', () => {
+  it('should return 401 when authorization header is missing', async () => {
     mockReq.headers = {};
 
-    authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+    await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
     expect(mockNext).not.toHaveBeenCalled();
     expect(statusMock).toHaveBeenCalledWith(401);
@@ -55,12 +70,12 @@ describe('authMiddleware', () => {
     });
   });
 
-  it('should return 401 when token format is invalid (no Bearer prefix)', () => {
+  it('should return 401 when token format is invalid (no Bearer prefix)', async () => {
     mockReq.headers = {
       authorization: 'test-api-key-12345'
     };
 
-    authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+    await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
     expect(mockNext).not.toHaveBeenCalled();
     expect(statusMock).toHaveBeenCalledWith(401);
@@ -72,40 +87,40 @@ describe('authMiddleware', () => {
     });
   });
 
-  it('should return 401 when token format is invalid (wrong prefix)', () => {
+  it('should return 401 when token format is invalid (wrong prefix)', async () => {
     mockReq.headers = {
       authorization: 'Basic test-api-key-12345'
     };
 
-    authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+    await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
     expect(mockNext).not.toHaveBeenCalled();
     expect(statusMock).toHaveBeenCalledWith(401);
   });
 
-  it('should return 401 when token does not match API_KEY', () => {
+  it('should return 401 when token is invalid', async () => {
     mockReq.headers = {
       authorization: 'Bearer wrong-api-key'
     };
 
-    authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+    await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
     expect(mockNext).not.toHaveBeenCalled();
     expect(statusMock).toHaveBeenCalledWith(401);
     expect(jsonMock).toHaveBeenCalledWith({
       error: {
         code: 'UNAUTHORIZED',
-        message: 'Invalid API key'
+        message: 'Invalid token'
       }
     });
   });
 
-  it('should return 401 when token is empty', () => {
+  it('should return 401 when token is empty', async () => {
     mockReq.headers = {
       authorization: 'Bearer '
     };
 
-    authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+    await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
     expect(mockNext).not.toHaveBeenCalled();
     expect(statusMock).toHaveBeenCalledWith(401);
