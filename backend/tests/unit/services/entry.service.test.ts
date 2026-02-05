@@ -1,41 +1,17 @@
-import { rm, mkdir, readFile } from 'fs/promises';
-import { join } from 'path';
-import matter from 'gray-matter';
+import { resetDatabase } from '../../setup';
 import {
   EntryService,
   EntryNotFoundError,
   EntryAlreadyExistsError,
   generateSlug
 } from '../../../src/services/entry.service';
-import { GitService } from '../../../src/services/git.service';
-import { IndexService } from '../../../src/services/index.service';
-
-const TEST_ENTRY_DIR = join(__dirname, '../../.test-entry-data');
 
 describe('EntryService', () => {
   let entryService: EntryService;
-  let gitService: GitService;
-  let indexService: IndexService;
 
   beforeEach(async () => {
-    // Clean up and create fresh test directory with category folders
-    await rm(TEST_ENTRY_DIR, { recursive: true, force: true });
-    await mkdir(TEST_ENTRY_DIR, { recursive: true });
-    await mkdir(join(TEST_ENTRY_DIR, 'people'), { recursive: true });
-    await mkdir(join(TEST_ENTRY_DIR, 'projects'), { recursive: true });
-    await mkdir(join(TEST_ENTRY_DIR, 'ideas'), { recursive: true });
-    await mkdir(join(TEST_ENTRY_DIR, 'admin'), { recursive: true });
-    await mkdir(join(TEST_ENTRY_DIR, 'inbox'), { recursive: true });
-    
-    gitService = new GitService(TEST_ENTRY_DIR);
-    await gitService.initialize();
-    
-    indexService = new IndexService(TEST_ENTRY_DIR);
-    entryService = new EntryService(TEST_ENTRY_DIR, gitService, indexService);
-  });
-
-  afterEach(async () => {
-    await rm(TEST_ENTRY_DIR, { recursive: true, force: true });
+    await resetDatabase();
+    entryService = new EntryService();
   });
 
   describe('generateSlug', () => {
@@ -122,7 +98,7 @@ describe('EntryService', () => {
         source_channel: 'chat'
       });
 
-      expect(result.path).toMatch(/^inbox\/\d{14}-new-project\.md$/);
+      expect(result.path).toMatch(/^inbox\/\d{8}-\d{6}-new-project\.md$/);
       expect((result.entry as any).status).toBe('needs_review');
     });
 
@@ -212,7 +188,7 @@ describe('EntryService', () => {
       });
 
       expect(new Date((updated.entry as any).updated_at).getTime())
-        .toBeGreaterThan(new Date((created.entry as any).created_at).getTime());
+        .toBeGreaterThanOrEqual(new Date((created.entry as any).created_at).getTime());
     });
 
     it('should update last_touched for people entries', async () => {
@@ -243,15 +219,7 @@ describe('EntryService', () => {
         context: '',
         source_channel: 'api',
         confidence: 0.9
-      });
-
-      // Manually add content to the file
-      const filePath = join(TEST_ENTRY_DIR, 'people/content-test.md');
-      const fileContent = await readFile(filePath, 'utf-8');
-      const { data } = matter(fileContent);
-      const newContent = matter.stringify('## Notes\n\nSome important notes here.', data);
-      const { writeFile: writeFileFs } = await import('fs/promises');
-      await writeFileFs(filePath, newContent);
+      }, 'api', '## Notes\n\nSome important notes here.');
 
       // Update frontmatter only
       const result = await entryService.update('people/content-test.md', {

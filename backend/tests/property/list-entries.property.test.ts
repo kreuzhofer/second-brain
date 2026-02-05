@@ -8,12 +8,10 @@
  */
 
 import * as fc from 'fast-check';
-import { rm, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { resetDatabase } from '../setup';
 import { ToolExecutor, ListEntriesResult } from '../../src/services/tool-executor';
 import { ToolRegistry, getToolRegistry, resetToolRegistry } from '../../src/services/tool-registry';
 import { EntryService } from '../../src/services/entry.service';
-import { GitService } from '../../src/services/git.service';
 import { IndexService } from '../../src/services/index.service';
 import { SearchService } from '../../src/services/search.service';
 import { DigestService } from '../../src/services/digest.service';
@@ -22,8 +20,6 @@ import { Category } from '../../src/types/entry.types';
 // ============================================
 // Test Setup
 // ============================================
-
-const TEST_LIST_ENTRIES_DIR = join(__dirname, '../.test-list-entries-property-data');
 
 // ============================================
 // Test Data Generators
@@ -58,26 +54,14 @@ describe('ToolExecutor - List Entries Filtering Properties', () => {
   let toolExecutor: ToolExecutor;
   let toolRegistry: ToolRegistry;
   let entryService: EntryService;
-  let gitService: GitService;
   let indexService: IndexService;
   let searchService: SearchService;
   let digestService: DigestService;
 
   beforeEach(async () => {
-    // Clean up and create fresh test directory with category folders
-    await rm(TEST_LIST_ENTRIES_DIR, { recursive: true, force: true });
-    await mkdir(TEST_LIST_ENTRIES_DIR, { recursive: true });
-    await mkdir(join(TEST_LIST_ENTRIES_DIR, 'people'), { recursive: true });
-    await mkdir(join(TEST_LIST_ENTRIES_DIR, 'projects'), { recursive: true });
-    await mkdir(join(TEST_LIST_ENTRIES_DIR, 'ideas'), { recursive: true });
-    await mkdir(join(TEST_LIST_ENTRIES_DIR, 'admin'), { recursive: true });
-    await mkdir(join(TEST_LIST_ENTRIES_DIR, 'inbox'), { recursive: true });
-    
-    gitService = new GitService(TEST_LIST_ENTRIES_DIR);
-    await gitService.initialize();
-    
-    indexService = new IndexService(TEST_LIST_ENTRIES_DIR);
-    entryService = new EntryService(TEST_LIST_ENTRIES_DIR, gitService, indexService);
+    await resetDatabase();
+    entryService = new EntryService();
+    indexService = new IndexService(entryService);
     searchService = new SearchService(entryService);
     // Pass null for services that DigestService doesn't need for this test
     digestService = new DigestService(entryService, indexService, null);
@@ -97,7 +81,7 @@ describe('ToolExecutor - List Entries Filtering Properties', () => {
   });
 
   afterEach(async () => {
-    await rm(TEST_LIST_ENTRIES_DIR, { recursive: true, force: true });
+    await resetDatabase();
   });
 
   /**

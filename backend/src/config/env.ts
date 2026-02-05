@@ -17,7 +17,7 @@ export interface EnvConfig {
   // Chat configuration (optional with defaults)
   CONFIDENCE_THRESHOLD: number;
   MAX_VERBATIM_MESSAGES: number;
-  SUMMARIZE_AFTER_MESSAGES: number;
+  SUMMARIZE_BATCH_SIZE: number;
   
   // Digest configuration (optional with defaults)
   DIGEST_TIME: string;
@@ -37,6 +37,23 @@ export interface EnvConfig {
   
   // When true, skip chat delivery of digests when email is configured (default: true)
   DIGEST_SKIP_CHAT_WHEN_EMAIL: boolean;
+
+  // Focus music configuration (optional)
+  YOUTUBE_API_KEY?: string;
+  FOCUS_MUSIC_SEARCH_TERMS: string[];
+  FOCUS_MUSIC_RESULTS_LIMIT: number;
+
+  // Offline queue configuration
+  OFFLINE_QUEUE_ENABLED: boolean;
+  OFFLINE_QUEUE_REPLAY_INTERVAL_SEC: number;
+  OFFLINE_QUEUE_PROCESSING_TIMEOUT_SEC: number;
+  OFFLINE_QUEUE_RETRY_BASE_SEC: number;
+  OFFLINE_QUEUE_MAX_ATTEMPTS: number;
+  OFFLINE_QUEUE_DEDUPE_TTL_HOURS: number;
+
+  // Entry revision retention
+  ENTRY_REVISION_MAX_PER_ENTRY: number;
+  ENTRY_REVISION_MAX_DAYS?: number;
 }
 
 /**
@@ -88,7 +105,7 @@ const REQUIRED_ENV_VARS = [
   'OPENAI_API_KEY',
   'DATABASE_URL',
   'API_KEY',
-  'DATA_PATH'
+  // DATA_PATH is optional now that entries are database-backed
 ] as const;
 
 /**
@@ -161,6 +178,13 @@ export function loadEnvConfig(): EnvConfig {
     console.warn(`Invalid STALE_DAYS "${process.env.STALE_DAYS}", using default 14`);
     staleDays = 14;
   }
+
+  // SUMMARIZE_BATCH_SIZE - number of messages per summary batch (default: 10)
+  let summarizeBatchSize = parseInt(process.env.SUMMARIZE_BATCH_SIZE || '10', 10);
+  if (isNaN(summarizeBatchSize) || summarizeBatchSize < 1) {
+    console.warn(`Invalid SUMMARIZE_BATCH_SIZE "${process.env.SUMMARIZE_BATCH_SIZE}", using default 10`);
+    summarizeBatchSize = 10;
+  }
   
   // INACTIVITY_DAYS - number of days of inactivity before nudge (default: 3)
   let inactivityDays = parseInt(process.env.INACTIVITY_DAYS || '3', 10);
@@ -189,6 +213,62 @@ export function loadEnvConfig(): EnvConfig {
     console.warn(`Invalid INACTIVITY_NUDGE_TIME format "${inactivityNudgeTime}", using default "20:00"`);
     inactivityNudgeTime = '20:00';
   }
+
+  // Offline queue configuration
+  const offlineQueueEnabled = (process.env.OFFLINE_QUEUE_ENABLED || 'true').toLowerCase() !== 'false';
+  let offlineReplayInterval = parseInt(process.env.OFFLINE_QUEUE_REPLAY_INTERVAL_SEC || '60', 10);
+  if (isNaN(offlineReplayInterval) || offlineReplayInterval < 5) {
+    console.warn(`Invalid OFFLINE_QUEUE_REPLAY_INTERVAL_SEC "${process.env.OFFLINE_QUEUE_REPLAY_INTERVAL_SEC}", using default 60`);
+    offlineReplayInterval = 60;
+  }
+  let offlineProcessingTimeout = parseInt(process.env.OFFLINE_QUEUE_PROCESSING_TIMEOUT_SEC || '300', 10);
+  if (isNaN(offlineProcessingTimeout) || offlineProcessingTimeout < 30) {
+    console.warn(`Invalid OFFLINE_QUEUE_PROCESSING_TIMEOUT_SEC "${process.env.OFFLINE_QUEUE_PROCESSING_TIMEOUT_SEC}", using default 300`);
+    offlineProcessingTimeout = 300;
+  }
+  let offlineRetryBase = parseInt(process.env.OFFLINE_QUEUE_RETRY_BASE_SEC || '30', 10);
+  if (isNaN(offlineRetryBase) || offlineRetryBase < 5) {
+    console.warn(`Invalid OFFLINE_QUEUE_RETRY_BASE_SEC "${process.env.OFFLINE_QUEUE_RETRY_BASE_SEC}", using default 30`);
+    offlineRetryBase = 30;
+  }
+  let offlineMaxAttempts = parseInt(process.env.OFFLINE_QUEUE_MAX_ATTEMPTS || '6', 10);
+  if (isNaN(offlineMaxAttempts) || offlineMaxAttempts < 1) {
+    console.warn(`Invalid OFFLINE_QUEUE_MAX_ATTEMPTS "${process.env.OFFLINE_QUEUE_MAX_ATTEMPTS}", using default 6`);
+    offlineMaxAttempts = 6;
+  }
+  let offlineDedupeTtl = parseInt(process.env.OFFLINE_QUEUE_DEDUPE_TTL_HOURS || '24', 10);
+  if (isNaN(offlineDedupeTtl) || offlineDedupeTtl < 1) {
+    console.warn(`Invalid OFFLINE_QUEUE_DEDUPE_TTL_HOURS "${process.env.OFFLINE_QUEUE_DEDUPE_TTL_HOURS}", using default 24`);
+    offlineDedupeTtl = 24;
+  }
+
+  let revisionMaxPerEntry = parseInt(process.env.ENTRY_REVISION_MAX_PER_ENTRY || '50', 10);
+  if (isNaN(revisionMaxPerEntry) || revisionMaxPerEntry < 1) {
+    console.warn(`Invalid ENTRY_REVISION_MAX_PER_ENTRY "${process.env.ENTRY_REVISION_MAX_PER_ENTRY}", using default 50`);
+    revisionMaxPerEntry = 50;
+  }
+
+  let revisionMaxDays: number | undefined;
+  if (process.env.ENTRY_REVISION_MAX_DAYS) {
+    const parsed = parseInt(process.env.ENTRY_REVISION_MAX_DAYS, 10);
+    if (isNaN(parsed) || parsed < 1) {
+      console.warn(`Invalid ENTRY_REVISION_MAX_DAYS "${process.env.ENTRY_REVISION_MAX_DAYS}", ignoring`);
+      revisionMaxDays = undefined;
+    } else {
+      revisionMaxDays = parsed;
+    }
+  }
+
+  const focusSearchTerms = (process.env.FOCUS_MUSIC_SEARCH_TERMS || 'deep focus music,focus music,ambient focus,lofi focus')
+    .split(',')
+    .map((term) => term.trim())
+    .filter(Boolean);
+
+  let focusResultsLimit = parseInt(process.env.FOCUS_MUSIC_RESULTS_LIMIT || '10', 10);
+  if (isNaN(focusResultsLimit) || focusResultsLimit < 1) {
+    console.warn(`Invalid FOCUS_MUSIC_RESULTS_LIMIT "${process.env.FOCUS_MUSIC_RESULTS_LIMIT}", using default 10`);
+    focusResultsLimit = 10;
+  }
   
   return {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
@@ -201,7 +281,7 @@ export function loadEnvConfig(): EnvConfig {
     // Chat configuration
     CONFIDENCE_THRESHOLD: parseFloat(process.env.CONFIDENCE_THRESHOLD || '0.6'),
     MAX_VERBATIM_MESSAGES: parseInt(process.env.MAX_VERBATIM_MESSAGES || '15', 10),
-    SUMMARIZE_AFTER_MESSAGES: parseInt(process.env.SUMMARIZE_AFTER_MESSAGES || '20', 10),
+    SUMMARIZE_BATCH_SIZE: summarizeBatchSize,
     
     // Digest configuration
     DIGEST_TIME: digestTime,
@@ -220,7 +300,22 @@ export function loadEnvConfig(): EnvConfig {
     DIGEST_RECIPIENT_EMAIL: process.env.DIGEST_RECIPIENT_EMAIL || undefined,
     
     // Skip chat delivery when email is configured (default: true)
-    DIGEST_SKIP_CHAT_WHEN_EMAIL: process.env.DIGEST_SKIP_CHAT_WHEN_EMAIL !== 'false'
+    DIGEST_SKIP_CHAT_WHEN_EMAIL: process.env.DIGEST_SKIP_CHAT_WHEN_EMAIL !== 'false',
+
+    // Focus music configuration
+    YOUTUBE_API_KEY: process.env.YOUTUBE_API_KEY || undefined,
+    FOCUS_MUSIC_SEARCH_TERMS: focusSearchTerms,
+    FOCUS_MUSIC_RESULTS_LIMIT: focusResultsLimit,
+
+    // Offline queue configuration
+    OFFLINE_QUEUE_ENABLED: offlineQueueEnabled,
+    OFFLINE_QUEUE_REPLAY_INTERVAL_SEC: offlineReplayInterval,
+    OFFLINE_QUEUE_PROCESSING_TIMEOUT_SEC: offlineProcessingTimeout,
+    OFFLINE_QUEUE_RETRY_BASE_SEC: offlineRetryBase,
+    OFFLINE_QUEUE_MAX_ATTEMPTS: offlineMaxAttempts,
+    OFFLINE_QUEUE_DEDUPE_TTL_HOURS: offlineDedupeTtl,
+    ENTRY_REVISION_MAX_PER_ENTRY: revisionMaxPerEntry,
+    ENTRY_REVISION_MAX_DAYS: revisionMaxDays
   };
 }
 

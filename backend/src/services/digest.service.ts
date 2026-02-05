@@ -9,8 +9,10 @@ import { EntryService, getEntryService } from './entry.service';
 import { IndexService, getIndexService } from './index.service';
 import { ConversationService, getConversationService } from './conversation.service';
 import { DigestMailer, getDigestMailer } from './digest-mailer';
+import { DailyTipService, getDailyTipService } from './daily-tip.service';
 import { getPrismaClient } from '../lib/prisma';
-import { EntrySummary } from '../types/entry.types';
+import { EntrySummary, Category } from '../types/entry.types';
+import { DigestPreferences, DigestPreferencesService, getDigestPreferencesService } from './digest-preferences.service';
 
 // ============================================
 // Types
@@ -61,69 +63,98 @@ export class DigestService {
   private indexService: IndexService | null;
   private conversationService: ConversationService | null;
   private digestMailer: DigestMailer | null;
+  private preferencesService: DigestPreferencesService;
+  private dailyTipService: DailyTipService;
   private prisma = getPrismaClient();
 
   constructor(
     entryService?: EntryService | null,
     indexService?: IndexService | null,
     conversationService?: ConversationService | null,
-    digestMailer?: DigestMailer | null
+    digestMailer?: DigestMailer | null,
+    preferencesService?: DigestPreferencesService,
+    dailyTipService?: DailyTipService
   ) {
     // Allow null services for testing formatting methods
     this.entryService = entryService === null ? null : (entryService || getEntryService());
     this.indexService = indexService === null ? null : (indexService || getIndexService());
     this.conversationService = conversationService === null ? null : (conversationService || getConversationService());
     this.digestMailer = digestMailer === null ? null : (digestMailer || getDigestMailer());
+    this.preferencesService = preferencesService || getDigestPreferencesService();
+    this.dailyTipService = dailyTipService || getDailyTipService();
   }
 
   /**
    * Generate a daily digest
    * @returns The formatted digest content as markdown
    */
-  async generateDailyDigest(): Promise<string> {
+  async generateDailyDigest(preferences?: DigestPreferences): Promise<string> {
     const config = getConfig();
+    const prefs = await this.preferencesService.getMergedPreferences(preferences);
     
     // Get top 3 items (active projects + pending admin tasks)
-    const topItems = await this.getTop3Items();
+    const topItems = await this.getTopItems(prefs);
     
     // Get stale inbox items
-    const staleItems = await this.getStaleInboxItems(config.STALE_INBOX_DAYS);
+    const staleItems = prefs.includeStaleInbox && this.isCategoryFocused(prefs, 'inbox')
+      ? await this.getStaleInboxItems(config.STALE_INBOX_DAYS)
+      : [];
     
     // Get small wins (completed admin tasks in last 7 days)
-    const smallWins = await this.getSmallWins();
+    const smallWins = prefs.includeSmallWins && this.isCategoryFocused(prefs, 'admin')
+      ? await this.getSmallWins()
+      : { completedCount: 0 };
     
+    // Daily momentum tip
+    let tip: string | undefined;
+    try {
+      tip = await this.dailyTipService.getNextTip();
+    } catch (error) {
+      console.warn('DigestService: Failed to load daily tip', error);
+      tip = undefined;
+    }
+
     // Format the digest
-    return this.formatDailyDigest(topItems, staleItems, smallWins);
+    let digest = this.formatDailyDigest(topItems, staleItems, smallWins, tip);
+    if (prefs.maxWords) {
+      digest = this.applyWordLimit(digest, prefs.maxWords);
+    }
+    return digest;
   }
 
   /**
    * Generate a weekly review
    * @returns The formatted review content as markdown
    */
-  async generateWeeklyReview(): Promise<string> {
+  async generateWeeklyReview(preferences?: DigestPreferences): Promise<string> {
+    const prefs = await this.preferencesService.getMergedPreferences(preferences);
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     
     // Get activity stats
-    const stats = await this.getActivityStats(weekAgo, now);
+    const stats = await this.getActivityStats(weekAgo, now, prefs);
     
     // Get open loops
-    const openLoops = await this.getOpenLoops();
+    const openLoops = prefs.includeOpenLoops ? await this.getOpenLoops(prefs) : [];
     
     // Get suggestions
-    const suggestions = await this.getSuggestions();
+    const suggestions = prefs.includeSuggestions ? await this.getSuggestions(prefs) : [];
     
     // Identify theme
-    const theme = await this.identifyTheme(weekAgo, now);
+    const theme = prefs.includeTheme ? await this.identifyTheme(weekAgo, now, prefs) : 'Theme disabled for this digest.';
     
     // Format the review
-    return this.formatWeeklyReview(weekAgo, now, stats, openLoops, suggestions, theme);
+    let review = this.formatWeeklyReview(weekAgo, now, stats, openLoops, suggestions, theme);
+    if (prefs.maxWords) {
+      review = this.applyWordLimit(review, prefs.maxWords);
+    }
+    return review;
   }
 
   /**
    * Get activity statistics for a date range
    */
-  async getActivityStats(startDate: Date, endDate: Date): Promise<ActivityStats> {
+  async getActivityStats(startDate: Date, endDate: Date, preferences?: DigestPreferences): Promise<ActivityStats> {
     if (!this.entryService) {
       throw new Error('EntryService not available');
     }
@@ -143,7 +174,12 @@ export class DigestService {
     const allEntries = await this.entryService.list();
     const entriesInRange = allEntries.filter(e => {
       const createdAt = new Date(e.updated_at);
-      return createdAt >= startDate && createdAt < endDate;
+      const inRange = createdAt >= startDate && createdAt < endDate;
+      if (!inRange) return false;
+      if (preferences?.focusCategories && preferences.focusCategories.length > 0) {
+        return preferences.focusCategories.includes(e.category);
+      }
+      return true;
     });
 
     const entriesCreated = {
@@ -171,7 +207,7 @@ export class DigestService {
   /**
    * Get top 3 priority items (active projects and pending admin tasks)
    */
-  async getTop3Items(): Promise<TopItem[]> {
+  async getTopItems(preferences?: DigestPreferences): Promise<TopItem[]> {
     if (!this.entryService) {
       throw new Error('EntryService not available');
     }
@@ -179,27 +215,31 @@ export class DigestService {
     const items: TopItem[] = [];
 
     // Get active projects
-    const projects = await this.entryService.list('projects', { status: 'active' });
-    for (const project of projects) {
-      if (project.next_action) {
-        items.push({
-          name: project.name,
-          nextAction: project.next_action,
-          source: 'project',
-          dueDate: project.due_date
-        });
+    if (this.isCategoryFocused(preferences, 'projects')) {
+      const projects = await this.entryService.list('projects', { status: 'active' });
+      for (const project of projects) {
+        if (project.next_action) {
+          items.push({
+            name: project.name,
+            nextAction: project.next_action,
+            source: 'project',
+            dueDate: project.due_date
+          });
+        }
       }
     }
 
     // Get pending admin tasks
-    const adminTasks = await this.entryService.list('admin', { status: 'pending' });
-    for (const task of adminTasks) {
-      items.push({
-        name: task.name,
-        nextAction: task.name, // Admin tasks use name as the action
-        source: 'admin',
-        dueDate: task.due_date
-      });
+    if (this.isCategoryFocused(preferences, 'admin')) {
+      const adminTasks = await this.entryService.list('admin', { status: 'pending' });
+      for (const task of adminTasks) {
+        items.push({
+          name: task.name,
+          nextAction: task.name, // Admin tasks use name as the action
+          source: 'admin',
+          dueDate: task.due_date
+        });
+      }
     }
 
     // Sort by due date (earliest first, items with due dates before items without)
@@ -210,7 +250,8 @@ export class DigestService {
       return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
     });
 
-    return items.slice(0, 3);
+    const limit = preferences?.maxItems ?? 3;
+    return items.slice(0, limit);
   }
 
   /**
@@ -279,7 +320,7 @@ export class DigestService {
   /**
    * Get open loops (waiting/blocked projects and stale inbox items)
    */
-  async getOpenLoops(): Promise<OpenLoop[]> {
+  async getOpenLoops(preferences?: DigestPreferences): Promise<OpenLoop[]> {
     if (!this.entryService) {
       throw new Error('EntryService not available');
     }
@@ -289,40 +330,45 @@ export class DigestService {
     const config = getConfig();
 
     // Get waiting/blocked projects
-    const projects = await this.entryService.list('projects');
-    const waitingProjects = projects.filter(p => 
-      p.status === 'waiting' || p.status === 'blocked'
-    );
+    if (this.isCategoryFocused(preferences, 'projects')) {
+      const projects = await this.entryService.list('projects');
+      const waitingProjects = projects.filter(p => 
+        p.status === 'waiting' || p.status === 'blocked'
+      );
 
-    for (const project of waitingProjects) {
-      const updatedAt = new Date(project.updated_at);
-      const age = Math.floor((now.getTime() - updatedAt.getTime()) / (24 * 60 * 60 * 1000));
-      loops.push({
-        name: project.name,
-        reason: project.status === 'waiting' ? 'waiting' : 'blocked',
-        age
-      });
+      for (const project of waitingProjects) {
+        const updatedAt = new Date(project.updated_at);
+        const age = Math.floor((now.getTime() - updatedAt.getTime()) / (24 * 60 * 60 * 1000));
+        loops.push({
+          name: project.name,
+          reason: project.status === 'waiting' ? 'waiting' : 'blocked',
+          age
+        });
+      }
     }
 
     // Get stale inbox items
-    const staleItems = await this.getStaleInboxItems(config.STALE_INBOX_DAYS);
-    for (const item of staleItems) {
-      loops.push({
-        name: item.name,
-        reason: 'in inbox',
-        age: item.daysInInbox
-      });
+    if (this.isCategoryFocused(preferences, 'inbox')) {
+      const staleItems = await this.getStaleInboxItems(config.STALE_INBOX_DAYS);
+      for (const item of staleItems) {
+        loops.push({
+          name: item.name,
+          reason: 'in inbox',
+          age: item.daysInInbox
+        });
+      }
     }
 
     // Sort by age (oldest first) and take top 3
     loops.sort((a, b) => b.age - a.age);
-    return loops.slice(0, 3);
+    const limit = preferences?.maxOpenLoops ?? 3;
+    return loops.slice(0, limit);
   }
 
   /**
    * Get suggestions for focus areas
    */
-  async getSuggestions(): Promise<Suggestion[]> {
+  async getSuggestions(preferences?: DigestPreferences): Promise<Suggestion[]> {
     if (!this.entryService) {
       throw new Error('EntryService not available');
     }
@@ -332,57 +378,64 @@ export class DigestService {
     const config = getConfig();
 
     // Check for inbox items needing resolution
-    const inboxItems = await this.entryService.list('inbox');
-    if (inboxItems.length > 0) {
-      suggestions.push({
-        text: 'Resolve inbox items',
-        reason: `${inboxItems.length} item${inboxItems.length > 1 ? 's' : ''} need${inboxItems.length === 1 ? 's' : ''} review`
-      });
+    if (this.isCategoryFocused(preferences, 'inbox')) {
+      const inboxItems = await this.entryService.list('inbox');
+      if (inboxItems.length > 0) {
+        suggestions.push({
+          text: 'Resolve inbox items',
+          reason: `${inboxItems.length} item${inboxItems.length > 1 ? 's' : ''} need${inboxItems.length === 1 ? 's' : ''} review`
+        });
+      }
     }
 
     // Check for people with old last_touched dates
-    const people = await this.entryService.list('people');
-    const stalePeople = people.filter(p => {
-      if (!p.last_touched) return false;
-      const lastTouched = new Date(p.last_touched);
-      const daysSince = Math.floor((now.getTime() - lastTouched.getTime()) / (24 * 60 * 60 * 1000));
-      return daysSince > 7;
-    });
-
-    if (stalePeople.length > 0) {
-      const oldestPerson = stalePeople.sort((a, b) => {
-        const aDate = new Date(a.last_touched || 0);
-        const bDate = new Date(b.last_touched || 0);
-        return aDate.getTime() - bDate.getTime();
-      })[0];
-      
-      const daysSince = Math.floor(
-        (now.getTime() - new Date(oldestPerson.last_touched || 0).getTime()) / (24 * 60 * 60 * 1000)
-      );
-      
-      suggestions.push({
-        text: `Follow up with ${oldestPerson.name}`,
-        reason: `last contact: ${daysSince} days ago`
+    if (this.isCategoryFocused(preferences, 'people')) {
+      const people = await this.entryService.list('people');
+      const stalePeople = people.filter(p => {
+        if (!p.last_touched) return false;
+        const lastTouched = new Date(p.last_touched);
+        const daysSince = Math.floor((now.getTime() - lastTouched.getTime()) / (24 * 60 * 60 * 1000));
+        return daysSince > 7;
       });
+
+      if (stalePeople.length > 0) {
+        const oldestPerson = stalePeople.sort((a, b) => {
+          const aDate = new Date(a.last_touched || 0);
+          const bDate = new Date(b.last_touched || 0);
+          return aDate.getTime() - bDate.getTime();
+        })[0];
+        
+        const daysSince = Math.floor(
+          (now.getTime() - new Date(oldestPerson.last_touched || 0).getTime()) / (24 * 60 * 60 * 1000)
+        );
+        
+        suggestions.push({
+          text: `Follow up with ${oldestPerson.name}`,
+          reason: `last contact: ${daysSince} days ago`
+        });
+      }
     }
 
     // Check for active projects without due dates
-    const projects = await this.entryService.list('projects', { status: 'active' });
-    const projectsWithoutDueDate = projects.filter(p => !p.due_date);
-    if (projectsWithoutDueDate.length > 0) {
-      suggestions.push({
-        text: `Set deadline for ${projectsWithoutDueDate[0].name}`,
-        reason: 'no due date set'
-      });
+    if (this.isCategoryFocused(preferences, 'projects')) {
+      const projects = await this.entryService.list('projects', { status: 'active' });
+      const projectsWithoutDueDate = projects.filter(p => !p.due_date);
+      if (projectsWithoutDueDate.length > 0) {
+        suggestions.push({
+          text: `Set deadline for ${projectsWithoutDueDate[0].name}`,
+          reason: 'no due date set'
+        });
+      }
     }
 
-    return suggestions.slice(0, 3);
+    const limit = preferences?.maxSuggestions ?? 3;
+    return suggestions.slice(0, limit);
   }
 
   /**
    * Identify theme from the week's activity
    */
-  async identifyTheme(startDate: Date, endDate: Date): Promise<string> {
+  async identifyTheme(startDate: Date, endDate: Date, preferences?: DigestPreferences): Promise<string> {
     if (!this.entryService) {
       throw new Error('EntryService not available');
     }
@@ -390,7 +443,12 @@ export class DigestService {
     const allEntries = await this.entryService.list();
     const entriesInRange = allEntries.filter(e => {
       const createdAt = new Date(e.updated_at);
-      return createdAt >= startDate && createdAt < endDate;
+      const inRange = createdAt >= startDate && createdAt < endDate;
+      if (!inRange) return false;
+      if (preferences?.focusCategories && preferences.focusCategories.length > 0) {
+        return preferences.focusCategories.includes(e.category);
+      }
+      return true;
     });
 
     if (entriesInRange.length === 0) {
@@ -427,7 +485,8 @@ export class DigestService {
   formatDailyDigest(
     topItems: TopItem[],
     staleItems: StaleInboxItem[],
-    smallWins: { completedCount: number; nextTask?: string }
+    smallWins: { completedCount: number; nextTask?: string },
+    dailyTip?: string
   ): string {
     const lines: string[] = [];
     
@@ -461,6 +520,12 @@ export class DigestService {
       lines.push('**Small Win:**');
       const nextPart = smallWins.nextTask ? ` ${smallWins.nextTask} is next.` : '';
       lines.push(`- You completed ${smallWins.completedCount} admin task${smallWins.completedCount > 1 ? 's' : ''} this week.${nextPart}`);
+    }
+
+    if (dailyTip) {
+      lines.push('');
+      lines.push('**Daily Momentum Tip:**');
+      lines.push(`- ${dailyTip}`);
     }
 
     lines.push('');
@@ -614,6 +679,20 @@ export class DigestService {
    */
   countWords(text: string): number {
     return text.split(/\s+/).filter(word => word.length > 0).length;
+  }
+
+  private applyWordLimit(text: string, maxWords: number): string {
+    if (!maxWords || maxWords <= 0) return text;
+    const words = text.split(/\s+/).filter(word => word.length > 0);
+    if (words.length <= maxWords) return text;
+    return words.slice(0, maxWords).join(' ') + '…';
+  }
+
+  private isCategoryFocused(preferences: DigestPreferences | undefined, category: Category): boolean {
+    if (!preferences?.focusCategories || preferences.focusCategories.length === 0) {
+      return true;
+    }
+    return preferences.focusCategories.includes(category);
   }
 }
 

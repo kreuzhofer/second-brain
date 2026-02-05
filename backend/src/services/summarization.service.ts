@@ -68,8 +68,8 @@ export class SummarizationService {
    * Check if summarization is needed and perform it if threshold is exceeded.
    * 
    * Property 13: Summarization Trigger
-   * When a conversation exceeds SUMMARIZE_AFTER_MESSAGES in message count,
-   * the system SHALL create a ConversationSummary covering the oldest messages
+   * When a conversation exceeds (MAX_VERBATIM_MESSAGES + SUMMARIZE_BATCH_SIZE) in message count,
+   * the system SHALL create a ConversationSummary covering the oldest batch
    * (excluding the most recent MAX_VERBATIM_MESSAGES).
    * 
    * @param conversationId - The conversation ID to check and potentially summarize
@@ -78,13 +78,13 @@ export class SummarizationService {
    */
   async checkAndSummarize(conversationId: string): Promise<void> {
     const config = getConfig();
-    const { SUMMARIZE_AFTER_MESSAGES, MAX_VERBATIM_MESSAGES } = config;
+    const { SUMMARIZE_BATCH_SIZE, MAX_VERBATIM_MESSAGES } = config;
 
     // Get total message count
     const messageCount = await this.conversationService.getMessageCount(conversationId);
 
-    // Check if we've exceeded the threshold
-    if (messageCount <= SUMMARIZE_AFTER_MESSAGES) {
+    // Check if we've exceeded the threshold (max verbatim + batch size)
+    if (messageCount <= MAX_VERBATIM_MESSAGES + SUMMARIZE_BATCH_SIZE) {
       return; // No summarization needed
     }
 
@@ -116,16 +116,18 @@ export class SummarizationService {
       }
     }
 
-    // Calculate how many messages to keep verbatim (the most recent ones)
-    // We need to summarize messages from startIndex to (total - MAX_VERBATIM_MESSAGES)
-    const endIndex = allMessages.length - MAX_VERBATIM_MESSAGES;
+    // Calculate how many messages are eligible to summarize
+    // We summarize in fixed-size batches, excluding the most recent MAX_VERBATIM_MESSAGES
+    const eligibleEndIndex = allMessages.length - MAX_VERBATIM_MESSAGES;
 
-    // Check if there are messages to summarize
-    if (startIndex >= endIndex) {
+    // Check if there are enough messages to summarize a full batch
+    const availableToSummarize = eligibleEndIndex - startIndex;
+    if (availableToSummarize < SUMMARIZE_BATCH_SIZE) {
       return; // No new messages to summarize
     }
 
-    // Get the messages to summarize
+    // Summarize the oldest batch of eligible messages
+    const endIndex = startIndex + SUMMARIZE_BATCH_SIZE;
     const messagesToSummarize = allMessages.slice(startIndex, endIndex);
 
     if (messagesToSummarize.length === 0) {

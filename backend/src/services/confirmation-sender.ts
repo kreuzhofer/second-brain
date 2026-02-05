@@ -15,6 +15,7 @@
 import { getSmtpSender, SmtpSender, SendEmailResult } from './smtp-sender';
 import { getThreadTracker, ThreadTracker } from './thread-tracker';
 import { Category } from '../types/entry.types';
+import { getConfig } from '../config/env';
 
 // ============================================
 // Types and Interfaces
@@ -59,7 +60,7 @@ export interface FormattedConfirmationEmail {
  * Confidence threshold for low-confidence entries
  * Entries below this threshold are routed to inbox and need clarification instructions
  */
-export const LOW_CONFIDENCE_THRESHOLD = 0.7;
+export const LOW_CONFIDENCE_THRESHOLD = getConfig().CONFIDENCE_THRESHOLD;
 
 /**
  * Interface for the ConfirmationSender service

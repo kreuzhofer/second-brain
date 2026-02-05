@@ -103,7 +103,8 @@ describe('Hint Parsing - Property Tests', () => {
             const parsed = parseHints(message);
             
             // The content should be preserved (possibly with normalized whitespace)
-            expect(parsed.cleanedMessage).toContain(content.trim());
+            const normalizedContent = content.replace(/\s+/g, ' ').trim();
+            expect(parsed.cleanedMessage).toContain(normalizedContent);
           }
         ),
         { numRuns: 50 }

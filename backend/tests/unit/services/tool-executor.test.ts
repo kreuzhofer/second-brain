@@ -21,6 +21,9 @@ import { ClassificationAgent } from '../../../src/services/classification.servic
 import { DigestService } from '../../../src/services/digest.service';
 import { SearchService } from '../../../src/services/search.service';
 import { IndexService } from '../../../src/services/index.service';
+import { ActionExtractionService } from '../../../src/services/action-extraction.service';
+import { DuplicateService } from '../../../src/services/duplicate.service';
+import { OfflineQueueService } from '../../../src/services/offline-queue.service';
 import { ClassificationResult } from '../../../src/types/chat.types';
 import { EntryWithPath, EntrySummary } from '../../../src/types/entry.types';
 
@@ -58,6 +61,9 @@ describe('ToolExecutor', () => {
   let mockDigestService: jest.Mocked<DigestService>;
   let mockSearchService: jest.Mocked<SearchService>;
   let mockIndexService: jest.Mocked<IndexService>;
+  let mockActionExtractionService: jest.Mocked<ActionExtractionService>;
+  let mockDuplicateService: jest.Mocked<DuplicateService>;
+  let mockOfflineQueueService: jest.Mocked<OfflineQueueService>;
 
   beforeEach(() => {
     resetToolExecutor();
@@ -68,6 +74,8 @@ describe('ToolExecutor', () => {
       create: jest.fn(),
       read: jest.fn(),
       update: jest.fn(),
+      move: jest.fn(),
+      merge: jest.fn(),
       delete: jest.fn(),
       list: jest.fn()
     } as unknown as jest.Mocked<EntryService>;
@@ -80,6 +88,20 @@ describe('ToolExecutor', () => {
       getIndexContent: jest.fn().mockResolvedValue('# Index\n\nTest index content'),
       regenerate: jest.fn()
     } as unknown as jest.Mocked<IndexService>;
+
+    mockActionExtractionService = {
+      extractActions: jest.fn().mockResolvedValue({ actions: [] })
+    } as unknown as jest.Mocked<ActionExtractionService>;
+
+    mockDuplicateService = {
+      findDuplicatesForText: jest.fn(),
+      findDuplicatesForEntry: jest.fn()
+    } as unknown as jest.Mocked<DuplicateService>;
+
+    mockOfflineQueueService = {
+      isEnabled: jest.fn().mockReturnValue(false),
+      enqueueCapture: jest.fn()
+    } as unknown as jest.Mocked<OfflineQueueService>;
     
     toolExecutor = new ToolExecutor(
       mockToolRegistry,
@@ -87,7 +109,10 @@ describe('ToolExecutor', () => {
       mockClassificationAgent,
       mockDigestService,
       mockSearchService,
-      mockIndexService
+      mockIndexService,
+      mockActionExtractionService,
+      mockDuplicateService,
+      mockOfflineQueueService
     );
   });
 
@@ -280,7 +305,8 @@ describe('ToolExecutor', () => {
           confidence: 0.45,
           source_channel: 'api'
         }),
-        'api'
+        'api',
+        expect.stringContaining('Agent Note')
       );
     });
 
@@ -433,9 +459,9 @@ describe('ToolExecutor', () => {
   describe('list_entries handler', () => {
     it('should return all entries when no filters provided', async () => {
       const mockEntries: EntrySummary[] = [
-        { path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' },
-        { path: 'people/john-doe.md', name: 'John Doe', category: 'people', updated_at: '2024-01-02T12:00:00Z' },
-        { path: 'ideas/new-idea.md', name: 'New Idea', category: 'ideas', updated_at: '2024-01-03T12:00:00Z', one_liner: 'A great idea' }
+        { id: 'entry-project-a', path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' },
+        { id: 'entry-john-doe', path: 'people/john-doe.md', name: 'John Doe', category: 'people', updated_at: '2024-01-02T12:00:00Z' },
+        { id: 'entry-new-idea', path: 'ideas/new-idea.md', name: 'New Idea', category: 'ideas', updated_at: '2024-01-03T12:00:00Z', one_liner: 'A great idea' }
       ];
       mockEntryService.list.mockResolvedValue(mockEntries);
 
@@ -456,8 +482,8 @@ describe('ToolExecutor', () => {
 
     it('should filter by category when provided', async () => {
       const mockEntries: EntrySummary[] = [
-        { path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' },
-        { path: 'projects/project-b.md', name: 'Project B', category: 'projects', updated_at: '2024-01-02T12:00:00Z', status: 'waiting' }
+        { id: 'entry-project-a', path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' },
+        { id: 'entry-project-b', path: 'projects/project-b.md', name: 'Project B', category: 'projects', updated_at: '2024-01-02T12:00:00Z', status: 'waiting' }
       ];
       mockEntryService.list.mockResolvedValue(mockEntries);
 
@@ -477,7 +503,7 @@ describe('ToolExecutor', () => {
 
     it('should filter by status when provided', async () => {
       const mockEntries: EntrySummary[] = [
-        { path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' }
+        { id: 'entry-project-a', path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' }
       ];
       mockEntryService.list.mockResolvedValue(mockEntries);
 
@@ -496,7 +522,7 @@ describe('ToolExecutor', () => {
 
     it('should filter by both category and status when provided', async () => {
       const mockEntries: EntrySummary[] = [
-        { path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' }
+        { id: 'entry-project-a', path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' }
       ];
       mockEntryService.list.mockResolvedValue(mockEntries);
 
@@ -515,11 +541,11 @@ describe('ToolExecutor', () => {
 
     it('should apply limit to results', async () => {
       const mockEntries: EntrySummary[] = [
-        { path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' },
-        { path: 'projects/project-b.md', name: 'Project B', category: 'projects', updated_at: '2024-01-02T12:00:00Z', status: 'active' },
-        { path: 'projects/project-c.md', name: 'Project C', category: 'projects', updated_at: '2024-01-03T12:00:00Z', status: 'active' },
-        { path: 'projects/project-d.md', name: 'Project D', category: 'projects', updated_at: '2024-01-04T12:00:00Z', status: 'active' },
-        { path: 'projects/project-e.md', name: 'Project E', category: 'projects', updated_at: '2024-01-05T12:00:00Z', status: 'active' }
+        { id: 'entry-project-a', path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' },
+        { id: 'entry-project-b', path: 'projects/project-b.md', name: 'Project B', category: 'projects', updated_at: '2024-01-02T12:00:00Z', status: 'active' },
+        { id: 'entry-project-c', path: 'projects/project-c.md', name: 'Project C', category: 'projects', updated_at: '2024-01-03T12:00:00Z', status: 'active' },
+        { id: 'entry-project-d', path: 'projects/project-d.md', name: 'Project D', category: 'projects', updated_at: '2024-01-04T12:00:00Z', status: 'active' },
+        { id: 'entry-project-e', path: 'projects/project-e.md', name: 'Project E', category: 'projects', updated_at: '2024-01-05T12:00:00Z', status: 'active' }
       ];
       mockEntryService.list.mockResolvedValue(mockEntries);
 
@@ -539,6 +565,7 @@ describe('ToolExecutor', () => {
     it('should use default limit of 10 when not provided', async () => {
       // Create 15 mock entries
       const mockEntries: EntrySummary[] = Array.from({ length: 15 }, (_, i) => ({
+        id: `entry-${i}`,
         path: `projects/project-${i}.md`,
         name: `Project ${i}`,
         category: 'projects' as const,
@@ -592,8 +619,8 @@ describe('ToolExecutor', () => {
 
     it('should return all entries when limit exceeds total count', async () => {
       const mockEntries: EntrySummary[] = [
-        { path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' },
-        { path: 'projects/project-b.md', name: 'Project B', category: 'projects', updated_at: '2024-01-02T12:00:00Z', status: 'active' }
+        { id: 'entry-project-a', path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' },
+        { id: 'entry-project-b', path: 'projects/project-b.md', name: 'Project B', category: 'projects', updated_at: '2024-01-02T12:00:00Z', status: 'active' }
       ];
       mockEntryService.list.mockResolvedValue(mockEntries);
 
@@ -1225,35 +1252,15 @@ Reply with thoughts or adjustments.`;
 
   describe('move_entry handler', () => {
     it('should move entry from one category to another', async () => {
-      // Mock reading existing entry from projects
-      const mockExistingEntry: EntryWithPath = {
-        path: 'projects/test-project.md',
-        category: 'projects',
+      // Mock move result
+      const mockMovedEntry: EntryWithPath = {
+        path: 'ideas/test-project.md',
+        category: 'ideas',
         entry: {
           id: 'test-id',
           name: 'Test Project',
           tags: ['important'],
           created_at: '2024-01-01T12:00:00Z',
-          updated_at: '2024-01-02T12:00:00Z',
-          source_channel: 'api',
-          confidence: 0.85,
-          status: 'active',
-          next_action: 'Review requirements',
-          related_people: []
-        },
-        content: ''
-      };
-      mockEntryService.read.mockResolvedValue(mockExistingEntry);
-
-      // Mock creating new entry in ideas
-      const mockNewEntry: EntryWithPath = {
-        path: 'ideas/test-project.md',
-        category: 'ideas',
-        entry: {
-          id: 'new-id',
-          name: 'Test Project',
-          tags: ['important'],
-          created_at: '2024-01-03T12:00:00Z',
           updated_at: '2024-01-03T12:00:00Z',
           source_channel: 'api',
           confidence: 0.85,
@@ -1262,8 +1269,7 @@ Reply with thoughts or adjustments.`;
         },
         content: ''
       };
-      mockEntryService.create.mockResolvedValue(mockNewEntry);
-      mockEntryService.delete.mockResolvedValue(undefined);
+      mockEntryService.move.mockResolvedValue(mockMovedEntry);
 
       const toolCall: ToolCall = {
         name: 'move_entry',
@@ -1279,48 +1285,17 @@ Reply with thoughts or adjustments.`;
       expect(moveResult.newPath).toBe('ideas/test-project.md');
       expect(moveResult.category).toBe('ideas');
 
-      // Verify the correct sequence of operations
-      expect(mockEntryService.read).toHaveBeenCalledWith('projects/test-project.md');
-      expect(mockEntryService.create).toHaveBeenCalledWith(
-        'ideas',
-        expect.objectContaining({
-          name: 'Test Project',
-          tags: ['important'],
-          confidence: 0.85,
-          source_channel: 'api',
-          one_liner: '',
-          related_projects: []
-        }),
-        'api'
-      );
-      expect(mockEntryService.delete).toHaveBeenCalledWith('projects/test-project.md', 'api');
+      // Verify move was called with correct args
+      expect(mockEntryService.move).toHaveBeenCalledWith('projects/test-project.md', 'ideas', 'api');
     });
 
     it('should move inbox entry to classified category using suggested_name', async () => {
-      // Mock reading existing inbox entry
-      const mockExistingEntry: EntryWithPath = {
-        path: 'inbox/20240101120000-unclear-thought.md',
-        category: 'inbox',
-        entry: {
-          id: 'test-id',
-          original_text: 'Some unclear thought about a person',
-          suggested_category: 'people',
-          suggested_name: 'John Doe',
-          confidence: 0.45,
-          status: 'needs_review',
-          source_channel: 'chat',
-          created_at: '2024-01-01T12:00:00Z'
-        },
-        content: ''
-      };
-      mockEntryService.read.mockResolvedValue(mockExistingEntry);
-
-      // Mock creating new entry in people
-      const mockNewEntry: EntryWithPath = {
+      // Mock move result
+      const mockMovedEntry: EntryWithPath = {
         path: 'people/john-doe.md',
         category: 'people',
         entry: {
-          id: 'new-id',
+          id: 'test-id',
           name: 'John Doe',
           tags: [],
           created_at: '2024-01-03T12:00:00Z',
@@ -1334,8 +1309,7 @@ Reply with thoughts or adjustments.`;
         },
         content: ''
       };
-      mockEntryService.create.mockResolvedValue(mockNewEntry);
-      mockEntryService.delete.mockResolvedValue(undefined);
+      mockEntryService.move.mockResolvedValue(mockMovedEntry);
 
       const toolCall: ToolCall = {
         name: 'move_entry',
@@ -1351,23 +1325,12 @@ Reply with thoughts or adjustments.`;
       expect(moveResult.newPath).toBe('people/john-doe.md');
       expect(moveResult.category).toBe('people');
 
-      // Verify inbox entry's suggested_name is used as name
-      expect(mockEntryService.create).toHaveBeenCalledWith(
-        'people',
-        expect.objectContaining({
-          name: 'John Doe',
-          confidence: 0.45,
-          source_channel: 'chat',
-          context: '',
-          follow_ups: [],
-          related_projects: []
-        }),
-        'api'
-      );
+      // Verify move was called with correct args
+      expect(mockEntryService.move).toHaveBeenCalledWith('inbox/20240101120000-unclear-thought.md', 'people', 'api');
     });
 
     it('should handle non-existent entry error', async () => {
-      mockEntryService.read.mockRejectedValue(new Error('Entry not found: projects/non-existent.md'));
+      mockEntryService.move.mockRejectedValue(new Error('Entry not found: projects/non-existent.md'));
 
       const toolCall: ToolCall = {
         name: 'move_entry',
@@ -1378,32 +1341,11 @@ Reply with thoughts or adjustments.`;
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Entry not found');
-      expect(mockEntryService.read).toHaveBeenCalledWith('projects/non-existent.md');
-      expect(mockEntryService.create).not.toHaveBeenCalled();
-      expect(mockEntryService.delete).not.toHaveBeenCalled();
+      expect(mockEntryService.move).toHaveBeenCalledWith('projects/non-existent.md', 'ideas', 'api');
     });
 
     it('should handle create error and not delete original entry', async () => {
-      // Mock reading existing entry
-      const mockExistingEntry: EntryWithPath = {
-        path: 'projects/test-project.md',
-        category: 'projects',
-        entry: {
-          id: 'test-id',
-          name: 'Test Project',
-          tags: [],
-          created_at: '2024-01-01T12:00:00Z',
-          updated_at: '2024-01-02T12:00:00Z',
-          source_channel: 'api',
-          confidence: 0.85,
-          status: 'active',
-          next_action: '',
-          related_people: []
-        },
-        content: ''
-      };
-      mockEntryService.read.mockResolvedValue(mockExistingEntry);
-      mockEntryService.create.mockRejectedValue(new Error('Failed to create entry'));
+      mockEntryService.move.mockRejectedValue(new Error('Failed to create entry'));
 
       const toolCall: ToolCall = {
         name: 'move_entry',
@@ -1414,36 +1356,16 @@ Reply with thoughts or adjustments.`;
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Failed to create entry');
-      // Original entry should NOT be deleted if create fails
-      expect(mockEntryService.delete).not.toHaveBeenCalled();
+      expect(mockEntryService.move).toHaveBeenCalledWith('projects/test-project.md', 'ideas', 'api');
     });
 
     it('should transform entry to admin category with correct defaults', async () => {
-      // Mock reading existing entry from ideas
-      const mockExistingEntry: EntryWithPath = {
-        path: 'ideas/test-idea.md',
-        category: 'ideas',
-        entry: {
-          id: 'test-id',
-          name: 'Test Idea',
-          tags: ['urgent'],
-          created_at: '2024-01-01T12:00:00Z',
-          updated_at: '2024-01-02T12:00:00Z',
-          source_channel: 'api',
-          confidence: 0.9,
-          one_liner: 'A great idea',
-          related_projects: []
-        },
-        content: ''
-      };
-      mockEntryService.read.mockResolvedValue(mockExistingEntry);
-
-      // Mock creating new entry in admin
-      const mockNewEntry: EntryWithPath = {
+      // Mock move result
+      const mockMovedEntry: EntryWithPath = {
         path: 'admin/test-idea.md',
         category: 'admin',
         entry: {
-          id: 'new-id',
+          id: 'test-id',
           name: 'Test Idea',
           tags: ['urgent'],
           created_at: '2024-01-03T12:00:00Z',
@@ -1454,8 +1376,7 @@ Reply with thoughts or adjustments.`;
         },
         content: ''
       };
-      mockEntryService.create.mockResolvedValue(mockNewEntry);
-      mockEntryService.delete.mockResolvedValue(undefined);
+      mockEntryService.move.mockResolvedValue(mockMovedEntry);
 
       const toolCall: ToolCall = {
         name: 'move_entry',
@@ -1465,18 +1386,7 @@ Reply with thoughts or adjustments.`;
       const result = await toolExecutor.execute(toolCall);
 
       expect(result.success).toBe(true);
-      // Verify admin-specific defaults are applied
-      expect(mockEntryService.create).toHaveBeenCalledWith(
-        'admin',
-        expect.objectContaining({
-          name: 'Test Idea',
-          tags: ['urgent'],
-          confidence: 0.9,
-          source_channel: 'api',
-          status: 'pending'
-        }),
-        'api'
-      );
+      expect(mockEntryService.move).toHaveBeenCalledWith('ideas/test-idea.md', 'admin', 'api');
     });
   });
 
@@ -1606,10 +1516,64 @@ Reply with thoughts or adjustments.`;
     });
   });
 
+  describe('find_duplicates handler', () => {
+    it('should return duplicate candidates', async () => {
+      mockDuplicateService.findDuplicatesForText = jest.fn().mockResolvedValue([
+        {
+          path: 'projects/test-project.md',
+          name: 'Test Project',
+          category: 'projects',
+          matchedField: 'name',
+          snippet: 'Test Project',
+          score: 0.92,
+          reason: 'name_similarity'
+        }
+      ]);
+
+      const toolCall: ToolCall = {
+        name: 'find_duplicates',
+        arguments: { name: 'Test Project', category: 'projects' }
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      expect(result.success).toBe(true);
+      expect(mockDuplicateService.findDuplicatesForText).toHaveBeenCalledWith({
+        name: 'Test Project',
+        text: undefined,
+        category: 'projects',
+        limit: undefined,
+        excludePath: undefined
+      });
+    });
+  });
+
+  describe('merge_entries handler', () => {
+    it('should merge entries into the target', async () => {
+      const mergedEntry = {
+        path: 'projects/merged.md',
+        category: 'projects',
+        entry: { id: '1', name: 'Merged' },
+        content: ''
+      } as EntryWithPath;
+      mockEntryService.merge = jest.fn().mockResolvedValue(mergedEntry);
+
+      const toolCall: ToolCall = {
+        name: 'merge_entries',
+        arguments: { targetPath: 'projects/merged.md', sourcePaths: ['projects/a.md'] }
+      };
+
+      const result = await toolExecutor.execute(toolCall);
+
+      expect(result.success).toBe(true);
+      expect(mockEntryService.merge).toHaveBeenCalledWith('projects/merged.md', ['projects/a.md'], 'api');
+    });
+  });
+
   describe('execute() - other tools', () => {
     it('should dispatch to list_entries handler with all filters', async () => {
       const mockEntries: EntrySummary[] = [
-        { path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' }
+        { id: 'entry-project-a', path: 'projects/project-a.md', name: 'Project A', category: 'projects', updated_at: '2024-01-01T12:00:00Z', status: 'active' }
       ];
       mockEntryService.list.mockResolvedValue(mockEntries);
 
@@ -1673,30 +1637,12 @@ Reply with thoughts or adjustments.`;
     });
 
     it('should dispatch to move_entry handler', async () => {
-      // Mock reading existing entry
-      const mockExistingEntry: EntryWithPath = {
-        path: 'inbox/20240101120000-test-idea.md',
-        category: 'inbox',
-        entry: {
-          id: 'test-id',
-          original_text: 'This is a test idea',
-          suggested_category: 'ideas',
-          suggested_name: 'Test Idea',
-          confidence: 0.5,
-          status: 'needs_review',
-          source_channel: 'api',
-          created_at: '2024-01-01T12:00:00Z'
-        },
-        content: ''
-      };
-      mockEntryService.read.mockResolvedValue(mockExistingEntry);
-
-      // Mock creating new entry
-      const mockNewEntry: EntryWithPath = {
+      // Mock move result
+      const mockMovedEntry: EntryWithPath = {
         path: 'projects/test-idea.md',
         category: 'projects',
         entry: {
-          id: 'new-id',
+          id: 'test-id',
           name: 'Test Idea',
           tags: [],
           created_at: '2024-01-01T12:00:00Z',
@@ -1709,8 +1655,7 @@ Reply with thoughts or adjustments.`;
         },
         content: ''
       };
-      mockEntryService.create.mockResolvedValue(mockNewEntry);
-      mockEntryService.delete.mockResolvedValue(undefined);
+      mockEntryService.move.mockResolvedValue(mockMovedEntry);
 
       const toolCall: ToolCall = {
         name: 'move_entry',
@@ -1725,9 +1670,7 @@ Reply with thoughts or adjustments.`;
       expect(moveResult.oldPath).toBe('inbox/20240101120000-test-idea.md');
       expect(moveResult.newPath).toBe('projects/test-idea.md');
       expect(moveResult.category).toBe('projects');
-      expect(mockEntryService.read).toHaveBeenCalledWith('inbox/20240101120000-test-idea.md');
-      expect(mockEntryService.create).toHaveBeenCalledWith('projects', expect.any(Object), 'api');
-      expect(mockEntryService.delete).toHaveBeenCalledWith('inbox/20240101120000-test-idea.md', 'api');
+      expect(mockEntryService.move).toHaveBeenCalledWith('inbox/20240101120000-test-idea.md', 'projects', 'api');
     });
 
     it('should dispatch to search_entries handler', async () => {

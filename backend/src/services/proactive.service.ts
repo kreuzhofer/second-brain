@@ -140,6 +140,9 @@ export class ProactiveService {
   async generateStaleCheck(): Promise<string | null> {
     const staleProjects = await this.getStaleProjects();
 
+    // Flag stale projects in entries without changing updated_at
+    await this.syncStaleFlags(staleProjects);
+
     // If empty, return null (no message)
     if (staleProjects.length === 0) {
       return null;
@@ -147,6 +150,48 @@ export class ProactiveService {
 
     // Format output using template
     return this.formatStaleCheck(staleProjects);
+  }
+
+  /**
+   * Sync stale flags on project entries without updating updated_at
+   */
+  private async syncStaleFlags(staleProjects: StaleProject[]): Promise<void> {
+    if (!this.entryService) {
+      throw new Error('EntryService not available');
+    }
+
+    const staleSet = new Set(staleProjects.map(p => p.path));
+    const allProjects = await this.entryService.list('projects');
+
+    for (const project of allProjects) {
+      const full = await this.entryService.read(project.path);
+      const entry = full.entry as { stale?: boolean; stale_since?: string };
+      const shouldBeStale = staleSet.has(project.path);
+      const isStale = entry.stale === true;
+
+      if (shouldBeStale && !isStale) {
+        await this.entryService.update(
+          project.path,
+          {
+            stale: true,
+            stale_since: new Date().toISOString().split('T')[0]
+          } as any,
+          'api',
+          undefined,
+          { preserveUpdatedAt: true }
+        );
+      }
+
+      if (!shouldBeStale && isStale) {
+        await this.entryService.update(
+          project.path,
+          { stale: false } as any,
+          'api',
+          undefined,
+          { preserveUpdatedAt: true }
+        );
+      }
+    }
   }
 
   /**
@@ -173,8 +218,12 @@ export class ProactiveService {
       const fullEntry = await this.entryService.read(summary.path);
       const peopleEntry = fullEntry.entry as { follow_ups?: string[]; last_touched?: string; name: string };
 
+      const normalizedFollowUps = (peopleEntry.follow_ups || [])
+        .map((item) => item.trim())
+        .filter(Boolean);
+
       // Filter to entries with non-empty follow_ups array
-      if (!peopleEntry.follow_ups || peopleEntry.follow_ups.length === 0) {
+      if (normalizedFollowUps.length === 0) {
         continue;
       }
 
@@ -191,7 +240,7 @@ export class ProactiveService {
       }
 
       // Limit to 2 follow-up items per person (Requirement 2.6)
-      const limitedFollowUps = peopleEntry.follow_ups.slice(0, 2);
+      const limitedFollowUps = normalizedFollowUps.slice(0, 2);
 
       peopleWithFollowUps.push({
         name: peopleEntry.name,

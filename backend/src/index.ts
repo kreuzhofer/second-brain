@@ -7,8 +7,18 @@ import { entriesRouter } from './routes/entries';
 import { indexRouter } from './routes/index-route';
 import { chatRouter } from './routes/chat';
 import { digestRouter } from './routes/digest';
+import { captureRouter } from './routes/capture';
+import { searchRouter } from './routes/search';
+import { inboxRouter } from './routes/inbox';
+import { duplicatesRouter } from './routes/duplicates';
+import { queueRouter } from './routes/queue';
+import { focusRouter } from './routes/focus';
 import { initializeDataFolder, initializeEmailChannel, shutdownEmailChannel } from './services/init.service';
 import { getCronService, resetCronService } from './services/cron.service';
+import { getOfflineQueueService } from './services/offline-queue.service';
+import { getToolExecutor } from './services/tool-executor';
+import { getEmbeddingBackfillService } from './services/embedding-backfill.service';
+import { getMemoryMigrationService } from './services/memory-migration.service';
 
 // Validate environment variables before starting
 validateRequiredEnvVars();
@@ -33,6 +43,12 @@ app.use('/api/entries', authMiddleware, entriesRouter);
 app.use('/api/index', authMiddleware, indexRouter);
 app.use('/api/chat', authMiddleware, chatRouter);
 app.use('/api/digest', authMiddleware, digestRouter);
+app.use('/api/capture', authMiddleware, captureRouter);
+app.use('/api/search', authMiddleware, searchRouter);
+app.use('/api/inbox', authMiddleware, inboxRouter);
+app.use('/api/duplicates', authMiddleware, duplicatesRouter);
+app.use('/api/queue', authMiddleware, queueRouter);
+app.use('/api/focus', authMiddleware, focusRouter);
 
 // Serve frontend static files in production
 if (process.env.NODE_ENV === 'production') {
@@ -64,6 +80,10 @@ async function start() {
   try {
     // Initialize data folder structure
     await initializeDataFolder();
+
+    // Migrate legacy filesystem entries into the database (if needed)
+    const memoryMigration = getMemoryMigrationService();
+    await memoryMigration.runIfNeeded();
     
     // Initialize email channel (verifies connectivity, starts polling if enabled)
     await initializeEmailChannel();
@@ -71,12 +91,31 @@ async function start() {
     // Start cron scheduler for digests and reviews
     const cronService = getCronService();
     cronService.start();
+
+    // Start offline queue replay worker
+    const offlineQueue = getOfflineQueueService();
+    const toolExecutor = getToolExecutor();
+    offlineQueue.startProcessing(async (item) => {
+      const result = await toolExecutor.execute(
+        { name: item.tool, arguments: item.args },
+        { channel: item.channel, context: item.context, allowQueue: false }
+      );
+      if (result.success && result.data && (result.data as any).queued) {
+        return { success: false, error: 'LLM unavailable, capture re-queued' };
+      }
+      return { success: result.success, error: result.error };
+    });
+
+    // Start embedding backfill (runs only when missing embeddings exist)
+    const embeddingBackfill = getEmbeddingBackfillService();
+    embeddingBackfill.start();
     
     // Graceful shutdown handler
     const shutdown = async () => {
       console.log('Shutting down gracefully...');
       await shutdownEmailChannel();
       resetCronService();
+      offlineQueue.stopProcessing();
       process.exit(0);
     };
     

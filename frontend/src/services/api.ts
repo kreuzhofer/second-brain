@@ -19,6 +19,7 @@ export interface EntryWithPath {
 }
 
 export interface EntrySummary {
+  id: string;
   path: string;
   name: string;
   category: Category;
@@ -31,6 +32,48 @@ export interface EntrySummary {
   last_touched?: string;
   original_text?: string;
   suggested_category?: Category;
+}
+
+export interface SearchHit {
+  path: string;
+  name: string;
+  category: Category;
+  matchedField: string;
+  snippet: string;
+  highlightRanges?: Array<{ start: number; end: number }>;
+  score?: number;
+  keywordScore?: number;
+  semanticScore?: number;
+}
+
+export interface SearchResult {
+  entries: SearchHit[];
+  total: number;
+}
+
+export interface FocusTrack {
+  id: string;
+  youtubeId: string;
+  title?: string | null;
+  channelTitle?: string | null;
+  rating: number;
+  likesCount: number;
+  dislikesCount: number;
+  timesPlayed: number;
+  lastPlayedAt?: string | null;
+}
+
+export interface FocusSession {
+  id: string;
+  entryPath: string;
+  entryName?: string | null;
+  durationSeconds: number;
+  startedAt: string;
+  endedAt: string;
+  completed: boolean;
+  notes?: string | null;
+  trackId?: string | null;
+  createdAt: string;
 }
 
 export interface EntryFilters {
@@ -267,6 +310,80 @@ class ApiClient {
     getConversation: async (conversationId: string): Promise<Conversation> => {
       return this.request<Conversation>(`/chat/conversations/${conversationId}`);
     },
+  };
+
+  /**
+   * Search operations
+   */
+  search = {
+    query: async (query: string, category?: Category, limit?: number): Promise<SearchResult> => {
+      const params = new URLSearchParams();
+      params.set('query', query);
+      if (category) params.set('category', category);
+      if (limit) params.set('limit', limit.toString());
+      const endpoint = `/search?${params.toString()}`;
+      return this.request<SearchResult>(endpoint);
+    }
+  };
+
+  /**
+   * Inbox triage operations
+   */
+  inbox = {
+    triage: async (payload: {
+      action: 'move' | 'resolve' | 'merge';
+      paths: string[];
+      targetCategory?: Category;
+      targetPath?: string;
+    }): Promise<{ entries?: EntryWithPath[]; entry?: EntryWithPath }> => {
+      return this.request<{ entries?: EntryWithPath[]; entry?: EntryWithPath }>(`/inbox/triage`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+  };
+
+  /**
+   * Focus operations
+   */
+  focus = {
+    nextTrack: async (mode: 'auto' | 'new' = 'auto', excludeYoutubeId?: string): Promise<FocusTrack> => {
+      const params = new URLSearchParams();
+      params.set('mode', mode);
+      if (excludeYoutubeId) params.set('exclude', excludeYoutubeId);
+      return this.request<FocusTrack>(`/focus/tracks/next?${params.toString()}`);
+    },
+    rateTrack: async (youtubeId: string, rating: number): Promise<FocusTrack> => {
+      return this.request<FocusTrack>(`/focus/tracks/rate`, {
+        method: 'POST',
+        body: JSON.stringify({ youtubeId, rating })
+      });
+    },
+    recordSession: async (payload: {
+      entryPath: string;
+      durationSeconds: number;
+      startedAt: string;
+      endedAt: string;
+      trackYoutubeId?: string;
+      notes?: string;
+    }): Promise<FocusSession> => {
+      return this.request<FocusSession>(`/focus/sessions`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    },
+    logProgress: async (entryPath: string, note: string): Promise<void> => {
+      await this.request<void>(`/focus/progress`, {
+        method: 'POST',
+        body: JSON.stringify({ entryPath, note })
+      });
+    },
+    congrats: async (payload: { entryPath?: string; entryName?: string; minutes?: number }): Promise<{ message: string }> => {
+      return this.request<{ message: string }>(`/focus/congrats`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
   };
 }
 

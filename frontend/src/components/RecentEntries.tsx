@@ -5,42 +5,24 @@
  * Requirements 10.3, 10.4
  */
 
-import { useState, useEffect } from 'react';
-import { api, EntrySummary } from '@/services/api';
+import { useMemo, useState } from 'react';
+import { EntrySummary } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, FileText, User, Briefcase, Lightbulb, ClipboardList, Inbox, RefreshCw } from 'lucide-react';
+import { useEntries } from '@/state/entries';
 
 interface RecentEntriesProps {
   onEntryClick: (path: string) => void;
   limit?: number;
 }
 
-export function RecentEntries({ onEntryClick, limit = 10 }: RecentEntriesProps) {
-  const [entries, setEntries] = useState<EntrySummary[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadEntries();
-  }, []);
-
-  const loadEntries = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const allEntries = await api.entries.list();
-      // Sort by updated_at and take the most recent
-      const sorted = allEntries
-        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-        .slice(0, limit);
-      setEntries(sorted);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load entries');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+export function RecentEntries({ onEntryClick, limit = 6 }: RecentEntriesProps) {
+  const { entries, isLoading, error, refresh } = useEntries();
+  const [expanded, setExpanded] = useState(false);
+  const sortedEntries = useMemo<EntrySummary[]>(() => {
+    return [...entries].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  }, [entries]);
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -82,14 +64,14 @@ export function RecentEntries({ onEntryClick, limit = 10 }: RecentEntriesProps) 
         <Button 
           variant="ghost" 
           size="icon" 
-          onClick={loadEntries}
+          onClick={refresh}
           disabled={isLoading}
         >
           <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
         </Button>
       </CardHeader>
       <CardContent>
-        {isLoading && entries.length === 0 && (
+        {isLoading && sortedEntries.length === 0 && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
@@ -98,21 +80,22 @@ export function RecentEntries({ onEntryClick, limit = 10 }: RecentEntriesProps) 
         {error && (
           <div className="text-center py-4">
             <p className="text-sm text-destructive">{error}</p>
-            <Button variant="outline" size="sm" onClick={loadEntries} className="mt-2">
+            <Button variant="outline" size="sm" onClick={refresh} className="mt-2">
               Retry
             </Button>
           </div>
         )}
 
-        {!isLoading && !error && entries.length === 0 && (
+        {!isLoading && !error && sortedEntries.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-4">
             No entries yet. Start chatting to create some!
           </p>
         )}
 
-        {entries.length > 0 && (
-          <ul className="space-y-2">
-            {entries.map((entry) => (
+        {sortedEntries.length > 0 && (
+          <>
+            <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {(expanded ? sortedEntries : sortedEntries.slice(0, limit)).map((entry) => (
               <li key={entry.path}>
                 <button
                   onClick={() => onEntryClick(entry.path)}
@@ -132,8 +115,19 @@ export function RecentEntries({ onEntryClick, limit = 10 }: RecentEntriesProps) 
                   </div>
                 </button>
               </li>
-            ))}
-          </ul>
+              ))}
+            </ul>
+            {sortedEntries.length > limit && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full mt-2"
+                onClick={() => setExpanded((prev) => !prev)}
+              >
+                {expanded ? 'Show less' : `Show all (${sortedEntries.length})`}
+              </Button>
+            )}
+          </>
         )}
       </CardContent>
     </Card>

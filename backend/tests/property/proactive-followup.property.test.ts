@@ -53,6 +53,7 @@ const toEntrySummary = (person: {
   follow_ups: string[];
   last_touched: string | null;
 }, index: number): EntrySummary => ({
+  id: `person-${index}`,
   path: `people/person-${index}.md`,
   name: person.name,
   category: 'people' as Category,

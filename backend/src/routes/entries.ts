@@ -52,6 +52,56 @@ entriesRouter.get('/', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/entries/merge
+ * Merge multiple entries into a target entry
+ */
+entriesRouter.post('/merge', async (req: Request, res: Response) => {
+  try {
+    const entryService = getEntryService();
+    const { targetPath, sourcePaths } = req.body as { targetPath?: string; sourcePaths?: string[] };
+
+    if (!targetPath || !Array.isArray(sourcePaths) || sourcePaths.length === 0) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'targetPath and sourcePaths are required'
+        }
+      });
+      return;
+    }
+
+    const merged = await entryService.merge(targetPath, sourcePaths, 'api');
+    res.json(merged);
+  } catch (error) {
+    if (error instanceof EntryNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: error.message
+        }
+      });
+      return;
+    }
+    if (error instanceof InvalidEntryDataError) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.message
+        }
+      });
+      return;
+    }
+    console.error('Error merging entries:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to merge entries'
+      }
+    });
+  }
+});
+
+/**
  * GET /api/entries/:path(*)
  * Get a single entry by path
  */

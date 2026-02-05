@@ -169,7 +169,7 @@ export class ToolRegistry {
       type: 'function',
       function: {
         name: 'update_entry',
-        description: 'Update an existing entry. Use "updates" to change metadata fields like status, due_date, next_action. Use "body_content" only to add notes or log entries to the body. To mark a task done, use updates: {status: "done"}. To add a note, use body_content with mode "section".',
+        description: 'Update an existing entry. Use when you need to change metadata fields like status, due_date, or next_action. Use "updates" to change metadata fields like status, due_date, next_action. Use "body_content" only to add notes or log entries to the body. To mark a task done, use updates: {status: "done"}. To add a note, use body_content with mode "section".',
         parameters: {
           type: 'object',
           properties: {
@@ -237,7 +237,7 @@ export class ToolRegistry {
       type: 'function',
       function: {
         name: 'search_entries',
-        description: 'Search for entries by keyword. Use when the user wants to find entries containing specific terms or asks questions like "do I have anything about X?"',
+        description: 'Search for entries by keyword or semantic query. Use when the user wants to find entries containing specific terms or asks questions like "do I have anything about X?"',
         parameters: {
           type: 'object',
           properties: {
@@ -276,6 +276,67 @@ export class ToolRegistry {
             }
           },
           required: ['path']
+        }
+      }
+    });
+
+    // find_duplicates
+    this.registerTool({
+      type: 'function',
+      function: {
+        name: 'find_duplicates',
+        description: 'Find likely duplicate entries. Use when the user asks if something already exists or wants to check for duplicates before creating a new entry.',
+        parameters: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Optional name/title to compare'
+            },
+            text: {
+              type: 'string',
+              description: 'Optional text to compare (e.g., the thought content)'
+            },
+            category: {
+              type: 'string',
+              enum: ['people', 'projects', 'ideas', 'admin', 'inbox'],
+              description: 'Optional category to limit search'
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum results to return',
+              default: 5
+            },
+            excludePath: {
+              type: 'string',
+              description: 'Optional path to exclude from duplicate results'
+            }
+          },
+          required: []
+        }
+      }
+    });
+
+    // merge_entries
+    this.registerTool({
+      type: 'function',
+      function: {
+        name: 'merge_entries',
+        description: 'Merge multiple entries into a target entry. Use when the user wants to combine duplicates or consolidate notes.',
+        parameters: {
+          type: 'object',
+          properties: {
+            targetPath: {
+              type: 'string',
+              description: 'The target entry path to keep'
+            },
+            sourcePaths: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Paths of entries to merge into the target'
+            }
+          },
+          required: ['targetPath', 'sourcePaths']
         }
       }
     });

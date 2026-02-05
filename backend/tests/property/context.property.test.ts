@@ -22,17 +22,15 @@ import {
   Role,
 } from '../../src/services/conversation.service';
 import { IndexService } from '../../src/services/index.service';
+import { EntryService } from '../../src/services/entry.service';
 import { Channel } from '../../src/types/entry.types';
-import { mkdir, rm, writeFile } from 'fs/promises';
-import { join } from 'path';
-
-// Test data directory
-const TEST_DATA_DIR = join(__dirname, '../../.test-data-context-property');
+import { resetDatabase } from '../setup';
 
 describe('Property Tests: Context Assembler', () => {
   let contextAssembler: ContextAssembler;
   let conversationService: ConversationService;
   let indexService: IndexService;
+  let entryService: EntryService;
   const prisma = getPrismaClient();
 
   // Default MAX_VERBATIM_MESSAGES for testing
@@ -41,14 +39,6 @@ describe('Property Tests: Context Assembler', () => {
   beforeAll(async () => {
     // Ensure database connection
     await prisma.$connect();
-
-    // Create test data directory structure
-    await mkdir(TEST_DATA_DIR, { recursive: true });
-    await mkdir(join(TEST_DATA_DIR, 'people'), { recursive: true });
-    await mkdir(join(TEST_DATA_DIR, 'projects'), { recursive: true });
-    await mkdir(join(TEST_DATA_DIR, 'ideas'), { recursive: true });
-    await mkdir(join(TEST_DATA_DIR, 'admin'), { recursive: true });
-    await mkdir(join(TEST_DATA_DIR, 'inbox'), { recursive: true });
   });
 
   beforeEach(async () => {
@@ -57,7 +47,8 @@ describe('Property Tests: Context Assembler', () => {
     resetContextAssembler();
 
     conversationService = new ConversationService();
-    indexService = new IndexService(TEST_DATA_DIR);
+    entryService = new EntryService();
+    indexService = new IndexService(entryService);
 
     // Create ContextAssembler with test dependencies
     contextAssembler = new ContextAssembler(
@@ -66,32 +57,23 @@ describe('Property Tests: Context Assembler', () => {
       MAX_VERBATIM_MESSAGES
     );
 
-    // Clean up test data before each test using transaction
-    await prisma.$transaction(async (tx) => {
-      await tx.message.deleteMany({});
-      await tx.conversationSummary.deleteMany({});
-      await tx.conversation.deleteMany({});
-    });
+    // Clean up test data before each test using TRUNCATE to avoid FK conflicts
+    await prisma.$executeRawUnsafe(
+      'TRUNCATE "Message", "ConversationSummary", "Conversation" RESTART IDENTITY CASCADE;'
+    );
+    await resetDatabase();
 
     // Create a fresh index.md
     await indexService.regenerate();
   });
 
   afterAll(async () => {
-    // Clean up all test data using transaction
-    await prisma.$transaction(async (tx) => {
-      await tx.message.deleteMany({});
-      await tx.conversationSummary.deleteMany({});
-      await tx.conversation.deleteMany({});
-    });
+    // Clean up all test data using TRUNCATE to avoid FK conflicts
+    await prisma.$executeRawUnsafe(
+      'TRUNCATE "Message", "ConversationSummary", "Conversation" RESTART IDENTITY CASCADE;'
+    );
     await disconnectPrisma();
-
-    // Clean up test data directory
-    try {
-      await rm(TEST_DATA_DIR, { recursive: true, force: true });
-    } catch {
-      // Directory might not exist
-    }
+    await resetDatabase();
   });
 
   // ============================================
@@ -337,24 +319,13 @@ describe('Property Tests: Context Assembler', () => {
     });
 
     it('context with entries SHALL have non-empty index content (Requirement 8.1)', async () => {
-      // Create a test entry to ensure index has content
-      const entryContent = `---
-id: test-entry-123
-name: Test Entry
-category: ideas
-tags: []
-created_at: ${new Date().toISOString()}
-source_channel: chat
-one_liner: A test entry for property testing
----
+      await entryService.create('ideas', {
+        name: 'Test Entry',
+        one_liner: 'A test entry for property testing',
+        source_channel: 'chat',
+        confidence: 0.9
+      }, 'chat', '# Test Entry\n\nThis is a test entry for property testing.');
 
-# Test Entry
-
-This is a test entry for property testing.
-`;
-      await writeFile(join(TEST_DATA_DIR, 'ideas', 'test-entry.md'), entryContent);
-
-      // Regenerate index to include the entry
       await indexService.regenerate();
 
       await fc.assert(
@@ -374,12 +345,7 @@ This is a test entry for property testing.
         { numRuns: 3 }
       );
 
-      // Clean up the test entry
-      try {
-        await rm(join(TEST_DATA_DIR, 'ideas', 'test-entry.md'));
-      } catch {
-        // File might not exist
-      }
+      await resetDatabase();
     });
 
     it('messages in context SHALL be in chronological order (oldest to newest)', async () => {

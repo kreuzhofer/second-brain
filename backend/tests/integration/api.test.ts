@@ -1,27 +1,25 @@
 import request from 'supertest';
 import express from 'express';
-import { rm, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { resetDatabase } from '../setup';
 import { entriesRouter } from '../../src/routes/entries';
 import { healthRouter } from '../../src/routes/health';
 import { indexRouter } from '../../src/routes/index-route';
 import { authMiddleware } from '../../src/middleware/auth';
-import { GitService } from '../../src/services/git.service';
-import { IndexService } from '../../src/services/index.service';
-import { EntryService } from '../../src/services/entry.service';
-
-const TEST_API_DIR = join(__dirname, '../.test-api-data');
 const TEST_API_KEY = 'test-api-key-12345';
 
 // Mock the config module
 jest.mock('../../src/config/env', () => ({
   getConfig: () => ({
     API_KEY: 'test-api-key-12345',
-    DATA_PATH: join(__dirname, '../.test-api-data')
+    DATA_PATH: '/memory',
+    OPENAI_API_KEY: '',
+    DATABASE_URL: process.env.DATABASE_URL || 'postgresql://user:pass@localhost:5432/second-brain'
   }),
   loadEnvConfig: () => ({
     API_KEY: 'test-api-key-12345',
-    DATA_PATH: join(__dirname, '../.test-api-data')
+    DATA_PATH: '/memory',
+    OPENAI_API_KEY: '',
+    DATABASE_URL: process.env.DATABASE_URL || 'postgresql://user:pass@localhost:5432/second-brain'
   })
 }));
 
@@ -29,25 +27,11 @@ describe('API Integration Tests', () => {
   let app: express.Application;
 
   beforeAll(async () => {
-    // Set up test data directory
-    await rm(TEST_API_DIR, { recursive: true, force: true });
-    await mkdir(TEST_API_DIR, { recursive: true });
-    await mkdir(join(TEST_API_DIR, 'people'), { recursive: true });
-    await mkdir(join(TEST_API_DIR, 'projects'), { recursive: true });
-    await mkdir(join(TEST_API_DIR, 'ideas'), { recursive: true });
-    await mkdir(join(TEST_API_DIR, 'admin'), { recursive: true });
-    await mkdir(join(TEST_API_DIR, 'inbox'), { recursive: true });
-
-    // Initialize git
-    const gitService = new GitService(TEST_API_DIR);
-    await gitService.initialize();
-
-    // Create initial index
-    const indexService = new IndexService(TEST_API_DIR);
-    await indexService.regenerate();
+    await resetDatabase();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await resetDatabase();
     // Create fresh Express app for each test
     app = express();
     app.use(express.json());
@@ -57,7 +41,7 @@ describe('API Integration Tests', () => {
   });
 
   afterAll(async () => {
-    await rm(TEST_API_DIR, { recursive: true, force: true });
+    await resetDatabase();
   });
 
   describe('GET /api/health', () => {

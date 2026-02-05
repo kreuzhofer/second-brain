@@ -6,9 +6,9 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
 
 - **Frictionless Capture**: Capture thoughts via chat UI, REST API, or email
 - **Automatic Classification**: AI classifies entries into people, projects, ideas, or admin tasks
-- **Markdown Storage**: All data stored as plain markdown files with YAML frontmatter
-- **Git Version Control**: Every change creates a git commit for full audit trail
-- **Auto-Generated Index**: Always up-to-date index.md summarizing all entries
+- **Database-Backed Markdown**: Entries stored in PostgreSQL with Markdown sections and logs
+- **Revision History**: Every change creates an immutable revision snapshot
+- **Auto-Generated Index**: Always up-to-date index summary computed from the database
 - **Email Channel**: Bidirectional email integration for capture and notifications (optional)
 - **Daily Digests**: Morning summaries of top priorities and stale items
 - **Weekly Reviews**: End-of-week activity summaries and suggestions
@@ -37,7 +37,7 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
    Edit `.env` and set:
    - `OPENAI_API_KEY`: Your OpenAI API key
    - `API_KEY`: A secure random string for API authentication
-   - `DATA_PATH`: Path to your memory directory (default: `./memory`)
+   - `DATA_PATH`: Optional legacy memory directory (used only for migration)
 
 4. **Start with Docker Compose**
    ```bash
@@ -47,6 +47,16 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
 5. **Access the application**
    Open http://localhost:3000 in your browser
 
+## Legacy Memory Migration (Optional)
+
+If you have legacy `memory/` markdown data, the app will auto-migrate it on startup when the database is empty.
+You can still run the manual migration after running migrations:
+
+```bash
+cd backend
+npm run migrate:memory
+```
+
 ## Environment Variables
 
 | Variable | Required | Default | Description |
@@ -54,10 +64,17 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
 | `OPENAI_API_KEY` | Yes | - | OpenAI API key for classification |
 | `DATABASE_URL` | Yes | - | PostgreSQL connection string |
 | `API_KEY` | Yes | - | API authentication key |
-| `DATA_PATH` | Yes | - | Path to memory directory |
+| `DATA_PATH` | No | `./memory` | Legacy memory directory (migration/backups only) |
 | `TIMEZONE` | No | `Europe/Berlin` | Timezone for timestamps |
 | `CONFIDENCE_THRESHOLD` | No | `0.6` | Classification confidence threshold |
 | `PORT` | No | `3000` | Server port |
+| `EMBEDDING_BACKFILL_ENABLED` | No | `true` | Auto-backfill missing embeddings on startup |
+| `EMBEDDING_BACKFILL_CATEGORY` | No | - | Restrict backfill to a category (`people`, `projects`, `ideas`, `admin`, `inbox`) |
+| `EMBEDDING_BACKFILL_LIMIT` | No | - | Max embeddings to process per startup |
+| `EMBEDDING_BACKFILL_BATCH_SIZE` | No | `10` | Batch size for missing-embedding lookup |
+| `EMBEDDING_BACKFILL_SLEEP_MS` | No | `0` | Sleep between embedding requests |
+| `MEMORY_MIGRATION_ENABLED` | No | `true` | Auto-migrate legacy `memory/` entries on startup when DB is empty |
+| `MEMORY_MIGRATION_FORCE` | No | `false` | Force memory migration even if entries already exist |
 
 ### Email Channel (Optional)
 
@@ -138,14 +155,9 @@ second-brain/
 │   │   └── types/          # TypeScript types
 │   ├── prisma/             # Database schema
 │   └── tests/              # Test files
-└── memory/                 # Memory directory (gitignored)
-    ├── .git/               # Git repository for data
-    ├── index.md            # Auto-generated index
-    ├── people/             # People entries
-    ├── projects/           # Project entries
-    ├── ideas/              # Idea entries
-    ├── admin/              # Admin task entries
-    └── inbox/              # Low-confidence entries
+└── memory/                 # Legacy memory directory (optional; migration only)
+    ├── .cache/             # Legacy embeddings cache (optional)
+    └── ...                 # Legacy markdown entries
 ```
 
 ## API Endpoints
@@ -158,7 +170,7 @@ second-brain/
 | POST | `/api/entries` | Create entry |
 | PATCH | `/api/entries/:path` | Update entry |
 | DELETE | `/api/entries/:path` | Delete entry |
-| GET | `/api/index` | Get index.md content |
+| GET | `/api/index` | Get index content |
 
 All endpoints except `/api/health` require authentication via Bearer token.
 

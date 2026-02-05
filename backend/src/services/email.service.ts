@@ -257,7 +257,8 @@ export class EmailService implements IEmailService {
       const chatResponse = await this.chatService.processMessage(
         conversationId,
         cleanText,
-        hint?.category
+        hint?.category,
+        'email'
       );
 
       // 7. Create thread record

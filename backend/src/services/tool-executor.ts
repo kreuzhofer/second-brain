@@ -9,13 +9,24 @@
 
 import { ToolRegistry, getToolRegistry } from './tool-registry';
 import { EntryService, getEntryService } from './entry.service';
-import { ClassificationAgent, getClassificationAgent } from './classification.service';
+import {
+  ClassificationAgent,
+  getClassificationAgent,
+  ClassificationAPIError,
+  ClassificationTimeoutError,
+  InvalidClassificationResponseError,
+  ClassificationError
+} from './classification.service';
 import { DigestService, getDigestService } from './digest.service';
 import { SearchService, getSearchService, SearchHit } from './search.service';
 import { IndexService, getIndexService } from './index.service';
+import { ActionExtractionService, getActionExtractionService } from './action-extraction.service';
+import { DuplicateService, getDuplicateService, DuplicateHit } from './duplicate.service';
+import { OfflineQueueService, getOfflineQueueService } from './offline-queue.service';
 import { CLASSIFICATION_SYSTEM_PROMPT } from './context.service';
 import { 
   Category, 
+  Channel,
   EntrySummary, 
   EntryWithPath,
   CreatePeopleInput,
@@ -26,6 +37,7 @@ import {
   BodyContentMode
 } from '../types/entry.types';
 import { ContextWindow, ClassificationResult } from '../types/chat.types';
+import { getConfig } from '../config/env';
 
 // ============================================
 // Tool Call Types
@@ -62,6 +74,9 @@ export interface CaptureResult {
   name: string;
   confidence: number;
   clarificationNeeded: boolean;
+  queued?: boolean;
+  queueId?: string;
+  message?: string;
 }
 
 /**
@@ -121,6 +136,13 @@ export interface SearchResult {
 }
 
 /**
+ * Result from find_duplicates tool
+ */
+export interface DuplicateResult {
+  duplicates: DuplicateHit[];
+}
+
+/**
  * Result from delete_entry tool
  * Requirements 3.2, 3.3: Delete entry and return path/name
  */
@@ -135,11 +157,13 @@ export interface DeleteEntryResult {
 // ============================================
 
 /**
- * Confidence threshold for routing entries to inbox vs classified category
- * Entries with confidence below this threshold go to inbox
- * Requirement 8.1: Backward compatibility with spec 002's routing behavior
+ * Execution options for tool calls
  */
-const CONFIDENCE_THRESHOLD = 0.6;
+export interface ToolExecutionOptions {
+  channel?: Channel;
+  context?: ContextWindow;
+  allowQueue?: boolean;
+}
 
 /**
  * Executes tool calls by dispatching to appropriate handlers
@@ -151,6 +175,9 @@ export class ToolExecutor {
   private digestService: DigestService;
   private searchService: SearchService;
   private indexService: IndexService;
+  private actionExtractionService?: ActionExtractionService;
+  private duplicateService?: DuplicateService;
+  private offlineQueueService?: OfflineQueueService;
 
   constructor(
     toolRegistry?: ToolRegistry,
@@ -158,7 +185,10 @@ export class ToolExecutor {
     classificationAgent?: ClassificationAgent,
     digestService?: DigestService,
     searchService?: SearchService,
-    indexService?: IndexService
+    indexService?: IndexService,
+    actionExtractionService?: ActionExtractionService,
+    duplicateService?: DuplicateService,
+    offlineQueueService?: OfflineQueueService
   ) {
     this.toolRegistry = toolRegistry || getToolRegistry();
     this.entryService = entryService || getEntryService();
@@ -166,6 +196,9 @@ export class ToolExecutor {
     this.digestService = digestService || getDigestService();
     this.searchService = searchService || getSearchService();
     this.indexService = indexService || getIndexService();
+    this.actionExtractionService = actionExtractionService;
+    this.duplicateService = duplicateService;
+    this.offlineQueueService = offlineQueueService;
   }
 
   /**
@@ -174,8 +207,11 @@ export class ToolExecutor {
    * @param toolCall - The tool call to execute
    * @returns ToolResult with success/error status and data
    */
-  async execute(toolCall: ToolCall): Promise<ToolResult> {
+  async execute(toolCall: ToolCall, options?: ToolExecutionOptions): Promise<ToolResult> {
     const { name, arguments: args } = toolCall;
+    const channel: Channel = options?.channel || 'api';
+    const context = options?.context;
+    const allowQueue = options?.allowQueue !== false;
 
     // Validate arguments against schema
     const validation = this.toolRegistry.validateArguments(name, args);
@@ -190,7 +226,7 @@ export class ToolExecutor {
     try {
       switch (name) {
         case 'classify_and_capture':
-          return await this.handleClassifyAndCapture(args);
+          return await this.handleClassifyAndCapture(args, channel, context, allowQueue);
         
         case 'list_entries':
           return await this.handleListEntries(args);
@@ -202,16 +238,22 @@ export class ToolExecutor {
           return await this.handleGenerateDigest(args);
         
         case 'update_entry':
-          return await this.handleUpdateEntry(args);
+          return await this.handleUpdateEntry(args, channel);
         
         case 'move_entry':
-          return await this.handleMoveEntry(args);
+          return await this.handleMoveEntry(args, channel);
         
         case 'search_entries':
           return await this.handleSearchEntries(args);
         
         case 'delete_entry':
-          return await this.handleDeleteEntry(args);
+          return await this.handleDeleteEntry(args, channel);
+
+        case 'find_duplicates':
+          return await this.handleFindDuplicates(args);
+
+        case 'merge_entries':
+          return await this.handleMergeEntries(args, channel);
         
         default:
           return {
@@ -232,6 +274,27 @@ export class ToolExecutor {
   // Tool Handlers (Stubs - to be implemented in subsequent tasks)
   // ============================================
 
+  private getActionExtractionService(): ActionExtractionService {
+    if (!this.actionExtractionService) {
+      this.actionExtractionService = getActionExtractionService();
+    }
+    return this.actionExtractionService;
+  }
+
+  private getDuplicateService(): DuplicateService {
+    if (!this.duplicateService) {
+      this.duplicateService = getDuplicateService();
+    }
+    return this.duplicateService;
+  }
+
+  private getOfflineQueueService(): OfflineQueueService {
+    if (!this.offlineQueueService) {
+      this.offlineQueueService = getOfflineQueueService();
+    }
+    return this.offlineQueueService;
+  }
+
   /**
    * Handle classify_and_capture tool
    * Requirement 3.1: Classify thought and create entry using ClassificationAgent and EntryService
@@ -239,43 +302,78 @@ export class ToolExecutor {
    * @param args - Tool arguments { text: string, hints?: string }
    * @returns ToolResult with CaptureResult data
    */
-  private async handleClassifyAndCapture(args: Record<string, unknown>): Promise<ToolResult> {
+  private async handleClassifyAndCapture(
+    args: Record<string, unknown>,
+    channel: Channel,
+    contextOverride?: ContextWindow,
+    allowQueue: boolean = true
+  ): Promise<ToolResult> {
     const text = args.text as string;
     const hints = args.hints as string | undefined;
 
-    // 1. Build minimal context for classification
-    // Since we don't have conversation history in this tool context,
-    // we use empty summaries and messages but include the index content
-    const indexContent = await this.indexService.getIndexContent();
-    
-    const context: ContextWindow = {
-      systemPrompt: CLASSIFICATION_SYSTEM_PROMPT,
-      indexContent,
-      summaries: [],
-      recentMessages: []
-    };
+    // 1. Build context for classification
+    // Prefer full conversation context when provided (chat/email),
+    // otherwise fall back to minimal context with index only.
+    let context: ContextWindow;
+    if (contextOverride) {
+      context = contextOverride;
+    } else {
+      const indexContent = await this.indexService.getIndexContent();
+      context = {
+        systemPrompt: CLASSIFICATION_SYSTEM_PROMPT,
+        indexContent,
+        summaries: [],
+        recentMessages: []
+      };
+    }
 
     // 2. Call classificationAgent.classify()
-    const classificationResult: ClassificationResult = await this.classificationAgent.classify({
-      text,
-      hints,
-      context
-    });
+    let classificationResult: ClassificationResult;
+    try {
+      classificationResult = await this.classificationAgent.classify({
+        text,
+        hints,
+        context
+      });
+    } catch (error) {
+      if (allowQueue && this.shouldQueueClassificationError(error)) {
+        const queueService = this.getOfflineQueueService();
+        if (queueService.isEnabled()) {
+          const queued = await queueService.enqueueCapture(text, hints, channel, context);
+          if (queued) {
+            const captureResult: CaptureResult = {
+              path: '',
+              category: 'inbox',
+              name: '',
+              confidence: 0,
+              clarificationNeeded: false,
+              queued: true,
+              queueId: queued.id,
+              message: 'Capture queued and will be processed when the LLM is available.'
+            };
+            return { success: true, data: captureResult };
+          }
+        }
+      }
+      throw error;
+    }
 
     // 3. Determine if entry should go to inbox (confidence < 0.6) or classified category
     // Requirement 8.1: Backward compatibility with spec 002's routing behavior
-    const useInbox = classificationResult.confidence < CONFIDENCE_THRESHOLD;
+    const confidenceThreshold = getConfig().CONFIDENCE_THRESHOLD;
+    const useInbox = classificationResult.confidence < confidenceThreshold;
     const targetCategory: Category = useInbox ? 'inbox' : classificationResult.category;
 
     // 4. Extract bodyContent from classification result
     // Requirement 1.1: Classification Agent generates body content
-    const bodyContent = classificationResult.bodyContent;
+    let bodyContent = classificationResult.bodyContent;
 
     // 5. Create entry using entryService.create()
     // Requirement 1.6: Pass bodyContent to EntryService.create()
     let createdEntry: EntryWithPath;
 
     if (useInbox) {
+      const agentNote = this.buildAgentNote(classificationResult);
       // Create inbox entry with original text and suggested classification
       // Note: Inbox entries don't get body content since they need review
       createdEntry = await this.entryService.create('inbox', {
@@ -283,12 +381,22 @@ export class ToolExecutor {
         suggested_category: classificationResult.category,
         suggested_name: classificationResult.name,
         confidence: classificationResult.confidence,
-        source_channel: 'api'
-      }, 'api');
+        source_channel: channel
+      }, channel, agentNote);
     } else {
       // Create entry in the classified category with appropriate fields and body content
-      const entryData = this.buildEntryData(classificationResult);
-      createdEntry = await this.entryService.create(targetCategory, entryData, 'api', bodyContent);
+      let entryData = this.buildEntryData(classificationResult, channel);
+
+      // Action extraction to enrich next actions for projects/admin
+      const actionResult = await this.getActionExtractionService().extractActions(text, targetCategory);
+      ({ entryData, bodyContent } = this.applyActionsToEntry(
+        targetCategory,
+        entryData,
+        bodyContent,
+        actionResult
+      ));
+
+      createdEntry = await this.entryService.create(targetCategory, entryData, channel, bodyContent);
     }
 
     // 6. Return CaptureResult
@@ -310,12 +418,15 @@ export class ToolExecutor {
    * Build entry data from classification result based on category
    * Maps ClassificationResult fields to CreateEntryInput format
    */
-  private buildEntryData(result: ClassificationResult): CreatePeopleInput | CreateProjectsInput | CreateIdeasInput | CreateAdminInput {
+  private buildEntryData(
+    result: ClassificationResult,
+    channel: Channel
+  ): CreatePeopleInput | CreateProjectsInput | CreateIdeasInput | CreateAdminInput {
     const baseData = {
       name: result.name,
       confidence: result.confidence,
       tags: [] as string[],
-      source_channel: 'api' as const
+      source_channel: channel
     };
 
     // Cast fields to unknown first, then to Record to access category-specific properties
@@ -448,7 +559,7 @@ export class ToolExecutor {
    * @param args - Tool arguments { path: string, updates?: object, body_content?: object }
    * @returns ToolResult with UpdateEntryResult data
    */
-  private async handleUpdateEntry(args: Record<string, unknown>): Promise<ToolResult> {
+  private async handleUpdateEntry(args: Record<string, unknown>, channel: Channel): Promise<ToolResult> {
     const path = args.path as string;
     const updates = (args.updates as Record<string, unknown>) || {};
     const bodyContentArg = args.body_content as { content: string; mode: string; section?: string } | undefined;
@@ -481,7 +592,7 @@ export class ToolExecutor {
     }
 
     // 1. Call entryService.update() with path, updates, and bodyUpdate
-    await this.entryService.update(path, updates, 'api', bodyUpdate);
+    await this.entryService.update(path, updates, channel, bodyUpdate);
 
     // 2. Return UpdateEntryResult with path, updated fields, and body update info
     const result: UpdateEntryResult = {
@@ -508,28 +619,17 @@ export class ToolExecutor {
    * @param args - Tool arguments { path: string, targetCategory: string }
    * @returns ToolResult with MoveEntryResult data
    */
-  private async handleMoveEntry(args: Record<string, unknown>): Promise<ToolResult> {
+  private async handleMoveEntry(args: Record<string, unknown>, channel: Channel): Promise<ToolResult> {
     const path = args.path as string;
     const targetCategory = args.targetCategory as Category;
 
-    // 1. Read existing entry
-    const existingEntry = await this.entryService.read(path);
-    const sourceCategory = existingEntry.category;
+    // 1. Move entry using EntryService.move()
+    const moveResult = await this.entryService.move(path, targetCategory, channel);
 
-    // 2. Transform fields for target category
-    const entryData = this.transformEntryForCategory(existingEntry, targetCategory);
-
-    // 3. Create new entry in target category
-    // EntryService.create() handles slug collision by throwing EntryAlreadyExistsError
-    const newEntry = await this.entryService.create(targetCategory, entryData, 'api');
-
-    // 4. Delete old entry
-    await this.entryService.delete(path, 'api');
-
-    // 5. Return MoveEntryResult
+    // 2. Return MoveEntryResult
     const result: MoveEntryResult = {
       oldPath: path,
-      newPath: newEntry.path,
+      newPath: moveResult.path,
       category: targetCategory
     };
 
@@ -537,83 +637,6 @@ export class ToolExecutor {
       success: true,
       data: result
     };
-  }
-
-  /**
-   * Transform entry data from source category to target category format
-   * Keeps common fields (name, tags, confidence, source_channel) and adds category-specific defaults
-   * For inbox entries, uses suggested_name as name
-   */
-  private transformEntryForCategory(
-    existingEntry: EntryWithPath,
-    targetCategory: Category
-  ): CreatePeopleInput | CreateProjectsInput | CreateIdeasInput | CreateAdminInput {
-    const entry = existingEntry.entry;
-    const sourceCategory = existingEntry.category;
-
-    // Extract common fields
-    // For inbox entries, use suggested_name as name
-    let name: string;
-    let tags: string[] = [];
-    let confidence: number;
-    let sourceChannel: 'chat' | 'email' | 'api';
-
-    if (sourceCategory === 'inbox') {
-      const inboxEntry = entry as import('../types/entry.types').InboxEntry;
-      name = inboxEntry.suggested_name;
-      confidence = inboxEntry.confidence;
-      sourceChannel = inboxEntry.source_channel;
-    } else {
-      const baseEntry = entry as import('../types/entry.types').BaseEntry;
-      name = baseEntry.name;
-      tags = baseEntry.tags || [];
-      confidence = baseEntry.confidence;
-      sourceChannel = baseEntry.source_channel;
-    }
-
-    // Build target category-specific entry data
-    switch (targetCategory) {
-      case 'people':
-        return {
-          name,
-          tags,
-          confidence,
-          source_channel: sourceChannel,
-          context: '',
-          follow_ups: [],
-          related_projects: []
-        };
-      case 'projects':
-        return {
-          name,
-          tags,
-          confidence,
-          source_channel: sourceChannel,
-          status: 'active' as const,
-          next_action: '',
-          related_people: []
-        };
-      case 'ideas':
-        return {
-          name,
-          tags,
-          confidence,
-          source_channel: sourceChannel,
-          one_liner: '',
-          related_projects: []
-        };
-      case 'admin':
-        return {
-          name,
-          tags,
-          confidence,
-          source_channel: sourceChannel,
-          status: 'pending' as const
-        };
-      default:
-        // This shouldn't happen due to schema validation, but TypeScript needs it
-        throw new Error(`Invalid target category: ${targetCategory}`);
-    }
   }
 
   /**
@@ -644,13 +667,126 @@ export class ToolExecutor {
   }
 
   /**
+   * Handle find_duplicates tool
+   */
+  private async handleFindDuplicates(args: Record<string, unknown>): Promise<ToolResult> {
+    const name = args.name as string | undefined;
+    const text = args.text as string | undefined;
+    const category = args.category as Category | undefined;
+    const limit = args.limit as number | undefined;
+    const excludePath = args.excludePath as string | undefined;
+
+    const duplicates = await this.getDuplicateService().findDuplicatesForText({
+      name,
+      text,
+      category,
+      limit,
+      excludePath
+    });
+
+    const result: DuplicateResult = { duplicates };
+
+    return {
+      success: true,
+      data: result
+    };
+  }
+
+  /**
+   * Handle merge_entries tool
+   */
+  private async handleMergeEntries(args: Record<string, unknown>, channel: Channel): Promise<ToolResult> {
+    const targetPath = args.targetPath as string;
+    const sourcePaths = args.sourcePaths as string[];
+
+    if (!targetPath || !Array.isArray(sourcePaths) || sourcePaths.length === 0) {
+      return {
+        success: false,
+        error: 'targetPath and sourcePaths are required for merge_entries'
+      };
+    }
+
+    const merged = await this.entryService.merge(targetPath, sourcePaths, channel);
+    return {
+      success: true,
+      data: { entry: merged }
+    };
+  }
+
+  private applyActionsToEntry(
+    category: Category,
+    entryData: CreatePeopleInput | CreateProjectsInput | CreateIdeasInput | CreateAdminInput,
+    bodyContent: string,
+    actionResult: { actions: Array<{ text: string; dueDate?: string }>; primaryAction?: string }
+  ): { entryData: CreatePeopleInput | CreateProjectsInput | CreateIdeasInput | CreateAdminInput; bodyContent: string } {
+    if (!actionResult || actionResult.actions.length === 0) {
+      return { entryData, bodyContent };
+    }
+
+    const actionLines = actionResult.actions.map((action) => {
+      const due = action.dueDate ? ` (due ${action.dueDate})` : '';
+      return `- ${action.text}${due}`;
+    });
+
+    if (category === 'projects') {
+      const projectData = entryData as CreateProjectsInput;
+      if (!projectData.next_action && actionResult.primaryAction) {
+        projectData.next_action = actionResult.primaryAction;
+      } else if (!projectData.next_action && actionResult.actions[0]) {
+        projectData.next_action = actionResult.actions[0].text;
+      }
+    }
+
+    if (category === 'admin') {
+      const adminData = entryData as CreateAdminInput;
+      if (!adminData.name && actionResult.primaryAction) {
+        adminData.name = actionResult.primaryAction;
+      }
+    }
+
+    const actionsSection = `## Actions\n\n${actionLines.join('\n')}`;
+    if (bodyContent && bodyContent.trim().length > 0) {
+      bodyContent = `${bodyContent.trim()}\n\n${actionsSection}`;
+    } else {
+      bodyContent = actionsSection;
+    }
+
+    return { entryData, bodyContent };
+  }
+
+  private shouldQueueClassificationError(error: unknown): boolean {
+    if (
+      (typeof ClassificationTimeoutError === 'function' && error instanceof ClassificationTimeoutError) ||
+      (typeof ClassificationAPIError === 'function' && error instanceof ClassificationAPIError)
+    ) {
+      return true;
+    }
+
+    if (typeof InvalidClassificationResponseError === 'function' && error instanceof InvalidClassificationResponseError) {
+      return false;
+    }
+
+    if (typeof ClassificationError === 'function' && error instanceof ClassificationError) {
+      const message = error.message.toLowerCase();
+      return message.includes('openai') || message.includes('timeout') || message.includes('rate limit');
+    }
+
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+      return message.includes('openai') || message.includes('timeout') || message.includes('rate limit');
+    }
+
+    return false;
+  }
+
+  /**
    * Handle delete_entry tool
    * Requirements 3.2, 3.3, 3.4, 3.5: Delete entry using EntryService.delete()
    * 
    * @param args - Tool arguments { path: string }
    * @returns ToolResult with DeleteEntryResult data
    */
-  private async handleDeleteEntry(args: Record<string, unknown>): Promise<ToolResult> {
+  private async handleDeleteEntry(args: Record<string, unknown>, channel: Channel): Promise<ToolResult> {
     const path = args.path as string;
 
     // 1. Read entry first to get name for response (Requirement 3.3)
@@ -666,7 +802,7 @@ export class ToolExecutor {
 
     // 2. Delete the entry (Requirement 3.2)
     // EntryService.delete() handles index regeneration and git commit (Requirement 3.5)
-    await this.entryService.delete(path, 'api');
+    await this.entryService.delete(path, channel);
 
     // 3. Return DeleteEntryResult with path and name (Requirement 3.3)
     const result: DeleteEntryResult = {
@@ -679,6 +815,23 @@ export class ToolExecutor {
       success: true,
       data: result
     };
+  }
+
+  /**
+   * Build an agent note for inbox entries
+   */
+  private buildAgentNote(result: ClassificationResult): string {
+    const confidencePercent = Math.round(result.confidence * 100);
+    return [
+      '## Agent Note',
+      '',
+      `Low confidence classification (${confidencePercent}%).`,
+      result.reasoning ? `Reasoning: ${result.reasoning}` : '',
+      '',
+      'Please clarify by replying with a category hint like [project], [person], [idea], or [task].'
+    ]
+      .filter(line => line !== '')
+      .join('\n');
   }
 }
 

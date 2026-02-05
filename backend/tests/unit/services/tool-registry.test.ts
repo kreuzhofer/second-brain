@@ -15,9 +15,9 @@ describe('ToolRegistry', () => {
   });
 
   describe('getAllTools', () => {
-    it('should return all 8 registered tools', () => {
+    it('should return all 10 registered tools', () => {
       const tools = registry.getAllTools();
-      expect(tools.length).toBe(8);
+      expect(tools.length).toBe(10);
     });
 
     it('should return tools with correct names', () => {
@@ -32,6 +32,8 @@ describe('ToolRegistry', () => {
       expect(toolNames).toContain('move_entry');
       expect(toolNames).toContain('search_entries');
       expect(toolNames).toContain('delete_entry');
+      expect(toolNames).toContain('find_duplicates');
+      expect(toolNames).toContain('merge_entries');
     });
 
     it('should return tools in OpenAI function calling format', () => {
@@ -147,6 +149,23 @@ describe('ToolRegistry', () => {
       expect(tool?.function.parameters.properties.category).toBeDefined();
       expect(tool?.function.parameters.properties.limit).toBeDefined();
       expect(tool?.function.parameters.required).toContain('query');
+    });
+
+    it('should return tool with correct schema for find_duplicates', () => {
+      const tool = registry.getTool('find_duplicates');
+
+      expect(tool?.function.parameters.properties.name).toBeDefined();
+      expect(tool?.function.parameters.properties.text).toBeDefined();
+      expect(tool?.function.parameters.properties.category).toBeDefined();
+    });
+
+    it('should return tool with correct schema for merge_entries', () => {
+      const tool = registry.getTool('merge_entries');
+
+      expect(tool?.function.parameters.properties.targetPath).toBeDefined();
+      expect(tool?.function.parameters.properties.sourcePaths).toBeDefined();
+      expect(tool?.function.parameters.required).toContain('targetPath');
+      expect(tool?.function.parameters.required).toContain('sourcePaths');
     });
   });
 
@@ -377,7 +396,7 @@ describe('ToolRegistry', () => {
       
       const retrieved = registry.getTool('custom_tool');
       expect(retrieved).toEqual(customTool);
-      expect(registry.getAllTools().length).toBe(9);
+      expect(registry.getAllTools().length).toBe(11);
     });
   });
 

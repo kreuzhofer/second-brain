@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "FocusTrack"
+ADD COLUMN "likesCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN "dislikesCount" INTEGER NOT NULL DEFAULT 0;

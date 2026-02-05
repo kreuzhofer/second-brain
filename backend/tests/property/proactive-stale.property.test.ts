@@ -56,6 +56,7 @@ const toEntrySummary = (project: {
   updated_at: string;
   path: string;
 }): EntrySummary => ({
+  id: project.path,
   path: project.path,
   name: project.name,
   category: 'projects' as Category,
@@ -75,7 +76,12 @@ const createMockEntryService = (projects: EntrySummary[]) => {
       return [];
     }),
     create: jest.fn(),
-    read: jest.fn(),
+    read: jest.fn().mockImplementation(async (path: string) => ({
+      path,
+      category: 'projects',
+      entry: { stale: false },
+      content: ''
+    })),
     update: jest.fn(),
     delete: jest.fn()
   };

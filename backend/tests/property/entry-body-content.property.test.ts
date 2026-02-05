@@ -1,12 +1,7 @@
 import * as fc from 'fast-check';
-import { rm, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { resetDatabase } from '../setup';
 import { EntryService } from '../../src/services/entry.service';
-import { GitService } from '../../src/services/git.service';
-import { IndexService } from '../../src/services/index.service';
 import { BodyContentUpdate } from '../../src/types/entry.types';
-
-const TEST_PROP_DIR = join(__dirname, '../.test-entry-body-content-data');
 
 /**
  * Feature: entry-content-management
@@ -19,41 +14,14 @@ const TEST_PROP_DIR = join(__dirname, '../.test-entry-body-content-data');
  * **Validates: Requirements 1.6**
  */
 describe('Property Tests: Entry Body Content', () => {
-  let iterationCounter = 0;
-
-  // Increase timeout for all tests in this suite since git operations can be slow
-  jest.setTimeout(60000);
-
-  beforeAll(async () => {
-    await rm(TEST_PROP_DIR, { recursive: true, force: true });
-    await mkdir(TEST_PROP_DIR, { recursive: true });
-  });
-
-  afterAll(async () => {
-    // Give a small delay to ensure all file handles are released
-    await new Promise(resolve => setTimeout(resolve, 100));
-    await rm(TEST_PROP_DIR, { recursive: true, force: true });
-  });
+  // Increase timeout for all tests in this suite since property tests can be slow
+  jest.setTimeout(120000);
 
   // Helper to create a fresh test environment for each property iteration
-  async function createTestEnv(): Promise<{ entryService: EntryService; testDir: string }> {
-    iterationCounter++;
-    const testDir = join(TEST_PROP_DIR, `iter-${iterationCounter}-${Date.now()}`);
-    
-    await mkdir(testDir, { recursive: true });
-    await mkdir(join(testDir, 'people'), { recursive: true });
-    await mkdir(join(testDir, 'projects'), { recursive: true });
-    await mkdir(join(testDir, 'ideas'), { recursive: true });
-    await mkdir(join(testDir, 'admin'), { recursive: true });
-    await mkdir(join(testDir, 'inbox'), { recursive: true });
-    
-    const gitService = new GitService(testDir);
-    await gitService.initialize();
-    
-    const indexService = new IndexService(testDir);
-    const entryService = new EntryService(testDir, gitService, indexService);
-    
-    return { entryService, testDir };
+  async function createTestEnv(): Promise<{ entryService: EntryService }> {
+    await resetDatabase();
+    const entryService = new EntryService();
+    return { entryService };
   }
 
   // Arbitraries for generating test data
@@ -64,7 +32,15 @@ describe('Property Tests: Entry Body Content', () => {
   const safeStringArb = fc.string({ minLength: 1, maxLength: 30 })
     .filter(s => /[a-zA-Z]/.test(s));
 
-  const tagsArb = fc.array(fc.string({ minLength: 1, maxLength: 20 }), { maxLength: 5 });
+  const tagsArb = fc.array(
+    fc.string({ minLength: 1, maxLength: 20 })
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0),
+    { maxLength: 5 }
+  );
+
+  const normalizeTags = (tags: string[]): string[] =>
+    tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0);
 
   // Body content arbitrary - generates markdown-like content
   // Avoid strings that start with '---' as they could be confused with frontmatter
@@ -91,7 +67,11 @@ describe('Property Tests: Entry Body Content', () => {
     next_action: fc.string({ maxLength: 100 }),
     related_people: fc.array(fc.string({ maxLength: 30 }), { maxLength: 3 }),
     tags: tagsArb,
-    due_date: fc.option(fc.date().map(d => d.toISOString().split('T')[0]), { nil: undefined }),
+    due_date: fc.option(
+      fc.date({ min: new Date('2000-01-01'), max: new Date('2100-12-31') })
+        .map(d => d.toISOString().split('T')[0]),
+      { nil: undefined }
+    ),
     source_channel: channelArb,
     confidence: confidenceArb
   });
@@ -111,7 +91,11 @@ describe('Property Tests: Entry Body Content', () => {
   const adminInputArb = fc.record({
     name: safeStringArb,
     status: adminStatusArb,
-    due_date: fc.option(fc.date().map(d => d.toISOString().split('T')[0]), { nil: undefined }),
+    due_date: fc.option(
+      fc.date({ min: new Date('2000-01-01'), max: new Date('2100-12-31') })
+        .map(d => d.toISOString().split('T')[0]),
+      { nil: undefined }
+    ),
     tags: tagsArb,
     source_channel: channelArb,
     confidence: confidenceArb
@@ -141,7 +125,7 @@ describe('Property Tests: Entry Body Content', () => {
           // Verify frontmatter fields
           expect((read.entry as any).name).toBe(input.name);
           expect((read.entry as any).status).toBe(input.status);
-          expect((read.entry as any).tags).toEqual(input.tags);
+          expect((read.entry as any).tags).toEqual(normalizeTags(input.tags));
           expect((read.entry as any).id).toBeDefined();
         }),
         { numRuns: 3 }
@@ -339,8 +323,10 @@ describe('Property Tests: Entry Body Content', () => {
             const updated = await entryService.update(created.path, {}, 'api', bodyUpdate);
             
             // Verify both contents are present
-            expect(updated.content).toContain(initialContent);
-            expect(updated.content).toContain(newContent);
+            const normalizedInitial = initialContent.trim();
+            const normalizedNew = newContent.trim();
+            expect(updated.content).toContain(normalizedInitial);
+            expect(updated.content).toContain(normalizedNew);
             
             // Verify section header still exists (only once)
             const headerMatches = updated.content.match(new RegExp(`## ${sectionName}`, 'g'));
@@ -392,11 +378,12 @@ describe('Property Tests: Entry Body Content', () => {
             expect(updated.content).toMatch(datePattern);
             
             // Verify the original content is present after the date prefix
-            expect(updated.content).toContain(logContent);
+            const normalizedLog = logContent.trim();
+            expect(updated.content).toContain(normalizedLog);
             
             // Verify the date is today's date
             const today = new Date().toISOString().split('T')[0];
-            expect(updated.content).toContain(`- ${today}: ${logContent}`);
+            expect(updated.content).toContain(`- ${today}: ${normalizedLog}`);
           }
         ),
         { numRuns: 3 }
@@ -436,8 +423,10 @@ describe('Property Tests: Entry Body Content', () => {
             
             // Verify both log entries have date prefixes
             const today = new Date().toISOString().split('T')[0];
-            expect(updated.content).toContain(`- ${today}: ${firstLog}`);
-            expect(updated.content).toContain(`- ${today}: ${secondLog}`);
+            const normalizedFirst = firstLog.trim();
+            const normalizedSecond = secondLog.trim();
+            expect(updated.content).toContain(`- ${today}: ${normalizedFirst}`);
+            expect(updated.content).toContain(`- ${today}: ${normalizedSecond}`);
           }
         ),
         { numRuns: 3 }

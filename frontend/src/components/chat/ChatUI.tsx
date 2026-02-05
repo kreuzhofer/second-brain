@@ -11,16 +11,20 @@ import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MessageSquare } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useEntries } from '@/state/entries';
 
 interface ChatUIProps {
   onEntryClick: (path: string) => void;
+  className?: string;
 }
 
-export function ChatUI({ onEntryClick }: ChatUIProps) {
+export function ChatUI({ onEntryClick, className }: ChatUIProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { refresh } = useEntries();
 
   // Load existing conversation on mount
   useEffect(() => {
@@ -74,6 +78,7 @@ export function ChatUI({ onEntryClick }: ChatUIProps) {
           response.message,
         ];
       });
+      void refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
       // Remove the optimistic user message on error
@@ -81,7 +86,7 @@ export function ChatUI({ onEntryClick }: ChatUIProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [conversationId]);
+  }, [conversationId, refresh]);
 
   const handleNewConversation = useCallback(() => {
     setMessages([]);
@@ -90,7 +95,7 @@ export function ChatUI({ onEntryClick }: ChatUIProps) {
   }, []);
 
   return (
-    <Card className="flex flex-col h-[600px] max-h-[80vh]">
+    <Card className={cn('flex flex-col h-full min-h-[520px]', className)}>
       <CardHeader className="flex-shrink-0 border-b">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

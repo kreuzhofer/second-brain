@@ -20,7 +20,9 @@ const MVP_TOOL_NAMES = [
   'update_entry',
   'move_entry',
   'search_entries',
-  'delete_entry'
+  'delete_entry',
+  'find_duplicates',
+  'merge_entries'
 ] as const;
 
 // ============================================
@@ -94,11 +96,11 @@ describe('ToolRegistry - Tool Schema Properties', () => {
       );
     });
 
-    it('should have all 8 registered tools', () => {
+    it('should have all 10 registered tools', () => {
       const allTools = toolRegistry.getAllTools();
       
-      // Should have exactly 8 tools
-      expect(allTools.length).toBe(8);
+      // Should have exactly 10 tools
+      expect(allTools.length).toBe(10);
       
       // All MVP tool names should be present
       const registeredNames = allTools.map(t => t.function.name);

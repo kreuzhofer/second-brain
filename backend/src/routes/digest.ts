@@ -5,9 +5,48 @@
 
 import { Router, Request, Response } from 'express';
 import { getDigestService } from '../services/digest.service';
+import { getDigestPreferencesService, DigestPreferences } from '../services/digest-preferences.service';
+import { Category } from '../types/entry.types';
 import { getConfig } from '../config/env';
 
 export const digestRouter = Router();
+
+const VALID_CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'admin', 'inbox'];
+
+function parseBool(value: unknown, defaultValue?: boolean): boolean | undefined {
+  if (value === undefined) return defaultValue;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    if (value.toLowerCase() === 'true') return true;
+    if (value.toLowerCase() === 'false') return false;
+  }
+  return defaultValue;
+}
+
+function parsePreferences(query: Record<string, unknown>): DigestPreferences {
+  const focus = typeof query.focus === 'string'
+    ? query.focus.split(',').map((v) => v.trim()).filter(Boolean)
+    : [];
+  const focusCategories = focus.filter((cat) => VALID_CATEGORIES.includes(cat as Category)) as Category[];
+
+  const maxItems = query.max_items ? parseInt(query.max_items as string, 10) : undefined;
+  const maxWords = query.max_words ? parseInt(query.max_words as string, 10) : undefined;
+  const maxOpenLoops = query.max_open_loops ? parseInt(query.max_open_loops as string, 10) : undefined;
+  const maxSuggestions = query.max_suggestions ? parseInt(query.max_suggestions as string, 10) : undefined;
+
+  return {
+    focusCategories: focusCategories.length > 0 ? focusCategories : undefined,
+    maxItems: isNaN(Number(maxItems)) ? undefined : maxItems,
+    maxWords: isNaN(Number(maxWords)) ? undefined : maxWords,
+    maxOpenLoops: isNaN(Number(maxOpenLoops)) ? undefined : maxOpenLoops,
+    maxSuggestions: isNaN(Number(maxSuggestions)) ? undefined : maxSuggestions,
+    includeStaleInbox: parseBool(query.include_stale_inbox),
+    includeSmallWins: parseBool(query.include_small_wins),
+    includeOpenLoops: parseBool(query.include_open_loops),
+    includeSuggestions: parseBool(query.include_suggestions),
+    includeTheme: parseBool(query.include_theme)
+  };
+}
 
 /**
  * GET /api/digest
@@ -39,11 +78,12 @@ digestRouter.get('/', async (req: Request, res: Response) => {
     const digestService = getDigestService();
     const config = getConfig();
     let content: string;
+    const preferences = parsePreferences(req.query as Record<string, unknown>);
 
     if (type === 'daily') {
-      content = await digestService.generateDailyDigest();
+      content = await digestService.generateDailyDigest(preferences);
     } else {
-      content = await digestService.generateWeeklyReview();
+      content = await digestService.generateWeeklyReview(preferences);
     }
 
     let emailSent = false;
@@ -69,6 +109,46 @@ digestRouter.get('/', async (req: Request, res: Response) => {
       error: {
         code: 'GENERATION_FAILED',
         message: error instanceof Error ? error.message : 'Unknown error'
+      }
+    });
+  }
+});
+
+/**
+ * GET /api/digest/preferences
+ * Retrieve stored digest preferences
+ */
+digestRouter.get('/preferences', async (_req: Request, res: Response) => {
+  try {
+    const service = getDigestPreferencesService();
+    const preferences = await service.getPreferences();
+    res.json(preferences);
+  } catch (error) {
+    console.error('Failed to fetch digest preferences:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch digest preferences'
+      }
+    });
+  }
+});
+
+/**
+ * PUT /api/digest/preferences
+ * Update stored digest preferences
+ */
+digestRouter.put('/preferences', async (req: Request, res: Response) => {
+  try {
+    const service = getDigestPreferencesService();
+    const preferences = await service.savePreferences(req.body as DigestPreferences);
+    res.json(preferences);
+  } catch (error) {
+    console.error('Failed to save digest preferences:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to save digest preferences'
       }
     });
   }

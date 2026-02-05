@@ -249,6 +249,23 @@ describe('DigestService - Daily Digest Properties', () => {
   });
 
   /**
+   * Property 4: Daily Tip Inclusion
+   * Validates: Daily momentum tip is shown when provided.
+   */
+  describe('Property 4: Daily Tip Inclusion', () => {
+    it('should include the daily tip section when a tip is provided', () => {
+      const digest = digestService.formatDailyDigest([], [], { completedCount: 0 }, 'Test tip');
+      expect(digest).toContain('**Daily Momentum Tip:**');
+      expect(digest).toContain('Test tip');
+    });
+
+    it('should omit the daily tip section when no tip is provided', () => {
+      const digest = digestService.formatDailyDigest([], [], { completedCount: 0 });
+      expect(digest).not.toContain('**Daily Momentum Tip:**');
+    });
+  });
+
+  /**
    * Property 4: Daily Digest Structure Invariant
    * Validates: Requirements 1.4
    */

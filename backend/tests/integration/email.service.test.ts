@@ -185,7 +185,8 @@ describe('EmailService Integration', () => {
       expect(mockProcessMessage).toHaveBeenCalledWith(
         null,
         'Test message content',
-        undefined
+        undefined,
+        'email'
       );
     });
 
@@ -251,7 +252,8 @@ describe('EmailService Integration', () => {
       expect(mockProcessMessage).toHaveBeenCalledWith(
         'existing-conv-id',
         'Test message content',
-        undefined
+        undefined,
+        'email'
       );
     });
 
@@ -270,7 +272,8 @@ describe('EmailService Integration', () => {
       expect(mockProcessMessage).toHaveBeenCalledWith(
         null,
         'Test message content',
-        'projects'
+        'projects',
+        'email'
       );
     });
 

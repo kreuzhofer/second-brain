@@ -19,7 +19,10 @@ const MVP_TOOL_NAMES = [
   'generate_digest',
   'update_entry',
   'move_entry',
-  'search_entries'
+  'search_entries',
+  'delete_entry',
+  'find_duplicates',
+  'merge_entries'
 ] as const;
 
 // ============================================
@@ -83,7 +86,7 @@ describe('SystemPrompt - System Prompt Completeness Properties', () => {
    * 
    * For any assembled system prompt, the prompt SHALL contain:
    * - A role description mentioning "knowledge management assistant"
-   * - References to all 7 tool names
+   * - References to all 10 tool names
    * - Guidelines for when to use each tool type
    * - The current index.md content (or placeholder if empty)
    * - Conversation history section
@@ -108,7 +111,7 @@ describe('SystemPrompt - System Prompt Completeness Properties', () => {
       );
     });
 
-    it('should contain references to all 7 tool names', () => {
+    it('should contain references to all 10 tool names', () => {
       fc.assert(
         fc.property(
           indexContentArbitrary,
@@ -116,7 +119,7 @@ describe('SystemPrompt - System Prompt Completeness Properties', () => {
           (indexContent, conversationHistory) => {
             const prompt = buildSystemPrompt(indexContent, conversationHistory);
             
-            // Should contain all 7 MVP tool names
+            // Should contain all 10 MVP tool names
             for (const toolName of MVP_TOOL_NAMES) {
               expect(prompt).toContain(toolName);
             }

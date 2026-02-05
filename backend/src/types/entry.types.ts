@@ -19,6 +19,8 @@ export interface BaseEntry {
   updated_at: string;
   source_channel: Channel;
   confidence: number;
+  focus_minutes_total?: number;
+  focus_last_session?: string;
 }
 
 /**
@@ -39,6 +41,8 @@ export interface ProjectsEntry extends BaseEntry {
   next_action: string;
   related_people: string[];
   due_date?: string;
+  stale?: boolean;
+  stale_since?: string;
 }
 
 /**
@@ -90,6 +94,7 @@ export interface EntryWithPath {
  * Summary type for list operations
  */
 export interface EntrySummary {
+  id: string;
   path: string;
   name: string;
   category: Category;
@@ -191,6 +196,8 @@ export interface UpdateProjectsInput {
   tags?: string[];
   due_date?: string;
   confidence?: number;
+  stale?: boolean;
+  stale_since?: string;
 }
 
 export interface UpdateIdeasInput {

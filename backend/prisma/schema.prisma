@@ -1,16 +1,43 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 enum Channel {
   chat
   email
   api
+}
+
+enum EntryCategory {
+  people
+  projects
+  ideas
+  admin
+  inbox
+}
+
+enum ProjectStatus {
+  active
+  waiting
+  blocked
+  someday
+  done
+}
+
+enum AdminStatus {
+  pending
+  done
+}
+
+enum InboxStatus {
+  needs_review
 }
 
 enum Role {
@@ -98,6 +125,8 @@ model CronJobRun {
 model EntryAuditLog {
   id            String    @id @default(uuid())
   entryPath     String
+  entryId       String?
+  entry         Entry?    @relation(fields: [entryId], references: [id])
   operation     Operation
   gitCommitHash String?
   channel       Channel
@@ -105,4 +134,218 @@ model EntryAuditLog {
   createdAt     DateTime  @default(now())
   
   @@index([entryPath, createdAt])
+  @@index([entryId, createdAt])
+}
+
+model FocusTrack {
+  id           String    @id @default(uuid())
+  youtubeId    String    @unique
+  title        String?
+  channelTitle String?
+  searchTerm   String?
+  rating       Int       @default(0)
+  likesCount   Int       @default(0)
+  dislikesCount Int      @default(0)
+  timesPlayed  Int       @default(0)
+  lastPlayedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions     FocusSession[]
+}
+
+model FocusSession {
+  id              String     @id @default(uuid())
+  entryPath       String
+  entryId         String?
+  entry           Entry?     @relation(fields: [entryId], references: [id])
+  entryName       String?
+  durationSeconds Int
+  startedAt       DateTime
+  endedAt         DateTime
+  completed       Boolean    @default(true)
+  notes           String?
+  trackId         String?
+  track           FocusTrack? @relation(fields: [trackId], references: [id])
+  createdAt       DateTime   @default(now())
+
+  @@index([entryPath, startedAt])
+  @@index([entryId, startedAt])
+  @@index([trackId])
+}
+
+model Entry {
+  id                String         @id @default(uuid())
+  category          EntryCategory
+  slug              String
+  title             String
+  confidence        Float?
+  sourceChannel     Channel?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  lastTouched       DateTime?
+  focusMinutesTotal Int            @default(0)
+  focusLastSession  DateTime?
+
+  projectDetails    ProjectDetails?
+  adminDetails      AdminTaskDetails?
+  ideaDetails       IdeaDetails?
+  personDetails     PersonDetails?
+  inboxDetails      InboxDetails?
+  sections          EntrySection[]
+  logs              EntryLog[]
+  tags              EntryTag[]
+  revisions         EntryRevision[]
+  embedding         EntryEmbedding?
+  auditLogs         EntryAuditLog[]
+  focusSessions     FocusSession[]
+
+  @@unique([category, slug])
+  @@index([category])
+}
+
+model ProjectDetails {
+  entryId       String        @id
+  entry         Entry         @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  status        ProjectStatus
+  nextAction    String?
+  relatedPeople String[]
+  dueDate       DateTime?
+  stale         Boolean       @default(false)
+  staleSince    DateTime?
+}
+
+model AdminTaskDetails {
+  entryId   String      @id
+  entry     Entry       @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  status    AdminStatus
+  dueDate   DateTime?
+}
+
+model IdeaDetails {
+  entryId          String   @id
+  entry            Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  oneLiner         String
+  relatedProjects  String[]
+}
+
+model PersonDetails {
+  entryId         String   @id
+  entry           Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  context         String
+  followUps       String[]
+  relatedProjects String[]
+  lastTouched     DateTime?
+}
+
+model InboxDetails {
+  entryId           String        @id
+  entry             Entry         @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  originalText      String
+  suggestedCategory EntryCategory
+  suggestedName     String
+  status            InboxStatus   @default(needs_review)
+}
+
+model EntrySection {
+  id              String   @id @default(uuid())
+  entryId         String
+  entry           Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  key             String
+  title           String
+  order           Int
+  contentMarkdown String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([entryId, key])
+  @@index([entryId, order])
+}
+
+model EntryLog {
+  id        String   @id @default(uuid())
+  entryId   String
+  entry     Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  channel   Channel
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([entryId, createdAt])
+}
+
+model Tag {
+  id    String     @id @default(uuid())
+  name  String     @unique
+  entries EntryTag[]
+}
+
+model EntryTag {
+  entryId String
+  tagId   String
+  entry   Entry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  tag     Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([entryId, tagId])
+}
+
+model EntryRevision {
+  id        String   @id @default(uuid())
+  entryId   String
+  entry     Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  revision  Int
+  snapshot  Json
+  channel   Channel?
+  messageId String?
+  createdAt DateTime @default(now())
+
+  @@unique([entryId, revision])
+  @@index([entryId, createdAt])
+}
+
+model EntryEmbedding {
+  entryId   String   @id
+  entry     Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  vector    Unsupported("vector(3072)")
+  hash      String
+  updatedAt DateTime @updatedAt
+}
+
+model DigestPreference {
+  id                 String         @id @default(uuid())
+  focusCategories    EntryCategory[]
+  maxItems           Int
+  maxOpenLoops       Int
+  maxSuggestions     Int
+  maxWords           Int?
+  includeStaleInbox  Boolean        @default(true)
+  includeSmallWins   Boolean        @default(true)
+  includeOpenLoops   Boolean        @default(true)
+  includeSuggestions Boolean        @default(true)
+  includeTheme       Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+}
+
+model DailyTipState {
+  id        String   @id @default(uuid())
+  order     Int[]
+  cursor    Int
+  lastTip   String?
+  updatedAt DateTime?
+}
+
+model OfflineQueueItem {
+  id                 String   @id
+  tool               String
+  args               Json
+  channel            Channel
+  context            Json?
+  createdAt          DateTime @default(now())
+  attempts           Int      @default(0)
+  lastError          String?
+  nextAttemptAt      DateTime?
+  processingStartedAt DateTime?
+  status             String   @default("pending")
+
+  @@index([status, createdAt])
 }

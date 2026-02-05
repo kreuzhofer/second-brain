@@ -1,11 +1,15 @@
 /**
  * Search Service
- * Provides full-text search across entries in the Second Brain application.
- * Searches entry names, one-liners, context fields, and markdown content.
+ * Provides keyword + semantic search across entries using PostgreSQL + pgvector.
  */
 
+import { createHash } from 'crypto';
+import { Prisma } from '@prisma/client';
+import { getPrismaClient } from '../lib/prisma';
 import { EntryService, getEntryService } from './entry.service';
 import { Category } from '../types/entry.types';
+import { getConfig } from '../config/env';
+import { EmbeddingService, OpenAIEmbeddingService } from './embedding.service';
 
 // ============================================
 // Types
@@ -27,12 +31,25 @@ export interface SearchHit {
   category: Category;
   matchedField: string;
   snippet: string;
+  highlightRanges?: Array<{ start: number; end: number }>;
+  score?: number;
+  keywordScore?: number;
+  semanticScore?: number;
 }
 
 interface MatchInfo {
   field: string;
   count: number;
   snippet: string;
+  highlightRanges: Array<{ start: number; end: number }>;
+}
+
+interface SearchConfig {
+  enableSemantic?: boolean;
+  semanticThreshold?: number;
+  keywordWeight?: number;
+  semanticWeight?: number;
+  maxEmbeddingChars?: number;
 }
 
 // ============================================
@@ -41,40 +58,90 @@ interface MatchInfo {
 
 export class SearchService {
   private entryService: EntryService;
+  private prisma = getPrismaClient();
+  private embeddingService?: EmbeddingService;
+  private enableSemantic: boolean;
+  private semanticThreshold: number;
+  private keywordWeight: number;
+  private semanticWeight: number;
+  private maxEmbeddingChars: number;
 
-  constructor(entryService?: EntryService) {
+  constructor(
+    entryService?: EntryService,
+    embeddingService?: EmbeddingService,
+    config?: SearchConfig
+  ) {
     this.entryService = entryService || getEntryService();
+    const env = getConfig();
+    const semanticEnabled = config?.enableSemantic ?? (process.env.SEMANTIC_SEARCH_ENABLED !== 'false');
+    this.enableSemantic = semanticEnabled && !!env.OPENAI_API_KEY;
+    const semanticThreshold = parseFloat(process.env.SEMANTIC_SEARCH_THRESHOLD || '0.75');
+    const keywordWeight = parseFloat(process.env.KEYWORD_SEARCH_WEIGHT || '0.4');
+    const semanticWeight = parseFloat(process.env.SEMANTIC_SEARCH_WEIGHT || '0.6');
+    const maxEmbeddingChars = parseInt(process.env.EMBEDDING_MAX_CHARS || '4000', 10);
+    this.semanticThreshold = config?.semanticThreshold ?? (Number.isFinite(semanticThreshold) ? semanticThreshold : 0.75);
+    this.keywordWeight = config?.keywordWeight ?? (Number.isFinite(keywordWeight) ? keywordWeight : 0.4);
+    this.semanticWeight = config?.semanticWeight ?? (Number.isFinite(semanticWeight) ? semanticWeight : 0.6);
+    this.maxEmbeddingChars = config?.maxEmbeddingChars ?? (Number.isFinite(maxEmbeddingChars) ? maxEmbeddingChars : 4000);
+    this.embeddingService = embeddingService || (this.enableSemantic ? new OpenAIEmbeddingService() : undefined);
   }
 
   /**
    * Search entries by query
-   * @param query - The search query string
-   * @param options - Optional search options (category filter, limit)
-   * @returns SearchResult with matching entries sorted by relevance
    */
   async search(query: string, options?: SearchOptions): Promise<SearchResult> {
-    // Handle empty query
     if (!query || query.trim().length === 0) {
       return { entries: [], total: 0 };
     }
 
-    const normalizedQuery = query.toLowerCase().trim();
+    const trimmedQuery = query.trim();
+    const normalizedQuery = trimmedQuery.toLowerCase();
     const category = options?.category;
     const limit = options?.limit;
 
-    // Get all entries (optionally filtered by category)
     const entries = await this.entryService.list(category);
 
-    // Search and score each entry
-    const scoredHits: Array<{ hit: SearchHit; matchCount: number }> = [];
+    const scoredHits: Array<{
+      hit: SearchHit;
+      matchCount: number;
+      semanticScore: number;
+    }> = [];
 
+    const queryEmbedding = this.enableSemantic
+      ? await this.safeEmbed(trimmedQuery)
+      : null;
+
+    const prepared = [];
     for (const entrySummary of entries) {
-      // Read full entry to get content
       const fullEntry = await this.entryService.read(entrySummary.path);
-      const entry = fullEntry.entry as unknown as Record<string, unknown>;
-      const content = fullEntry.content || '';
+      prepared.push({
+        summary: entrySummary,
+        entry: fullEntry.entry as unknown as Record<string, unknown>,
+        content: fullEntry.content || ''
+      });
+    }
 
-      // Search across all relevant fields
+    if (this.enableSemantic && queryEmbedding) {
+      for (const item of prepared) {
+        const embeddingText = this.buildEmbeddingText(
+          item.summary.name,
+          item.entry,
+          item.content,
+          item.summary.category
+        );
+        await this.ensureEmbedding(item.summary.id, embeddingText);
+      }
+    }
+
+    const semanticScores = queryEmbedding
+      ? await this.fetchSemanticScores(queryEmbedding, category)
+      : new Map<string, number>();
+
+    for (const item of prepared) {
+      const entrySummary = item.summary;
+      const entry = item.entry;
+      const content = item.content;
+
       const matchInfo = this.findBestMatch(
         normalizedQuery,
         entrySummary.name,
@@ -83,36 +150,110 @@ export class SearchService {
         entrySummary.category
       );
 
-      if (matchInfo) {
+      const semanticScore = semanticScores.get(entrySummary.id) || 0;
+      const keywordMatchCount = matchInfo?.count || 0;
+      const matchesSemantic = this.enableSemantic && semanticScore >= this.semanticThreshold;
+      const matchesKeyword = keywordMatchCount > 0;
+
+      if (matchesKeyword || matchesSemantic) {
+        const snippetSource = matchInfo?.snippet || this.createSnippet(entrySummary.name || content, normalizedQuery);
         scoredHits.push({
           hit: {
             path: entrySummary.path,
             name: entrySummary.name,
             category: entrySummary.category,
-            matchedField: matchInfo.field,
-            snippet: matchInfo.snippet
+            matchedField: matchInfo?.field || 'semantic',
+            snippet: snippetSource,
+            highlightRanges: matchInfo?.highlightRanges || [],
+            keywordScore: keywordMatchCount,
+            semanticScore
           },
-          matchCount: matchInfo.count
+          matchCount: keywordMatchCount,
+          semanticScore
         });
       }
     }
 
-    // Sort by relevance (match count, descending)
-    scoredHits.sort((a, b) => b.matchCount - a.matchCount);
+    const maxMatch = scoredHits.reduce((max, hit) => Math.max(max, hit.matchCount), 0) || 1;
+    scoredHits.sort((a, b) => {
+      const aKeyword = a.matchCount / maxMatch;
+      const bKeyword = b.matchCount / maxMatch;
+      const aScore = (this.keywordWeight * aKeyword) + (this.semanticWeight * a.semanticScore);
+      const bScore = (this.keywordWeight * bKeyword) + (this.semanticWeight * b.semanticScore);
+      return bScore - aScore;
+    });
 
-    // Apply limit
     const limitedHits = limit !== undefined ? scoredHits.slice(0, limit) : scoredHits;
 
     return {
-      entries: limitedHits.map(sh => sh.hit),
+      entries: limitedHits.map((sh) => ({
+        ...sh.hit,
+        score: (this.keywordWeight * (sh.matchCount / maxMatch)) + (this.semanticWeight * sh.semanticScore)
+      })),
       total: scoredHits.length
     };
   }
 
-  /**
-   * Find the best match across all searchable fields
-   * Returns match info with the field that has the most matches
-   */
+  private async fetchSemanticScores(queryEmbedding: number[], category?: Category): Promise<Map<string, number>> {
+    if (!this.enableSemantic) return new Map();
+
+    const embeddingLiteral = `[${queryEmbedding.join(',')}]`;
+    const limit = 200;
+
+    const rows = await this.prisma.$queryRaw<Array<{ entryId: string; score: number }>>(Prisma.sql`
+      SELECT e.id as "entryId", (1 - (emb."vector" <=> ${embeddingLiteral}::vector)) as score
+      FROM "EntryEmbedding" emb
+      JOIN "Entry" e ON e.id = emb."entryId"
+      ${category ? Prisma.sql`WHERE e.category = ${category}::"EntryCategory"` : Prisma.empty}
+      ORDER BY emb."vector" <=> ${embeddingLiteral}::vector
+      LIMIT ${limit}
+    `);
+
+    const scores = new Map<string, number>();
+    for (const row of rows) {
+      scores.set(row.entryId, Number(row.score));
+    }
+    return scores;
+  }
+
+  private async ensureEmbedding(entryId: string, text: string): Promise<void> {
+    if (!this.embeddingService) return;
+
+    const trimmed = text.slice(0, this.maxEmbeddingChars);
+    const hash = createHash('sha256').update(trimmed).digest('hex');
+
+    const existing = await this.prisma.entryEmbedding.findUnique({
+      where: { entryId },
+      select: { hash: true }
+    });
+
+    if (existing?.hash === hash) {
+      return;
+    }
+
+    const vector = await this.safeEmbed(trimmed);
+    if (!vector) return;
+
+    const embeddingLiteral = `[${vector.join(',')}]`;
+    await this.prisma.$executeRaw(Prisma.sql`
+      INSERT INTO "EntryEmbedding" ("entryId", "vector", "hash", "updatedAt")
+      VALUES (${entryId}, ${embeddingLiteral}::vector, ${hash}, NOW())
+      ON CONFLICT ("entryId") DO UPDATE
+      SET "vector" = ${embeddingLiteral}::vector,
+          "hash" = ${hash},
+          "updatedAt" = NOW()
+    `);
+  }
+
+  private async safeEmbed(text: string): Promise<number[] | null> {
+    if (!this.embeddingService) return null;
+    try {
+      return await this.embeddingService.embed(text);
+    } catch {
+      return null;
+    }
+  }
+
   private findBestMatch(
     query: string,
     name: string,
@@ -122,154 +263,162 @@ export class SearchService {
   ): MatchInfo | null {
     const matches: MatchInfo[] = [];
 
-    // Search in name
     const nameMatches = this.countMatches(name, query);
     if (nameMatches > 0) {
+      const snippet = this.createSnippet(name, query);
       matches.push({
         field: 'name',
         count: nameMatches,
-        snippet: this.createSnippet(name, query)
+        snippet,
+        highlightRanges: this.findHighlightRanges(snippet, query)
       });
     }
 
-    // Search in one_liner (ideas category)
     if (category === 'ideas' && typeof entry.one_liner === 'string') {
       const oneLinerMatches = this.countMatches(entry.one_liner, query);
       if (oneLinerMatches > 0) {
+        const snippet = this.createSnippet(entry.one_liner, query);
         matches.push({
           field: 'one_liner',
           count: oneLinerMatches,
-          snippet: this.createSnippet(entry.one_liner, query)
+          snippet,
+          highlightRanges: this.findHighlightRanges(snippet, query)
         });
       }
     }
 
-    // Search in context (people category)
     if (category === 'people' && typeof entry.context === 'string') {
       const contextMatches = this.countMatches(entry.context, query);
       if (contextMatches > 0) {
+        const snippet = this.createSnippet(entry.context, query);
         matches.push({
           field: 'context',
           count: contextMatches,
-          snippet: this.createSnippet(entry.context, query)
+          snippet,
+          highlightRanges: this.findHighlightRanges(snippet, query)
         });
       }
     }
 
-    // Search in content (markdown body)
-    if (content) {
-      const contentMatches = this.countMatches(content, query);
-      if (contentMatches > 0) {
+    if (category === 'projects' && typeof entry.next_action === 'string') {
+      const nextActionMatches = this.countMatches(entry.next_action, query);
+      if (nextActionMatches > 0) {
+        const snippet = this.createSnippet(entry.next_action, query);
         matches.push({
-          field: 'content',
-          count: contentMatches,
-          snippet: this.createSnippet(content, query)
+          field: 'next_action',
+          count: nextActionMatches,
+          snippet,
+          highlightRanges: this.findHighlightRanges(snippet, query)
         });
       }
     }
 
-    // Search in original_text (inbox category)
     if (category === 'inbox' && typeof entry.original_text === 'string') {
-      const originalTextMatches = this.countMatches(entry.original_text, query);
-      if (originalTextMatches > 0) {
+      const originalMatches = this.countMatches(entry.original_text, query);
+      if (originalMatches > 0) {
+        const snippet = this.createSnippet(entry.original_text, query);
         matches.push({
           field: 'original_text',
-          count: originalTextMatches,
-          snippet: this.createSnippet(entry.original_text, query)
+          count: originalMatches,
+          snippet,
+          highlightRanges: this.findHighlightRanges(snippet, query)
         });
       }
     }
 
-    if (matches.length === 0) {
-      return null;
+    const contentMatches = this.countMatches(content, query);
+    if (contentMatches > 0) {
+      const snippet = this.createSnippet(content, query);
+      matches.push({
+        field: 'content',
+        count: contentMatches,
+        snippet,
+        highlightRanges: this.findHighlightRanges(snippet, query)
+      });
     }
 
-    // Return the match with the highest count
-    // If tied, prefer name > one_liner > context > content > original_text
-    const fieldPriority = ['name', 'one_liner', 'context', 'content', 'original_text'];
-    matches.sort((a, b) => {
-      if (b.count !== a.count) {
-        return b.count - a.count;
-      }
-      return fieldPriority.indexOf(a.field) - fieldPriority.indexOf(b.field);
-    });
-
-    // Calculate total match count across all fields for relevance sorting
-    const totalCount = matches.reduce((sum, m) => sum + m.count, 0);
-
-    return {
-      field: matches[0].field,
-      count: totalCount,
-      snippet: matches[0].snippet
-    };
+    if (matches.length === 0) return null;
+    matches.sort((a, b) => b.count - a.count);
+    return matches[0];
   }
 
-  /**
-   * Count occurrences of query in text (case-insensitive)
-   */
+  private buildEmbeddingText(
+    name: string,
+    entry: Record<string, unknown>,
+    content: string,
+    category: Category
+  ): string {
+    const parts: string[] = [];
+    if (name) parts.push(name);
+
+    if (category === 'ideas' && typeof entry.one_liner === 'string') {
+      parts.push(entry.one_liner);
+    }
+
+    if (category === 'people' && typeof entry.context === 'string') {
+      parts.push(entry.context);
+    }
+
+    if (category === 'projects' && typeof entry.next_action === 'string') {
+      parts.push(entry.next_action);
+    }
+
+    if (category === 'inbox' && typeof entry.original_text === 'string') {
+      parts.push(entry.original_text);
+    }
+
+    if (content) parts.push(content);
+
+    return parts.join('\n').slice(0, this.maxEmbeddingChars);
+  }
+
   private countMatches(text: string, query: string): number {
-    if (!text) return 0;
+    if (!text || !query) return 0;
     const normalizedText = text.toLowerCase();
     let count = 0;
     let pos = 0;
-    
     while ((pos = normalizedText.indexOf(query, pos)) !== -1) {
-      count++;
+      count += 1;
       pos += query.length;
     }
-    
     return count;
   }
 
-  /**
-   * Create a snippet showing context around the match
-   */
   private createSnippet(text: string, query: string): string {
-    if (!text) return '';
-    
     const normalizedText = text.toLowerCase();
     const matchIndex = normalizedText.indexOf(query);
-    
     if (matchIndex === -1) {
-      // No match found, return truncated text
-      return text.length > 100 ? text.substring(0, 100) + '...' : text;
+      return text.substring(0, 140);
     }
 
-    // Calculate snippet boundaries
-    const snippetLength = 100;
-    const contextBefore = 30;
-    
-    let start = Math.max(0, matchIndex - contextBefore);
-    let end = Math.min(text.length, start + snippetLength);
-    
-    // Adjust start if we're near the end
-    if (end === text.length && end - start < snippetLength) {
-      start = Math.max(0, end - snippetLength);
-    }
+    const snippetStart = Math.max(0, matchIndex - 50);
+    const snippetEnd = Math.min(text.length, matchIndex + query.length + 50);
+    let snippet = text.substring(snippetStart, snippetEnd);
 
-    let snippet = text.substring(start, end);
-    
-    // Add ellipsis if truncated
-    if (start > 0) {
-      snippet = '...' + snippet;
-    }
-    if (end < text.length) {
-      snippet = snippet + '...';
-    }
+    if (snippetStart > 0) snippet = `...${snippet}`;
+    if (snippetEnd < text.length) snippet = `${snippet}...`;
 
     return snippet;
   }
-}
 
-// ============================================
-// Singleton Instance
-// ============================================
+  private findHighlightRanges(snippet: string, query: string): Array<{ start: number; end: number }> {
+    const ranges: Array<{ start: number; end: number }> = [];
+    const normalizedSnippet = snippet.toLowerCase();
+    const normalizedQuery = query.toLowerCase();
+    let pos = 0;
+    while ((pos = normalizedSnippet.indexOf(normalizedQuery, pos)) !== -1) {
+      ranges.push({ start: pos, end: pos + normalizedQuery.length });
+      pos += normalizedQuery.length;
+    }
+    return ranges;
+  }
+}
 
 let searchServiceInstance: SearchService | null = null;
 
 export function getSearchService(entryService?: EntryService): SearchService {
   if (!searchServiceInstance || entryService) {
-    searchServiceInstance = new SearchService(entryService);
+    searchServiceInstance = new SearchService(entryService || undefined);
   }
   return searchServiceInstance;
 }

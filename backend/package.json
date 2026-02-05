@@ -14,7 +14,9 @@
     "lint": "eslint src --ext .ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "migrate:memory": "tsx src/scripts/migrate-memory-to-db.ts",
+    "backfill:embeddings": "tsx src/scripts/backfill-embeddings.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.9.0",

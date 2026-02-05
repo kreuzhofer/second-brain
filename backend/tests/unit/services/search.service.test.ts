@@ -1,39 +1,17 @@
-import { rm, mkdir, writeFile } from 'fs/promises';
-import { join } from 'path';
-import matter from 'gray-matter';
+import { resetDatabase } from '../../setup';
 import { SearchService, SearchResult } from '../../../src/services/search.service';
 import { EntryService } from '../../../src/services/entry.service';
-import { GitService } from '../../../src/services/git.service';
-import { IndexService } from '../../../src/services/index.service';
-
-const TEST_SEARCH_DIR = join(__dirname, '../../.test-search-data');
 
 describe('SearchService', () => {
   let searchService: SearchService;
   let entryService: EntryService;
-  let gitService: GitService;
-  let indexService: IndexService;
 
   beforeEach(async () => {
-    // Clean up and create fresh test directory with category folders
-    await rm(TEST_SEARCH_DIR, { recursive: true, force: true });
-    await mkdir(TEST_SEARCH_DIR, { recursive: true });
-    await mkdir(join(TEST_SEARCH_DIR, 'people'), { recursive: true });
-    await mkdir(join(TEST_SEARCH_DIR, 'projects'), { recursive: true });
-    await mkdir(join(TEST_SEARCH_DIR, 'ideas'), { recursive: true });
-    await mkdir(join(TEST_SEARCH_DIR, 'admin'), { recursive: true });
-    await mkdir(join(TEST_SEARCH_DIR, 'inbox'), { recursive: true });
-    
-    gitService = new GitService(TEST_SEARCH_DIR);
-    await gitService.initialize();
-    
-    indexService = new IndexService(TEST_SEARCH_DIR);
-    entryService = new EntryService(TEST_SEARCH_DIR, gitService, indexService);
-    searchService = new SearchService(entryService);
-  });
-
-  afterEach(async () => {
-    await rm(TEST_SEARCH_DIR, { recursive: true, force: true });
+    await resetDatabase();
+    entryService = new EntryService();
+    searchService = new SearchService(entryService, undefined, {
+      enableSemantic: false
+    });
   });
 
   describe('search', () => {
@@ -115,13 +93,7 @@ describe('SearchService', () => {
         next_action: 'Create mockups',
         source_channel: 'api',
         confidence: 0.9
-      });
-
-      // Add content to the file
-      const filePath = join(TEST_SEARCH_DIR, 'projects/website-redesign.md');
-      const entry = await entryService.read('projects/website-redesign.md');
-      const newContent = matter.stringify('## Notes\n\nThis project involves implementing a new dashboard feature.', entry.entry);
-      await writeFile(filePath, newContent);
+      }, 'api', '## Notes\n\nThis project involves implementing a new dashboard feature.');
 
       const result = await searchService.search('dashboard');
       
@@ -270,6 +242,47 @@ describe('SearchService', () => {
       expect(categories).toContain('people');
       expect(categories).toContain('projects');
       expect(categories).toContain('ideas');
+    });
+
+    it('should include semantic matches when keyword matches are absent', async () => {
+      const makeVector = (a: number, b: number): number[] => {
+        const vector = new Array(3072).fill(0);
+        vector[0] = a;
+        vector[1] = b;
+        return vector;
+      };
+
+      const mockEmbeddingService = {
+        embed: jest.fn(async (text: string) => {
+          const normalized = text.toLowerCase();
+          if (normalized.includes('strategy') || normalized.includes('roadmap')) {
+            return makeVector(1, 0);
+          }
+          if (normalized.includes('meeting') || normalized.includes('sync')) {
+            return makeVector(0, 1);
+          }
+          return makeVector(0, 0);
+        })
+      };
+
+      const semanticSearchService = new SearchService(entryService, mockEmbeddingService, {
+        enableSemantic: true,
+        semanticThreshold: 0.5
+      });
+
+      await entryService.create('projects', {
+        name: 'Growth Plan',
+        next_action: 'Review the roadmap',
+        source_channel: 'api',
+        confidence: 0.9
+      });
+
+      const result = await semanticSearchService.search('strategy');
+
+      expect(result.entries.length).toBe(1);
+      expect(result.entries[0].name).toBe('Growth Plan');
+      expect(result.entries[0].matchedField).toBe('semantic');
+      expect(mockEmbeddingService.embed).toHaveBeenCalled();
     });
   });
 });

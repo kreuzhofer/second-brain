@@ -13,12 +13,10 @@
  */
 
 import * as fc from 'fast-check';
-import { rm, mkdir, access, constants } from 'fs/promises';
-import { join } from 'path';
+import { resetDatabase } from '../setup';
 import { ToolExecutor, GetEntryResult, MoveEntryResult } from '../../src/services/tool-executor';
 import { ToolRegistry, getToolRegistry, resetToolRegistry } from '../../src/services/tool-registry';
 import { EntryService } from '../../src/services/entry.service';
-import { GitService } from '../../src/services/git.service';
 import { IndexService } from '../../src/services/index.service';
 import { SearchService } from '../../src/services/search.service';
 import { DigestService } from '../../src/services/digest.service';
@@ -33,8 +31,6 @@ import {
 // ============================================
 // Test Setup
 // ============================================
-
-const TEST_MOVE_ENTRY_DIR = join(__dirname, '../.test-move-entry-property-data');
 
 // ============================================
 // Test Data Generators
@@ -93,26 +89,14 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
   let toolExecutor: ToolExecutor;
   let toolRegistry: ToolRegistry;
   let entryService: EntryService;
-  let gitService: GitService;
   let indexService: IndexService;
   let searchService: SearchService;
   let digestService: DigestService;
 
   beforeEach(async () => {
-    // Clean up and create fresh test directory with category folders
-    await rm(TEST_MOVE_ENTRY_DIR, { recursive: true, force: true });
-    await mkdir(TEST_MOVE_ENTRY_DIR, { recursive: true });
-    await mkdir(join(TEST_MOVE_ENTRY_DIR, 'people'), { recursive: true });
-    await mkdir(join(TEST_MOVE_ENTRY_DIR, 'projects'), { recursive: true });
-    await mkdir(join(TEST_MOVE_ENTRY_DIR, 'ideas'), { recursive: true });
-    await mkdir(join(TEST_MOVE_ENTRY_DIR, 'admin'), { recursive: true });
-    await mkdir(join(TEST_MOVE_ENTRY_DIR, 'inbox'), { recursive: true });
-    
-    gitService = new GitService(TEST_MOVE_ENTRY_DIR);
-    await gitService.initialize();
-    
-    indexService = new IndexService(TEST_MOVE_ENTRY_DIR);
-    entryService = new EntryService(TEST_MOVE_ENTRY_DIR, gitService, indexService);
+    await resetDatabase();
+    entryService = new EntryService();
+    indexService = new IndexService(entryService);
     searchService = new SearchService(entryService);
     // Pass null for services that DigestService doesn't need for this test
     digestService = new DigestService(entryService, indexService, null);
@@ -132,7 +116,7 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
   });
 
   afterEach(async () => {
-    await rm(TEST_MOVE_ENTRY_DIR, { recursive: true, force: true });
+    await resetDatabase();
   });
 
   /**
@@ -156,6 +140,7 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
           differentCategoriesArbitrary,
           entryNameArbitrary,
           async ([sourceCategory, targetCategory], name) => {
+            await resetDatabase();
             // Create an entry in the source category
             const entryData = createEntryDataForCategory(sourceCategory, name);
             const createdEntry = await entryService.create(sourceCategory, entryData);
@@ -207,6 +192,7 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
           differentCategoriesArbitrary,
           entryNameArbitrary,
           async ([sourceCategory, targetCategory], name) => {
+            await resetDatabase();
             // Create an entry in the source category
             const entryData = createEntryDataForCategory(sourceCategory, name);
             const createdEntry = await entryService.create(sourceCategory, entryData);
@@ -232,10 +218,6 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
             expect(getResult.success).toBe(false);
             expect(getResult.error).toContain('Entry not found');
             
-            // Also verify file doesn't exist on disk
-            const fullPath = join(TEST_MOVE_ENTRY_DIR, originalPath);
-            await expect(access(fullPath, constants.F_OK)).rejects.toThrow();
-            
             return true;
           }
         ),
@@ -253,6 +235,7 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
           differentCategoriesArbitrary,
           entryNameArbitrary,
           async ([sourceCategory, targetCategory], name) => {
+            await resetDatabase();
             // Create an entry in the source category
             const entryData = createEntryDataForCategory(sourceCategory, name);
             const createdEntry = await entryService.create(sourceCategory, entryData);
@@ -322,6 +305,7 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
           differentCategoriesArbitrary,
           entryNameArbitrary,
           async ([sourceCategory, targetCategory], name) => {
+            await resetDatabase();
             // Create an entry in the source category
             const entryData = createEntryDataForCategory(sourceCategory, name);
             const createdEntry = await entryService.create(sourceCategory, entryData);
@@ -378,6 +362,7 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
           differentCategoriesArbitrary,
           entryNameArbitrary,
           async ([sourceCategory, targetCategory], name) => {
+            await resetDatabase();
             // Create an entry in the source category
             const entryData = createEntryDataForCategory(sourceCategory, name);
             const createdEntry = await entryService.create(sourceCategory, entryData);
@@ -427,6 +412,7 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
             .map(s => s.replace(/[^a-z0-9]/g, '-').toLowerCase())
             .filter(s => s.length >= 3),
           async (sourceCategory, targetCategory, slug) => {
+            await resetDatabase();
             const nonExistentPath = `${sourceCategory}/${slug}-nonexistent.md`;
             
             // Call move_entry with non-existent path

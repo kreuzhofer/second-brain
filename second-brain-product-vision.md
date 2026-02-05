@@ -97,19 +97,21 @@ These principles are derived from the 12 engineering patterns for reliable AI sy
 
 | Decision | Rationale |
 |----------|-----------|
-| **Markdown + Git** | Portable, human-readable, version-controlled. No vendor lock-in. Works with any text editor. |
+| **PostgreSQL + Markdown** | Entries, sections, logs, and revisions live in Postgres; Markdown content is preserved. |
 | **PostgreSQL for conversations** | Conversations are ephemeral working memory, not the second brain itself. Relational data (threads, summaries) fits SQL well. |
 | **Single app container** | Frontend, backend, and cron in one container simplifies deployment. Cron uses in-process scheduler (node-cron), not system cron. |
 | **Volume mount for data** | User owns their data. Back up by copying a folder. Move between machines trivially. |
-| **No vector database (MVP)** | Auto-generated index.md + full-text search is sufficient for <500 entries. Add embeddings in v2 if needed. |
+| **pgvector embeddings** | Semantic search uses pgvector; embeddings stored alongside entries. |
 
 ---
 
 ## 4. Data Models
 
-### 4.1 Markdown Entry Schema
+**Implementation update (Feb 5, 2026):** Entries are now stored in PostgreSQL with normalized detail tables, Markdown sections/logs, immutable revisions, and pgvector embeddings. The `/memory` markdown format below is retained only as a migration format (see `backend/src/scripts/migrate-memory-to-db.ts`).
 
-Each entry is a markdown file with YAML frontmatter:
+### 4.1 Legacy Markdown Entry Schema (Migration Format)
+
+Legacy entries are markdown files with YAML frontmatter:
 
 **People** (`/memory/people/{slug}.md`)
 ```yaml

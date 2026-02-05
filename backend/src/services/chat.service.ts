@@ -132,12 +132,13 @@ export class ChatService {
   async processMessage(
     conversationId: string | null,
     message: string,
-    hints?: string
+    hints?: string,
+    channel: Channel = 'chat'
   ): Promise<ChatResponse> {
     // Delegate to the new tool-based flow
     // Note: hints are handled naturally by the LLM through the system prompt
     // The LLM will extract hints from the message and pass them to classify_and_capture
-    return this.processMessageWithTools(conversationId, message);
+    return this.processMessageWithTools(conversationId, message, channel);
   }
 
   /**
@@ -155,12 +156,13 @@ export class ChatService {
    */
   async processMessageWithTools(
     conversationId: string | null,
-    message: string
+    message: string,
+    channel: Channel = 'chat'
   ): Promise<ChatResponse> {
     // 1. Get or create conversation
     const conversation = conversationId
       ? await this.conversationService.getById(conversationId)
-      : await this.conversationService.create('chat');
+      : await this.conversationService.create(channel);
 
     if (!conversation) {
       throw new ChatServiceError('Failed to get or create conversation');
@@ -234,20 +236,25 @@ export class ChatService {
         }
 
         // Execute the tool
-        const result = await this.toolExecutor.execute({
-          name: toolName,
-          arguments: toolArgs
-        });
+        const result = await this.toolExecutor.execute(
+          {
+            name: toolName,
+            arguments: toolArgs
+          },
+          { channel, context }
+        );
 
         // If this was classify_and_capture and it succeeded, capture entry info
         if (toolName === 'classify_and_capture' && result.success && result.data) {
           const captureResult = result.data as CaptureResult;
-          entryInfo = {
-            path: captureResult.path,
-            category: captureResult.category,
-            name: captureResult.name,
-            confidence: captureResult.confidence
-          };
+          if (!captureResult.queued) {
+            entryInfo = {
+              path: captureResult.path,
+              category: captureResult.category,
+              name: captureResult.name,
+              confidence: captureResult.confidence
+            };
+          }
         }
 
         toolResults.push({

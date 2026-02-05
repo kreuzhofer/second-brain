@@ -17,11 +17,13 @@ interface MessageListProps {
 }
 
 export function MessageList({ messages, onEntryClick, isLoading }: MessageListProps) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to newest message
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const list = listRef.current;
+    if (!list) return;
+    list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' });
   }, [messages, isLoading]);
 
   if (messages.length === 0 && !isLoading) {
@@ -38,7 +40,7 @@ export function MessageList({ messages, onEntryClick, isLoading }: MessageListPr
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-4">
       {messages.map((message) => (
         <Message 
           key={message.id} 
@@ -52,7 +54,6 @@ export function MessageList({ messages, onEntryClick, isLoading }: MessageListPr
           <span className="text-sm">Thinking...</span>
         </div>
       )}
-      <div ref={bottomRef} />
     </div>
   );
 }

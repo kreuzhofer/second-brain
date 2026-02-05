@@ -229,8 +229,8 @@ describe('SummarizationService', () => {
     it('should not summarize when message count is below threshold', async () => {
       const conversation = await conversationService.create('chat');
       
-      // Add fewer messages than SUMMARIZE_AFTER_MESSAGES (default 20)
-      for (let i = 0; i < 10; i++) {
+      // Add fewer messages than MAX_VERBATIM_MESSAGES + SUMMARIZE_BATCH_SIZE (default 25)
+      for (let i = 0; i < 20; i++) {
         await conversationService.addMessage(
           conversation.id,
           i % 2 === 0 ? 'user' : 'assistant',
@@ -251,8 +251,8 @@ describe('SummarizationService', () => {
     it('should summarize when message count exceeds threshold', async () => {
       const conversation = await conversationService.create('chat');
       
-      // Add more messages than SUMMARIZE_AFTER_MESSAGES (default 20)
-      for (let i = 0; i < 25; i++) {
+      // Add more messages than MAX_VERBATIM_MESSAGES + SUMMARIZE_BATCH_SIZE (default 25)
+      for (let i = 0; i < 26; i++) {
         await conversationService.addMessage(
           conversation.id,
           i % 2 === 0 ? 'user' : 'assistant',
@@ -273,10 +273,10 @@ describe('SummarizationService', () => {
     it('should retain MAX_VERBATIM_MESSAGES most recent messages unsummarized', async () => {
       const conversation = await conversationService.create('chat');
       
-      // Add 25 messages (threshold is 20, verbatim is 15)
-      // So messages 1-10 should be summarized, 11-25 kept verbatim
+      // Add 26 messages (threshold is 25, verbatim is 15)
+      // So messages 1-10 should be summarized, 11-26 kept verbatim
       const messageIds: string[] = [];
-      for (let i = 0; i < 25; i++) {
+      for (let i = 0; i < 26; i++) {
         const msg = await conversationService.addMessage(
           conversation.id,
           i % 2 === 0 ? 'user' : 'assistant',
@@ -291,7 +291,7 @@ describe('SummarizationService', () => {
       expect(summaries).toHaveLength(1);
 
       // Summary should cover messages 1-10 (indices 0-9)
-      // endMessageId should be message at index 9 (25 - 15 - 1 = 9)
+      // endMessageId should be message at index 9 (26 - 15 - 1 = 10, but batch size is 10)
       const summary = summaries[0];
       expect(summary.startMessageId).toBe(messageIds[0]);
       expect(summary.endMessageId).toBe(messageIds[9]);
@@ -301,8 +301,8 @@ describe('SummarizationService', () => {
     it('should not re-summarize already summarized messages', async () => {
       const conversation = await conversationService.create('chat');
       
-      // Add 25 messages
-      for (let i = 0; i < 25; i++) {
+      // Add 26 messages
+      for (let i = 0; i < 26; i++) {
         await conversationService.addMessage(
           conversation.id,
           i % 2 === 0 ? 'user' : 'assistant',
@@ -328,8 +328,8 @@ describe('SummarizationService', () => {
     it('should create additional summary when more messages are added', async () => {
       const conversation = await conversationService.create('chat');
       
-      // Add 25 messages
-      for (let i = 0; i < 25; i++) {
+      // Add 26 messages
+      for (let i = 0; i < 26; i++) {
         await conversationService.addMessage(
           conversation.id,
           i % 2 === 0 ? 'user' : 'assistant',
@@ -340,8 +340,8 @@ describe('SummarizationService', () => {
       // First summarization
       await summarizationService.checkAndSummarize(conversation.id);
       
-      // Add 20 more messages (total 45)
-      for (let i = 25; i < 45; i++) {
+      // Add 9 more messages (total 35)
+      for (let i = 26; i < 35; i++) {
         await conversationService.addMessage(
           conversation.id,
           i % 2 === 0 ? 'user' : 'assistant',
@@ -371,9 +371,9 @@ describe('SummarizationService', () => {
     it('should store summary with correct metadata', async () => {
       const conversation = await conversationService.create('chat');
       
-      // Add 25 messages
+      // Add 26 messages
       const messages = [];
-      for (let i = 0; i < 25; i++) {
+      for (let i = 0; i < 26; i++) {
         const msg = await conversationService.addMessage(
           conversation.id,
           i % 2 === 0 ? 'user' : 'assistant',
@@ -391,7 +391,7 @@ describe('SummarizationService', () => {
       expect(summary.conversationId).toBe(conversation.id);
       expect(summary.summary).toBe('Test summary: Key topics discussed, decisions made.');
       expect(summary.startMessageId).toBe(messages[0].id);
-      // With 25 messages and 15 verbatim, we summarize first 10 (indices 0-9)
+      // With 26 messages and 15 verbatim, we summarize first 10 (indices 0-9)
       expect(summary.endMessageId).toBe(messages[9].id);
       expect(summary.messageCount).toBe(10);
     });
@@ -405,8 +405,8 @@ describe('SummarizationService', () => {
     it('should handle exactly threshold number of messages', async () => {
       const conversation = await conversationService.create('chat');
       
-      // Add exactly 20 messages (threshold)
-      for (let i = 0; i < 20; i++) {
+      // Add exactly 25 messages (threshold)
+      for (let i = 0; i < 25; i++) {
         await conversationService.addMessage(
           conversation.id,
           i % 2 === 0 ? 'user' : 'assistant',
@@ -423,8 +423,8 @@ describe('SummarizationService', () => {
     it('should handle threshold + 1 messages', async () => {
       const conversation = await conversationService.create('chat');
       
-      // Add 21 messages (threshold + 1)
-      for (let i = 0; i < 21; i++) {
+      // Add 26 messages (threshold + 1)
+      for (let i = 0; i < 26; i++) {
         await conversationService.addMessage(
           conversation.id,
           i % 2 === 0 ? 'user' : 'assistant',
@@ -434,12 +434,12 @@ describe('SummarizationService', () => {
 
       await summarizationService.checkAndSummarize(conversation.id);
 
-      // Should summarize (21 - 15 = 6 messages to summarize)
+      // Should summarize (batch size 10)
       expect(mockCreate).toHaveBeenCalledTimes(1);
 
       const summaries = await conversationService.getSummaries(conversation.id);
       expect(summaries).toHaveLength(1);
-      expect(summaries[0].messageCount).toBe(6);
+      expect(summaries[0].messageCount).toBe(10);
     });
 
     it('should trim whitespace from generated summary', async () => {

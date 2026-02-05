@@ -2,31 +2,26 @@ import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Brain, CheckCircle, AlertCircle } from 'lucide-react';
+import { Brain } from 'lucide-react';
 import { ChatUI } from '@/components/chat';
 import { EntryModal } from '@/components/EntryModal';
-import { RecentEntries } from '@/components/RecentEntries';
-import { api } from '@/services/api';
-
-interface HealthStatus {
-  status: string;
-  service: string;
-  version: string;
-  timestamp: string;
-}
+import { DeepFocusView } from '@/components/DeepFocusView';
+import { SearchPanel } from '@/components/SearchPanel';
+import { FocusPanel } from '@/components/FocusPanel';
+import { api, EntryWithPath } from '@/services/api';
+import { EntriesProvider } from '@/state/entries';
 
 function App() {
   const [apiKey, setApiKey] = useState<string>(() => 
     localStorage.getItem('second-brain-api-key') || ''
   );
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedEntryPath, setSelectedEntryPath] = useState<string | null>(null);
+  const [focusEntry, setFocusEntry] = useState<EntryWithPath | null>(null);
 
   // Check health on mount and try to get API key from server
   useEffect(() => {
-    checkHealth();
     // Try to fetch the API key from the server (for local dev convenience)
     fetchApiKey();
   }, []);
@@ -56,18 +51,6 @@ function App() {
     }
   }, [apiKey]);
 
-  const checkHealth = async () => {
-    try {
-      const response = await fetch('/api/health');
-      if (response.ok) {
-        const data = await response.json();
-        setHealthStatus(data);
-      }
-    } catch (err) {
-      console.error('Health check failed:', err);
-    }
-  };
-
   const checkAuth = async () => {
     try {
       const response = await fetch('/api/entries', {
@@ -95,32 +78,40 @@ function App() {
     setSelectedEntryPath(null);
   };
 
+  const handleStartFocus = (entry: EntryWithPath) => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => undefined);
+      }
+    }
+    setFocusEntry(entry);
+  };
+
+  const handleCloseFocus = () => {
+    setFocusEntry(null);
+  };
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen h-screen flex flex-col bg-background">
       {/* Header */}
       <header className="border-b">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Brain className="h-8 w-8 text-primary" />
-            <h1 className="text-2xl font-bold">Second Brain</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            {healthStatus && (
-              <span className="text-sm text-muted-foreground">
-                v{healthStatus.version}
-              </span>
-            )}
-            {isAuthenticated ? (
-              <CheckCircle className="h-5 w-5 text-green-500" />
-            ) : (
-              <AlertCircle className="h-5 w-5 text-yellow-500" />
+        <div className="w-full px-4 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Brain className="h-8 w-8 text-primary" />
+              <h1 className="text-2xl font-bold">Second Brain</h1>
+            </div>
+            {isAuthenticated && (
+              <div className="min-w-[360px] max-w-[520px] w-full flex justify-end">
+                <SearchPanel onEntryClick={handleEntryClick} variant="header" />
+              </div>
             )}
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="w-full px-4 py-6 flex-1 min-h-0">
         {!isAuthenticated ? (
           <Card className="max-w-md mx-auto">
             <CardHeader>
@@ -149,57 +140,31 @@ function App() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Chat UI - Main area */}
-            <div className="lg:col-span-2">
-              <ChatUI onEntryClick={handleEntryClick} />
-            </div>
+          <EntriesProvider enabled={isAuthenticated}>
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,3fr)] gap-6 h-full min-h-0">
+              <div className="flex flex-col min-h-0">
+                <ChatUI onEntryClick={handleEntryClick} className="h-full" />
+              </div>
 
-            {/* Sidebar - Recent entries */}
-            <div className="space-y-6">
-              <RecentEntries onEntryClick={handleEntryClick} />
-              
-              {/* Category cards */}
-              <div className="grid grid-cols-2 gap-4">
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-lg font-bold">People</div>
-                    <p className="text-xs text-muted-foreground">Contacts</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-lg font-bold">Projects</div>
-                    <p className="text-xs text-muted-foreground">Active work</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-lg font-bold">Ideas</div>
-                    <p className="text-xs text-muted-foreground">Future</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-lg font-bold">Admin</div>
-                    <p className="text-xs text-muted-foreground">Tasks</p>
-                  </CardContent>
-                </Card>
+              <div className="flex flex-col gap-4 min-h-0 lg:overflow-y-auto">
+                <FocusPanel onEntryClick={handleEntryClick} />
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Entry Modal */}
-        <EntryModal 
-          entryPath={selectedEntryPath} 
-          onClose={handleCloseModal} 
-        />
+            {/* Entry Modal */}
+            <EntryModal 
+              entryPath={selectedEntryPath} 
+              onClose={handleCloseModal} 
+              onStartFocus={handleStartFocus}
+            />
+            <DeepFocusView entry={focusEntry} onClose={handleCloseFocus} />
+          </EntriesProvider>
+        )}
       </main>
 
       {/* Footer */}
       <footer className="border-t mt-auto">
-        <div className="container mx-auto px-4 py-4 text-center text-sm text-muted-foreground">
+        <div className="w-full px-4 py-1 text-center text-[10px] text-muted-foreground leading-none">
           Second Brain v0.1.0 - Your AI-powered knowledge management system
         </div>
       </footer>

@@ -17,29 +17,19 @@ import {
   resetConversationService,
 } from '../../../src/services/conversation.service';
 import { IndexService } from '../../../src/services/index.service';
-import { mkdir, writeFile, rm } from 'fs/promises';
-import { join } from 'path';
-
-// Test data directory
-const TEST_DATA_DIR = join(__dirname, '../../../.test-data-context');
+import { EntryService } from '../../../src/services/entry.service';
+import { resetDatabase } from '../../setup';
 
 describe('ContextAssembler', () => {
   let contextAssembler: ContextAssembler;
   let conversationService: ConversationService;
   let indexService: IndexService;
+  let entryService: EntryService;
   const prisma = getPrismaClient();
 
   beforeAll(async () => {
     // Ensure database connection
     await prisma.$connect();
-    
-    // Create test data directory structure
-    await mkdir(TEST_DATA_DIR, { recursive: true });
-    await mkdir(join(TEST_DATA_DIR, 'people'), { recursive: true });
-    await mkdir(join(TEST_DATA_DIR, 'projects'), { recursive: true });
-    await mkdir(join(TEST_DATA_DIR, 'ideas'), { recursive: true });
-    await mkdir(join(TEST_DATA_DIR, 'admin'), { recursive: true });
-    await mkdir(join(TEST_DATA_DIR, 'inbox'), { recursive: true });
   });
 
   beforeEach(async () => {
@@ -48,7 +38,8 @@ describe('ContextAssembler', () => {
     resetContextAssembler();
     
     conversationService = new ConversationService();
-    indexService = new IndexService(TEST_DATA_DIR);
+    entryService = new EntryService();
+    indexService = new IndexService(entryService);
     
     // Create ContextAssembler with test dependencies
     contextAssembler = new ContextAssembler(
@@ -57,28 +48,16 @@ describe('ContextAssembler', () => {
       15 // MAX_VERBATIM_MESSAGES
     );
 
-    // Clean up test data before each test (order matters due to foreign keys)
-    await prisma.message.deleteMany({});
-    await prisma.conversationSummary.deleteMany({});
-    await prisma.conversation.deleteMany({});
+    // Clean up test data before each test
+    await resetDatabase();
     
     // Create a fresh index.md
     await indexService.regenerate();
   });
 
   afterAll(async () => {
-    // Clean up all test data (order matters due to foreign keys)
-    await prisma.message.deleteMany({});
-    await prisma.conversationSummary.deleteMany({});
-    await prisma.conversation.deleteMany({});
+    await resetDatabase();
     await disconnectPrisma();
-    
-    // Clean up test data directory
-    try {
-      await rm(TEST_DATA_DIR, { recursive: true, force: true });
-    } catch {
-      // Directory might not exist
-    }
   });
 
   // ============================================
@@ -403,10 +382,9 @@ describe('ContextAssembler', () => {
     });
 
     it('should handle empty index.md', async () => {
-      // Create a new index service pointing to empty directory
-      const emptyDir = join(TEST_DATA_DIR, 'empty');
-      await mkdir(emptyDir, { recursive: true });
-      const emptyIndexService = new IndexService(emptyDir);
+      await resetDatabase();
+      const emptyEntryService = new EntryService();
+      const emptyIndexService = new IndexService(emptyEntryService);
       
       const emptyContextAssembler = new ContextAssembler(
         emptyIndexService,

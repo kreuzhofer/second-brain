@@ -228,15 +228,20 @@ describe('EmailParser - Email Body Text Extraction Property Tests', () => {
           signatureDelimiterArbitrary,
           signatureContentArbitrary,
           (mainContent, delimiter, signatureContent) => {
+            const normalizedMain = mainContent.trim();
+            const normalizedSignature = signatureContent.trim();
+            fc.pre(normalizedSignature.length > 0);
+            fc.pre(!normalizedMain.includes(normalizedSignature));
+
             const fullText = `${mainContent}\n${delimiter}\n${signatureContent}`;
             const email = createParsedEmail({ text: fullText });
 
             const result = parser.extractText(email);
 
             // Result should contain the main content
-            expect(result).toContain(mainContent.trim());
+            expect(result).toContain(normalizedMain);
             // Result should NOT contain the signature content
-            expect(result).not.toContain(signatureContent);
+            expect(result).not.toContain(normalizedSignature);
           }
         ),
         { numRuns: 10 }

@@ -21,10 +21,10 @@ describe('System Prompt Builder', () => {
       expect(result).toContain('stay organized');
     });
 
-    it('should include all 7 tool names', () => {
+    it('should include all 10 tool names', () => {
       const result = buildSystemPrompt('', '');
       
-      // All 7 MVP tools must be mentioned
+      // All 10 MVP tools must be mentioned
       expect(result).toContain('classify_and_capture');
       expect(result).toContain('list_entries');
       expect(result).toContain('get_entry');
@@ -32,6 +32,9 @@ describe('System Prompt Builder', () => {
       expect(result).toContain('update_entry');
       expect(result).toContain('move_entry');
       expect(result).toContain('search_entries');
+      expect(result).toContain('delete_entry');
+      expect(result).toContain('find_duplicates');
+      expect(result).toContain('merge_entries');
     });
 
     it('should include index content', () => {

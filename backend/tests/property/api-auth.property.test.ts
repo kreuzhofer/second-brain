@@ -14,6 +14,14 @@ import express from 'express';
 import { authMiddleware } from '../../src/middleware/auth';
 import { chatRouter } from '../../src/routes/chat';
 
+const TEST_API_KEY = 'test-api-key-12345';
+
+jest.mock('../../src/config/env', () => ({
+  getConfig: () => ({
+    API_KEY: 'test-api-key-12345'
+  })
+}));
+
 // Create a test app with auth middleware
 const createTestApp = () => {
   const app = express();
@@ -74,7 +82,7 @@ describe('Property Tests: API Authentication', () => {
       
       for (const wrongToken of wrongTokens) {
         // Skip if it happens to match the actual token
-        if (wrongToken === process.env.API_TOKEN) continue;
+        if (wrongToken === TEST_API_KEY) continue;
         
         for (const endpoint of protectedEndpoints) {
           const req = endpoint.method === 'post'
@@ -99,17 +107,11 @@ describe('Property Tests: API Authentication', () => {
     });
 
     it('allows requests with valid Bearer token', async () => {
-      const validToken = process.env.API_TOKEN;
-      if (!validToken) {
-        console.warn('API_TOKEN not set, skipping valid token test');
-        return;
-      }
-
       // POST /api/chat should not return 401 with valid token
       // (it may return other errors due to missing services, but not 401)
       const response = await request(app)
         .post('/api/chat')
-        .set('Authorization', `Bearer ${validToken}`)
+        .set('Authorization', `Bearer ${TEST_API_KEY}`)
         .send({ message: 'test' });
 
       expect(response.status).not.toBe(401);

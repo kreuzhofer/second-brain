@@ -1,11 +1,6 @@
 import * as fc from 'fast-check';
-import { rm, mkdir } from 'fs/promises';
-import { join } from 'path';
 import { EntryService } from '../../src/services/entry.service';
-import { GitService } from '../../src/services/git.service';
-import { IndexService } from '../../src/services/index.service';
-
-const TEST_PROP_DIR = join(__dirname, '../.test-property-data');
+import { resetDatabase } from '../setup';
 
 /**
  * Property 3: Entry Serialization Round-Trip
@@ -16,37 +11,13 @@ const TEST_PROP_DIR = join(__dirname, '../.test-property-data');
  * Validates: Requirements 5.6, 6.1
  */
 describe('Property Tests: Entry Service', () => {
-  let iterationCounter = 0;
-
   beforeAll(async () => {
-    await rm(TEST_PROP_DIR, { recursive: true, force: true });
-    await mkdir(TEST_PROP_DIR, { recursive: true });
+    await resetDatabase();
   });
 
   afterAll(async () => {
-    await rm(TEST_PROP_DIR, { recursive: true, force: true });
+    await resetDatabase();
   });
-
-  // Helper to create a fresh test environment for each property iteration
-  async function createTestEnv(): Promise<{ entryService: EntryService; testDir: string }> {
-    iterationCounter++;
-    const testDir = join(TEST_PROP_DIR, `iter-${iterationCounter}-${Date.now()}`);
-    
-    await mkdir(testDir, { recursive: true });
-    await mkdir(join(testDir, 'people'), { recursive: true });
-    await mkdir(join(testDir, 'projects'), { recursive: true });
-    await mkdir(join(testDir, 'ideas'), { recursive: true });
-    await mkdir(join(testDir, 'admin'), { recursive: true });
-    await mkdir(join(testDir, 'inbox'), { recursive: true });
-    
-    const gitService = new GitService(testDir);
-    await gitService.initialize();
-    
-    const indexService = new IndexService(testDir);
-    const entryService = new EntryService(testDir, gitService, indexService);
-    
-    return { entryService, testDir };
-  }
 
   // Arbitraries for generating test data
   const channelArb = fc.constantFrom('chat', 'email', 'api') as fc.Arbitrary<'chat' | 'email' | 'api'>;
@@ -56,7 +27,15 @@ describe('Property Tests: Entry Service', () => {
   const safeStringArb = fc.string({ minLength: 1, maxLength: 30 })
     .filter(s => /[a-zA-Z]/.test(s)); // Must contain at least one letter
 
-  const tagsArb = fc.array(fc.string({ minLength: 1, maxLength: 20 }), { maxLength: 5 });
+  const tagsArb = fc.array(
+    fc.string({ minLength: 1, maxLength: 20 })
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0),
+    { maxLength: 5 }
+  );
+
+  const normalizeTags = (tags: string[]): string[] =>
+    tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0);
 
   // People entry arbitrary
   const peopleInputArb = fc.record({
@@ -77,7 +56,11 @@ describe('Property Tests: Entry Service', () => {
     next_action: fc.string({ maxLength: 100 }),
     related_people: fc.array(fc.string({ maxLength: 30 }), { maxLength: 3 }),
     tags: tagsArb,
-    due_date: fc.option(fc.date().map(d => d.toISOString().split('T')[0]), { nil: undefined }),
+    due_date: fc.option(
+      fc.date({ min: new Date('2000-01-01'), max: new Date('2100-12-31') })
+        .map(d => d.toISOString().split('T')[0]),
+      { nil: undefined }
+    ),
     source_channel: channelArb,
     confidence: confidenceArb
   });
@@ -97,7 +80,11 @@ describe('Property Tests: Entry Service', () => {
   const adminInputArb = fc.record({
     name: safeStringArb,
     status: adminStatusArb,
-    due_date: fc.option(fc.date().map(d => d.toISOString().split('T')[0]), { nil: undefined }),
+    due_date: fc.option(
+      fc.date({ min: new Date('2000-01-01'), max: new Date('2100-12-31') })
+        .map(d => d.toISOString().split('T')[0]),
+      { nil: undefined }
+    ),
     tags: tagsArb,
     source_channel: channelArb,
     confidence: confidenceArb
@@ -110,7 +97,8 @@ describe('Property Tests: Entry Service', () => {
     it('people entries round-trip correctly', async () => {
       await fc.assert(
         fc.asyncProperty(peopleInputArb, async (input) => {
-          const { entryService } = await createTestEnv();
+          await resetDatabase();
+          const entryService = new EntryService();
           const created = await entryService.create('people', input);
           const read = await entryService.read(created.path);
 
@@ -119,7 +107,7 @@ describe('Property Tests: Entry Service', () => {
           expect((read.entry as any).context).toBe(input.context);
           expect((read.entry as any).follow_ups).toEqual(input.follow_ups);
           expect((read.entry as any).related_projects).toEqual(input.related_projects);
-          expect((read.entry as any).tags).toEqual(input.tags);
+          expect((read.entry as any).tags).toEqual(normalizeTags(input.tags));
           expect((read.entry as any).source_channel).toBe(input.source_channel);
           
           // Verify system-generated fields exist
@@ -135,7 +123,8 @@ describe('Property Tests: Entry Service', () => {
     it('projects entries round-trip correctly', async () => {
       await fc.assert(
         fc.asyncProperty(projectsInputArb, async (input) => {
-          const { entryService } = await createTestEnv();
+          await resetDatabase();
+          const entryService = new EntryService();
           const created = await entryService.create('projects', input);
           const read = await entryService.read(created.path);
 
@@ -143,7 +132,7 @@ describe('Property Tests: Entry Service', () => {
           expect((read.entry as any).status).toBe(input.status);
           expect((read.entry as any).next_action).toBe(input.next_action);
           expect((read.entry as any).related_people).toEqual(input.related_people);
-          expect((read.entry as any).tags).toEqual(input.tags);
+          expect((read.entry as any).tags).toEqual(normalizeTags(input.tags));
           
           if (input.due_date) {
             expect((read.entry as any).due_date).toBe(input.due_date);
@@ -159,14 +148,15 @@ describe('Property Tests: Entry Service', () => {
     it('ideas entries round-trip correctly', async () => {
       await fc.assert(
         fc.asyncProperty(ideasInputArb, async (input) => {
-          const { entryService } = await createTestEnv();
+          await resetDatabase();
+          const entryService = new EntryService();
           const created = await entryService.create('ideas', input);
           const read = await entryService.read(created.path);
 
           expect((read.entry as any).name).toBe(input.name);
           expect((read.entry as any).one_liner).toBe(input.one_liner);
           expect((read.entry as any).related_projects).toEqual(input.related_projects);
-          expect((read.entry as any).tags).toEqual(input.tags);
+          expect((read.entry as any).tags).toEqual(normalizeTags(input.tags));
           expect((read.entry as any).id).toBeDefined();
         }),
         { numRuns: 5 }
@@ -176,13 +166,14 @@ describe('Property Tests: Entry Service', () => {
     it('admin entries round-trip correctly', async () => {
       await fc.assert(
         fc.asyncProperty(adminInputArb, async (input) => {
-          const { entryService } = await createTestEnv();
+          await resetDatabase();
+          const entryService = new EntryService();
           const created = await entryService.create('admin', input);
           const read = await entryService.read(created.path);
 
           expect((read.entry as any).name).toBe(input.name);
           expect((read.entry as any).status).toBe(input.status);
-          expect((read.entry as any).tags).toEqual(input.tags);
+          expect((read.entry as any).tags).toEqual(normalizeTags(input.tags));
           
           if (input.due_date) {
             expect((read.entry as any).due_date).toBe(input.due_date);

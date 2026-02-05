@@ -8,12 +8,10 @@
  */
 
 import * as fc from 'fast-check';
-import { rm, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { resetDatabase } from '../setup';
 import { ToolExecutor, GetEntryResult } from '../../src/services/tool-executor';
 import { ToolRegistry, getToolRegistry, resetToolRegistry } from '../../src/services/tool-registry';
 import { EntryService } from '../../src/services/entry.service';
-import { GitService } from '../../src/services/git.service';
 import { IndexService } from '../../src/services/index.service';
 import { SearchService } from '../../src/services/search.service';
 import { DigestService } from '../../src/services/digest.service';
@@ -22,8 +20,6 @@ import { Category, EntryWithPath } from '../../src/types/entry.types';
 // ============================================
 // Test Setup
 // ============================================
-
-const TEST_GET_ENTRY_DIR = join(__dirname, '../.test-get-entry-property-data');
 
 // ============================================
 // Test Data Generators
@@ -37,10 +33,13 @@ const nonInboxCategoryArbitrary = fc.constantFrom<Category>('people', 'projects'
 /**
  * Generate a valid entry name (alphanumeric with spaces, reasonable length)
  */
-const entryNameArbitrary = fc.string({ minLength: 3, maxLength: 30 })
-  .filter(s => /^[a-zA-Z]/.test(s)) // Must start with a letter
-  .map(s => s.replace(/[^a-zA-Z0-9 ]/g, '').trim()) // Only alphanumeric and spaces
-  .filter(s => s.length >= 3); // Ensure minimum length after filtering
+const entryNameArbitrary = fc.tuple(
+  fc.string({ minLength: 3, maxLength: 30 })
+    .filter(s => /^[a-zA-Z]/.test(s)) // Must start with a letter
+    .map(s => s.replace(/[^a-zA-Z0-9 ]/g, '').trim()) // Only alphanumeric and spaces
+    .filter(s => s.length >= 3),
+  fc.uuid()
+).map(([name, id]) => `${name} ${id.slice(0, 8)}`);
 
 /**
  * Generate a valid context/one-liner/next_action string
@@ -57,26 +56,14 @@ describe('ToolExecutor - Get Entry Round-Trip Properties', () => {
   let toolExecutor: ToolExecutor;
   let toolRegistry: ToolRegistry;
   let entryService: EntryService;
-  let gitService: GitService;
   let indexService: IndexService;
   let searchService: SearchService;
   let digestService: DigestService;
 
   beforeEach(async () => {
-    // Clean up and create fresh test directory with category folders
-    await rm(TEST_GET_ENTRY_DIR, { recursive: true, force: true });
-    await mkdir(TEST_GET_ENTRY_DIR, { recursive: true });
-    await mkdir(join(TEST_GET_ENTRY_DIR, 'people'), { recursive: true });
-    await mkdir(join(TEST_GET_ENTRY_DIR, 'projects'), { recursive: true });
-    await mkdir(join(TEST_GET_ENTRY_DIR, 'ideas'), { recursive: true });
-    await mkdir(join(TEST_GET_ENTRY_DIR, 'admin'), { recursive: true });
-    await mkdir(join(TEST_GET_ENTRY_DIR, 'inbox'), { recursive: true });
-    
-    gitService = new GitService(TEST_GET_ENTRY_DIR);
-    await gitService.initialize();
-    
-    indexService = new IndexService(TEST_GET_ENTRY_DIR);
-    entryService = new EntryService(TEST_GET_ENTRY_DIR, gitService, indexService);
+    await resetDatabase();
+    entryService = new EntryService();
+    indexService = new IndexService(entryService);
     searchService = new SearchService(entryService);
     // Pass null for services that DigestService doesn't need for this test
     digestService = new DigestService(entryService, indexService, null);
@@ -96,7 +83,7 @@ describe('ToolExecutor - Get Entry Round-Trip Properties', () => {
   });
 
   afterEach(async () => {
-    await rm(TEST_GET_ENTRY_DIR, { recursive: true, force: true });
+    await resetDatabase();
   });
 
   /**

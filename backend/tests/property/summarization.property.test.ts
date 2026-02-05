@@ -2,8 +2,9 @@
  * Property Tests: Summarization Service
  * 
  * Property 13: Summarization Trigger
- * For any conversation where the total message count exceeds SUMMARIZE_AFTER_MESSAGES,
- * the system SHALL create a ConversationSummary covering the oldest messages
+ * For any conversation where the total message count exceeds
+ * (MAX_VERBATIM_MESSAGES + SUMMARIZE_BATCH_SIZE), the system SHALL create a
+ * ConversationSummary covering the oldest SUMMARIZE_BATCH_SIZE messages
  * (excluding the most recent MAX_VERBATIM_MESSAGES).
  * 
  * **Validates: Requirements 9.1**
@@ -57,8 +58,9 @@ describe('Property Tests: Summarization Service', () => {
   const prisma = getPrismaClient();
 
   // Test configuration values
-  const SUMMARIZE_AFTER_MESSAGES = 20;
+  const SUMMARIZE_BATCH_SIZE = 10;
   const MAX_VERBATIM_MESSAGES = 15;
+  const SUMMARY_TRIGGER = MAX_VERBATIM_MESSAGES + SUMMARIZE_BATCH_SIZE;
 
   beforeAll(async () => {
     await prisma.$connect();
@@ -102,8 +104,9 @@ describe('Property Tests: Summarization Service', () => {
     /**
      * Feature: chat-capture-and-classification, Property 13: Summarization Trigger
      * 
-     * For any conversation where the total message count exceeds SUMMARIZE_AFTER_MESSAGES,
-     * the system SHALL create a ConversationSummary covering the oldest messages
+     * For any conversation where the total message count exceeds
+     * (MAX_VERBATIM_MESSAGES + SUMMARIZE_BATCH_SIZE), the system SHALL create a
+     * ConversationSummary covering the oldest SUMMARIZE_BATCH_SIZE messages
      * (excluding the most recent MAX_VERBATIM_MESSAGES).
      * 
      * **Validates: Requirements 9.1**
@@ -113,8 +116,8 @@ describe('Property Tests: Summarization Service', () => {
       await fc.assert(
         fc.asyncProperty(
           channelArb,
-          // Generate message count at or below threshold (1 to SUMMARIZE_AFTER_MESSAGES)
-          fc.integer({ min: 1, max: SUMMARIZE_AFTER_MESSAGES }),
+          // Generate message count at or below threshold (1 to SUMMARY_TRIGGER)
+          fc.integer({ min: 1, max: SUMMARY_TRIGGER }),
           async (channel, messageCount) => {
             // Create mock OpenAI client
             const mockOpenAI = createMockOpenAI();
@@ -156,7 +159,7 @@ describe('Property Tests: Summarization Service', () => {
         fc.asyncProperty(
           channelArb,
           // Generate message count above threshold (threshold + 1 to threshold + 10)
-          fc.integer({ min: SUMMARIZE_AFTER_MESSAGES + 1, max: SUMMARIZE_AFTER_MESSAGES + 10 }),
+          fc.integer({ min: SUMMARY_TRIGGER + 1, max: SUMMARY_TRIGGER + 10 }),
           async (channel, messageCount) => {
             // Create mock OpenAI client
             const mockOpenAI = createMockOpenAI('Generated summary for test');
@@ -200,7 +203,7 @@ describe('Property Tests: Summarization Service', () => {
         fc.asyncProperty(
           channelArb,
           // Generate message count above threshold
-          fc.integer({ min: SUMMARIZE_AFTER_MESSAGES + 1, max: SUMMARIZE_AFTER_MESSAGES + 15 }),
+          fc.integer({ min: SUMMARY_TRIGGER + 1, max: SUMMARY_TRIGGER + 15 }),
           async (channel, messageCount) => {
             // Create mock OpenAI client
             const mockOpenAI = createMockOpenAI('Summary covering oldest messages');
@@ -236,13 +239,12 @@ describe('Property Tests: Summarization Service', () => {
             // Property: Summary SHALL start from the first message
             expect(summary.startMessageId).toBe(createdMessages[0].id);
 
-            // Property: Summary SHALL end at (total - MAX_VERBATIM_MESSAGES - 1)
-            // This leaves MAX_VERBATIM_MESSAGES messages unsummarized
-            const expectedEndIndex = messageCount - MAX_VERBATIM_MESSAGES - 1;
+            // Property: Summary SHALL end at the end of the first batch
+            const expectedEndIndex = SUMMARIZE_BATCH_SIZE - 1;
             expect(summary.endMessageId).toBe(createdMessages[expectedEndIndex].id);
 
-            // Property: Message count in summary SHALL equal messages covered
-            const expectedMessageCount = messageCount - MAX_VERBATIM_MESSAGES;
+            // Property: Message count in summary SHALL equal batch size
+            const expectedMessageCount = SUMMARIZE_BATCH_SIZE;
             expect(summary.messageCount).toBe(expectedMessageCount);
           }
         ),
@@ -265,8 +267,8 @@ describe('Property Tests: Summarization Service', () => {
             // Create a conversation
             const conversation = await conversationService.create(channel);
 
-            // Add messages exceeding the threshold (25 messages)
-            const initialMessageCount = SUMMARIZE_AFTER_MESSAGES + 5;
+            // Add messages exceeding the threshold
+            const initialMessageCount = SUMMARY_TRIGGER + 5;
             const createdMessages: Array<{ id: string }> = [];
             for (let i = 0; i < initialMessageCount; i++) {
               const role: Role = i % 2 === 0 ? 'user' : 'assistant';
@@ -339,8 +341,8 @@ describe('Property Tests: Summarization Service', () => {
             // Create a conversation
             const conversation = await conversationService.create(channel);
 
-            // Add messages exceeding the threshold (25 messages)
-            const initialMessageCount = SUMMARIZE_AFTER_MESSAGES + 5;
+            // Add messages exceeding the threshold
+            const initialMessageCount = SUMMARY_TRIGGER + 5;
             for (let i = 0; i < initialMessageCount; i++) {
               const role: Role = i % 2 === 0 ? 'user' : 'assistant';
               await conversationService.addMessage(
@@ -360,9 +362,10 @@ describe('Property Tests: Summarization Service', () => {
             // Add more messages to exceed threshold again
             // We need to add enough messages so that unsummarized messages exceed threshold
             // After first summary: 15 verbatim messages remain
-            // Need to add more than (SUMMARIZE_AFTER_MESSAGES - 15) = 5 messages
-            // to trigger another summarization
-            const additionalMessages = MAX_VERBATIM_MESSAGES + 6; // 21 more messages
+            // Need enough messages so that eligible messages reach another batch
+            // After first summary: startIndex = SUMMARIZE_BATCH_SIZE
+            // Next summary triggers when total >= startIndex + MAX_VERBATIM_MESSAGES + SUMMARIZE_BATCH_SIZE
+            const additionalMessages = (SUMMARIZE_BATCH_SIZE + MAX_VERBATIM_MESSAGES + SUMMARIZE_BATCH_SIZE) - initialMessageCount;
             for (let i = 0; i < additionalMessages; i++) {
               const role: Role = i % 2 === 0 ? 'user' : 'assistant';
               await conversationService.addMessage(
@@ -394,7 +397,7 @@ describe('Property Tests: Summarization Service', () => {
         fc.asyncProperty(
           channelArb,
           // Generate message count above threshold
-          fc.integer({ min: SUMMARIZE_AFTER_MESSAGES + 1, max: SUMMARIZE_AFTER_MESSAGES + 20 }),
+          fc.integer({ min: SUMMARY_TRIGGER + 1, max: SUMMARY_TRIGGER + 20 }),
           async (channel, messageCount) => {
             // Create mock OpenAI client
             const mockOpenAI = createMockOpenAI('Summary with accurate count');
@@ -425,9 +428,8 @@ describe('Property Tests: Summarization Service', () => {
 
             const summary = summaries[0];
 
-            // Property: messageCount SHALL equal (total messages - MAX_VERBATIM_MESSAGES)
-            // This is the number of messages that were summarized
-            const expectedMessageCount = messageCount - MAX_VERBATIM_MESSAGES;
+            // Property: messageCount SHALL equal batch size
+            const expectedMessageCount = SUMMARIZE_BATCH_SIZE;
             expect(summary.messageCount).toBe(expectedMessageCount);
           }
         ),
@@ -460,7 +462,7 @@ describe('Property Tests: Summarization Service', () => {
         fc.asyncProperty(
           channelArb,
           // Generate message count above threshold
-          fc.integer({ min: SUMMARIZE_AFTER_MESSAGES + 1, max: SUMMARIZE_AFTER_MESSAGES + 15 }),
+          fc.integer({ min: SUMMARY_TRIGGER + 1, max: SUMMARY_TRIGGER + 15 }),
           async (channel, messageCount) => {
             // Create mock OpenAI client
             const mockOpenAI = createMockOpenAI('Summary of older messages');
@@ -516,7 +518,7 @@ describe('Property Tests: Summarization Service', () => {
         fc.asyncProperty(
           channelArb,
           // Generate message count above threshold
-          fc.integer({ min: SUMMARIZE_AFTER_MESSAGES + 1, max: SUMMARIZE_AFTER_MESSAGES + 10 }),
+          fc.integer({ min: SUMMARY_TRIGGER + 1, max: SUMMARY_TRIGGER + 10 }),
           async (channel, messageCount) => {
             // Create mock OpenAI client
             const mockOpenAI = createMockOpenAI('Summary of older messages');
@@ -578,7 +580,7 @@ describe('Property Tests: Summarization Service', () => {
           // Generate random message contents
           fc.array(
             fc.string({ minLength: 1, maxLength: 100 }).filter((s) => s.trim().length > 0),
-            { minLength: SUMMARIZE_AFTER_MESSAGES + 1, maxLength: SUMMARIZE_AFTER_MESSAGES + 5 }
+            { minLength: SUMMARY_TRIGGER + 1, maxLength: SUMMARY_TRIGGER + 5 }
           ),
           async (channel, messageContents) => {
             // Create mock OpenAI client
@@ -636,7 +638,7 @@ describe('Property Tests: Summarization Service', () => {
         fc.asyncProperty(
           channelArb,
           // Generate message count above threshold
-          fc.integer({ min: SUMMARIZE_AFTER_MESSAGES + 1, max: SUMMARIZE_AFTER_MESSAGES + 10 }),
+          fc.integer({ min: SUMMARY_TRIGGER + 1, max: SUMMARY_TRIGGER + 10 }),
           async (channel, messageCount) => {
             // Create mock OpenAI client
             const summaryText = 'Generated summary of older conversation messages';
@@ -690,7 +692,7 @@ describe('Property Tests: Summarization Service', () => {
         fc.asyncProperty(
           channelArb,
           // Generate message count above threshold
-          fc.integer({ min: SUMMARIZE_AFTER_MESSAGES + 1, max: SUMMARIZE_AFTER_MESSAGES + 10 }),
+          fc.integer({ min: SUMMARY_TRIGGER + 1, max: SUMMARY_TRIGGER + 10 }),
           async (channel, messageCount) => {
             // Create mock OpenAI client
             const mockOpenAI = createMockOpenAI('Summary of older messages');

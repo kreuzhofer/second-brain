@@ -14,9 +14,10 @@ import { Button } from '@/components/ui/button';
 interface EntryModalProps {
   entryPath: string | null;
   onClose: () => void;
+  onStartFocus?: (entry: EntryWithPath) => void;
 }
 
-export function EntryModal({ entryPath, onClose }: EntryModalProps) {
+export function EntryModal({ entryPath, onClose, onStartFocus }: EntryModalProps) {
   const [entry, setEntry] = useState<EntryWithPath | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -185,7 +186,17 @@ export function EntryModal({ entryPath, onClose }: EntryModalProps) {
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 flex-shrink-0">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            {entry?.category === 'admin' && (entry.entry as any)?.status !== 'done' && onStartFocus && (
+              <Button
+                onClick={() => {
+                  onStartFocus(entry);
+                  onClose();
+                }}
+              >
+                Focus now
+              </Button>
+            )}
             <Button variant="outline" onClick={onClose}>
               Close
             </Button>

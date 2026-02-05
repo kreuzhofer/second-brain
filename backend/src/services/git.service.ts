@@ -142,6 +142,18 @@ export function formatDeleteCommit(
 }
 
 /**
+ * Format commit message for entry move
+ */
+export function formatMoveCommit(
+  sourceCategory: Category,
+  targetCategory: Category,
+  name: string,
+  channel: Channel
+): string {
+  return `move: ${sourceCategory} -> ${targetCategory}: ${name} [via: ${channel}]`;
+}
+
+/**
  * Format commit message for initial data folder setup
  */
 export function formatInitCommit(): string {

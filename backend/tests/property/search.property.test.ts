@@ -8,19 +8,14 @@
  */
 
 import * as fc from 'fast-check';
-import { rm, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { resetDatabase } from '../setup';
 import { SearchService, SearchResult } from '../../src/services/search.service';
 import { EntryService } from '../../src/services/entry.service';
-import { GitService } from '../../src/services/git.service';
-import { IndexService } from '../../src/services/index.service';
 import { Category } from '../../src/types/entry.types';
 
 // ============================================
 // Test Setup
 // ============================================
-
-const TEST_SEARCH_PROP_DIR = join(__dirname, '../.test-search-property-data');
 
 // ============================================
 // Test Data Generators
@@ -53,29 +48,17 @@ const limitArbitrary = fc.integer({ min: 1, max: 20 });
 describe('SearchService - Search Filtering and Relevance Properties', () => {
   let searchService: SearchService;
   let entryService: EntryService;
-  let gitService: GitService;
-  let indexService: IndexService;
 
   beforeEach(async () => {
-    // Clean up and create fresh test directory with category folders
-    await rm(TEST_SEARCH_PROP_DIR, { recursive: true, force: true });
-    await mkdir(TEST_SEARCH_PROP_DIR, { recursive: true });
-    await mkdir(join(TEST_SEARCH_PROP_DIR, 'people'), { recursive: true });
-    await mkdir(join(TEST_SEARCH_PROP_DIR, 'projects'), { recursive: true });
-    await mkdir(join(TEST_SEARCH_PROP_DIR, 'ideas'), { recursive: true });
-    await mkdir(join(TEST_SEARCH_PROP_DIR, 'admin'), { recursive: true });
-    await mkdir(join(TEST_SEARCH_PROP_DIR, 'inbox'), { recursive: true });
-    
-    gitService = new GitService(TEST_SEARCH_PROP_DIR);
-    await gitService.initialize();
-    
-    indexService = new IndexService(TEST_SEARCH_PROP_DIR);
-    entryService = new EntryService(TEST_SEARCH_PROP_DIR, gitService, indexService);
-    searchService = new SearchService(entryService);
+    await resetDatabase();
+    entryService = new EntryService();
+    searchService = new SearchService(entryService, undefined, {
+      enableSemantic: false
+    });
   });
 
   afterEach(async () => {
-    await rm(TEST_SEARCH_PROP_DIR, { recursive: true, force: true });
+    await resetDatabase();
   });
 
   /**

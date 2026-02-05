@@ -170,7 +170,9 @@ describe('Chat Tools Integration', () => {
 
       // Create mock ToolExecutor that returns a predictable CaptureResult
       const mockToolExecutor = {
-        execute: jest.fn().mockImplementation(async (toolCall: { name: string; arguments: Record<string, unknown> }) => {
+        execute: jest.fn().mockImplementation(async (
+          toolCall: { name: string; arguments: Record<string, unknown> }
+        ) => {
           if (toolCall.name === 'classify_and_capture') {
             const captureResult: CaptureResult = {
               path: expectedPath,
@@ -208,10 +210,21 @@ describe('Chat Tools Integration', () => {
 
       // Verify tool was executed
       expect(mockToolExecutor.execute).toHaveBeenCalledTimes(1);
-      expect(mockToolExecutor.execute).toHaveBeenCalledWith({
-        name: 'classify_and_capture',
-        arguments: { text: 'Working on a new project called Test Project' }
-      });
+      expect(mockToolExecutor.execute).toHaveBeenCalledWith(
+        {
+          name: 'classify_and_capture',
+          arguments: { text: 'Working on a new project called Test Project' }
+        },
+        {
+          channel: 'chat',
+          context: expect.objectContaining({
+            systemPrompt: 'Test system prompt',
+            indexContent: '# Index\n\nTest index content',
+            summaries: expect.any(Array),
+            recentMessages: expect.any(Array)
+          })
+        }
+      );
 
       // Verify response contains entry info
       expect(response.entry).toBeDefined();
@@ -376,8 +389,8 @@ describe('Chat Tools Integration', () => {
       // Mock data for list_entries result
       const listEntriesResult: ListEntriesResult = {
         entries: [
-          { path: 'projects/project-a.md', name: 'Project A', category: 'projects' as Category, updated_at: '2024-01-01T00:00:00Z' },
-          { path: 'projects/project-b.md', name: 'Project B', category: 'projects' as Category, updated_at: '2024-01-01T00:00:00Z' }
+          { id: 'entry-project-a', path: 'projects/project-a.md', name: 'Project A', category: 'projects' as Category, updated_at: '2024-01-01T00:00:00Z' },
+          { id: 'entry-project-b', path: 'projects/project-b.md', name: 'Project B', category: 'projects' as Category, updated_at: '2024-01-01T00:00:00Z' }
         ],
         total: 2
       };
@@ -459,7 +472,9 @@ describe('Chat Tools Integration', () => {
 
       // Create mock ToolExecutor that handles both tools
       const mockToolExecutor = {
-        execute: jest.fn().mockImplementation(async (toolCall: { name: string; arguments: Record<string, unknown> }) => {
+        execute: jest.fn().mockImplementation(async (
+          toolCall: { name: string; arguments: Record<string, unknown> }
+        ) => {
           if (toolCall.name === 'list_entries') {
             return { success: true, data: listEntriesResult };
           }
@@ -493,14 +508,36 @@ describe('Chat Tools Integration', () => {
 
       // Verify both tools were executed
       expect(mockToolExecutor.execute).toHaveBeenCalledTimes(2);
-      expect(mockToolExecutor.execute).toHaveBeenCalledWith({
-        name: 'list_entries',
-        arguments: { category: 'projects', limit: 5 }
-      });
-      expect(mockToolExecutor.execute).toHaveBeenCalledWith({
-        name: 'get_entry',
-        arguments: { path: 'projects/project-a.md' }
-      });
+      expect(mockToolExecutor.execute).toHaveBeenCalledWith(
+        {
+          name: 'list_entries',
+          arguments: { category: 'projects', limit: 5 }
+        },
+        {
+          channel: 'chat',
+          context: expect.objectContaining({
+            systemPrompt: 'Test system prompt',
+            indexContent: '# Index\n\nTest index content',
+            summaries: expect.any(Array),
+            recentMessages: expect.any(Array)
+          })
+        }
+      );
+      expect(mockToolExecutor.execute).toHaveBeenCalledWith(
+        {
+          name: 'get_entry',
+          arguments: { path: 'projects/project-a.md' }
+        },
+        {
+          channel: 'chat',
+          context: expect.objectContaining({
+            systemPrompt: 'Test system prompt',
+            indexContent: '# Index\n\nTest index content',
+            summaries: expect.any(Array),
+            recentMessages: expect.any(Array)
+          })
+        }
+      );
 
       // Verify toolsUsed contains both tools
       expect(response.toolsUsed).toContain('list_entries');
