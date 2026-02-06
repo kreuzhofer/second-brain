@@ -66,11 +66,11 @@ describe('Property Tests: Conversation Service', () => {
   // Optional filed entry path (for assistant messages that file entries)
   const filedEntryPathArb = fc.option(
     fc.constantFrom(
-      'people/john-doe.md',
-      'projects/test-project.md',
-      'ideas/new-idea.md',
-      'admin/task-item.md',
-      'inbox/unclear-item.md'
+      'people/john-doe',
+      'projects/test-project',
+      'ideas/new-idea',
+      'admin/task-item',
+      'inbox/unclear-item'
     ),
     { nil: undefined }
   );

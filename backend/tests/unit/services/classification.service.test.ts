@@ -19,6 +19,7 @@ import {
   ContextWindow,
 } from '../../../src/types/chat.types';
 import { CLASSIFICATION_SYSTEM_PROMPT } from '../../../src/services/context.service';
+import { getConfig } from '../../../src/config/env';
 
 // Mock OpenAI
 const mockCreate = jest.fn();
@@ -60,7 +61,7 @@ function createValidResponse(overrides: Partial<{
 function createContextWindow(overrides: Partial<ContextWindow> = {}): ContextWindow {
   return {
     systemPrompt: CLASSIFICATION_SYSTEM_PROMPT,
-    indexContent: '# Index\n- projects/existing-project.md',
+    indexContent: '# Index\n- projects/existing-project',
     summaries: [],
     recentMessages: [],
     ...overrides,
@@ -129,7 +130,7 @@ describe('ClassificationAgent', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'gpt-4o-mini',
+          model: getConfig().OPENAI_MODEL_CLASSIFICATION,
           response_format: { type: 'json_object' },
           temperature: 0.3,
           max_tokens: 1000,
@@ -184,7 +185,7 @@ describe('ClassificationAgent', () => {
 
     it('should include index content in the prompt', async () => {
       const input = createClassificationInput('Test thought', undefined, {
-        indexContent: '# My Index\n- people/john-doe.md\n- projects/website.md',
+        indexContent: '# My Index\n- people/john-doe\n- projects/website',
       });
 
       await classificationAgent.classify(input);
@@ -192,7 +193,7 @@ describe('ClassificationAgent', () => {
       const callArgs = mockCreate.mock.calls[0][0];
       const userContent = callArgs.messages[1].content;
       expect(userContent).toContain('# My Index');
-      expect(userContent).toContain('people/john-doe.md');
+      expect(userContent).toContain('people/john-doe');
     });
   });
 
@@ -303,6 +304,7 @@ describe('ClassificationAgent', () => {
                 fields: {
                   status: 'pending',
                   dueDate: '2024-02-15',
+                  relatedPeople: []
                 },
               }),
             },
@@ -317,6 +319,7 @@ describe('ClassificationAgent', () => {
       expect(result.fields).toMatchObject({
         status: 'pending',
         dueDate: '2024-02-15',
+        relatedPeople: []
       });
     });
   });
@@ -509,6 +512,7 @@ describe('ClassificationAgent', () => {
 
       expect(result.fields).toMatchObject({
         status: 'pending',
+        relatedPeople: []
       });
       expect((result.fields as any).dueDate).toBeUndefined();
     });

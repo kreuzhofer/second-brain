@@ -55,15 +55,23 @@ This document tracks the next MVP scope and progress.
 - Adaptive Digests: Completed
 - Daily Momentum Tip: Completed
 - Offline Queue: Completed
+- Notes Editing (Entry Modal): Completed
+- People Linking (Admin Tasks): Improved (verb + name filters, reduced false positives)
+- Link Paths (no `.md`): Completed
 
 ## Notes
 - Prioritize backend-first slices where possible.
 - Keep API changes documented in `docs/API.md`.
 - UI refocus: Added Focus panel, compact inbox/recent lists, and fixed chat auto-scroll behavior.
 - Deep Focus: Adjusted timer-start music playback and notification permission request on start.
+- Auth: JWT + password login/registration with default user via env.
+- Storage: Fully DB-backed entries with revisions + embeddings (no filesystem memory store).
 
 ## Progress Log
 - 2026-02-05: DB-backed entries and pgvector embeddings in place; tests updated for EntrySummary ids and normalized content; all backend tests passing.
 - 2026-02-05: Added embedding backfill script (`npm run backfill:embeddings`) to populate missing vectors post-migration.
 - 2026-02-05: Added auto embedding backfill on app startup (no CLI required in prod).
 - 2026-02-05: Added current-date context to classification/action prompts and normalized relative due dates on capture to prevent incorrect past years; tests updated and passing.
+- 2026-02-06: Entry notes are now editable in the modal with unobtrusive edit/save/cancel controls and auto-resizing editor.
+- 2026-02-06: Removed `.md` from canonical entry links/paths while keeping backward-compatible parsing.
+- 2026-02-06: Improved people inference for admin task updates (added pay verb, capitalized-name filter, expanded stopwords).

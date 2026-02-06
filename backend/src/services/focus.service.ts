@@ -65,6 +65,7 @@ export class FocusService {
   private fetcher: Fetcher;
   private random: () => number;
   private openai: OpenAI | null = null;
+  private congratsModel: string;
 
   private getUserId(): string {
     return requireUserId();
@@ -80,6 +81,7 @@ export class FocusService {
     this.entryService = entryService || getEntryService();
     this.fetcher = fetcher;
     this.random = random;
+    this.congratsModel = this.config.OPENAI_MODEL_FOCUS_CONGRATS || 'gpt-4o-mini';
   }
 
   async generateCongratsMessage(payload: {
@@ -123,7 +125,7 @@ export class FocusService {
         .join('\n');
 
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: this.congratsModel,
         messages: [
           {
             role: 'system',

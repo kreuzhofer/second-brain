@@ -136,7 +136,7 @@ export class ToolRegistry {
           properties: {
             path: {
               type: 'string',
-              description: 'The entry path (e.g., projects/clientco-integration.md)'
+              description: 'The entry path (e.g., projects/clientco-integration)'
             }
           },
           required: ['path']
@@ -169,7 +169,7 @@ export class ToolRegistry {
       type: 'function',
       function: {
         name: 'update_entry',
-        description: 'Update an existing entry. Use when you need to change metadata fields like status, due_date, or next_action. Use "updates" to change metadata fields like status, due_date, next_action. Use "body_content" only to add notes or log entries to the body. To mark a task done, use updates: {status: "done"}. To add a note, use body_content with mode "section".',
+        description: 'Update an existing entry. Use when you need to change metadata fields like status, due_date, or next_action. Use "updates" to change metadata fields like status, due_date, next_action. Use "body_content" only to add notes or log entries to the body. To mark a task done, use updates: {status: "done"}. To add a note, use body_content with mode "section". If the update mentions people for an admin task, include updates.related_people as an array of full names.',
         parameters: {
           type: 'object',
           properties: {
@@ -179,7 +179,7 @@ export class ToolRegistry {
             },
             updates: {
               type: 'object',
-              description: 'Metadata fields to update. For admin/projects: status ("pending", "done", "active", "waiting", "blocked"). Also: next_action, due_date, context, tags.',
+              description: 'Metadata fields to update. For admin/projects: status ("pending", "done", "active", "waiting", "blocked"). Also: next_action, due_date, context, tags. For admin updates mentioning people, include related_people: string[].',
               additionalProperties: true
             },
             body_content: {
@@ -272,7 +272,7 @@ export class ToolRegistry {
           properties: {
             path: {
               type: 'string',
-              description: 'The entry path to delete (e.g., admin/grocery-shopping.md)'
+              description: 'The entry path to delete (e.g., admin/grocery-shopping)'
             }
           },
           required: ['path']

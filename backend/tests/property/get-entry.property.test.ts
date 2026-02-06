@@ -234,7 +234,7 @@ describe('ToolExecutor - Get Entry Round-Trip Properties', () => {
             .map(s => s.replace(/[^a-z0-9]/g, '-').toLowerCase())
             .filter(s => s.length >= 3),
           async (category, slug) => {
-            const nonExistentPath = `${category}/${slug}-nonexistent.md`;
+            const nonExistentPath = `${category}/${slug}-nonexistent`;
             
             // Call get_entry with non-existent path
             const result = await toolExecutor.execute({

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Brain } from 'lucide-react';
+import { Brain, Search, Target, MessageSquare } from 'lucide-react';
 import { ChatUI } from '@/components/chat';
 import { EntryModal } from '@/components/EntryModal';
 import { DeepFocusView } from '@/components/DeepFocusView';
@@ -24,6 +24,8 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [selectedEntryPath, setSelectedEntryPath] = useState<string | null>(null);
   const [focusEntry, setFocusEntry] = useState<EntryWithPath | null>(null);
+  const [mobilePanel, setMobilePanel] = useState<'focus' | 'chat'>('focus');
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   // Check authentication when token changes
   useEffect(() => {
@@ -81,6 +83,7 @@ function App() {
 
   const handleEntryClick = (path: string) => {
     setSelectedEntryPath(path);
+    setMobileSearchOpen(false);
   };
 
   const handleCloseModal = () => {
@@ -104,23 +107,41 @@ function App() {
     <div className="min-h-screen h-screen flex flex-col bg-background">
       {/* Header */}
       <header className="border-b">
-        <div className="w-full px-4 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Brain className="h-8 w-8 text-primary" />
-              <h1 className="text-2xl font-bold">Second Brain</h1>
+        <div className="w-full px-3 py-2 sm:px-4 sm:py-4">
+          <div className="flex items-center justify-between gap-2 sm:gap-3 flex-nowrap">
+            <div className="flex items-center gap-2 min-w-0 max-w-[60%] sm:max-w-none">
+              <Brain className="h-6 w-6 sm:h-8 sm:w-8 text-primary shrink-0" />
+              <h1 className="text-base sm:text-2xl font-bold whitespace-nowrap truncate leading-none">
+                Second Brain
+              </h1>
             </div>
             {isAuthenticated && (
-              <div className="min-w-[360px] max-w-[520px] w-full flex justify-end">
-                <SearchPanel onEntryClick={handleEntryClick} variant="header" />
+              <div className="flex items-center gap-2 w-full justify-end min-w-0">
+                <div className="hidden lg:flex min-w-[360px] max-w-[520px] w-full justify-end">
+                  <SearchPanel onEntryClick={handleEntryClick} variant="header" />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="lg:hidden shrink-0"
+                  onClick={() => setMobileSearchOpen((prev) => !prev)}
+                >
+                  <Search className="h-5 w-5" />
+                </Button>
               </div>
             )}
           </div>
+          {isAuthenticated && mobileSearchOpen && (
+            <div className="mt-2 lg:hidden">
+              <SearchPanel onEntryClick={handleEntryClick} variant="header" />
+            </div>
+          )}
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="w-full px-4 py-6 flex-1 min-h-0">
+      <main className="w-full px-2 py-3 sm:px-4 sm:py-6 flex-1 min-h-0 pb-[calc(64px+env(safe-area-inset-bottom))] lg:pb-6">
         {!isAuthenticated ? (
           <Card className="max-w-md mx-auto">
             <CardHeader>
@@ -200,13 +221,21 @@ function App() {
           </Card>
         ) : (
           <EntriesProvider enabled={isAuthenticated}>
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,3fr)] gap-6 h-full min-h-0">
-              <div className="flex flex-col min-h-0">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,3fr)] gap-3 sm:gap-6 h-full min-h-0">
+              <div className="hidden lg:flex flex-col min-h-0">
                 <ChatUI onEntryClick={handleEntryClick} className="h-full" />
               </div>
 
-              <div className="flex flex-col gap-4 min-h-0 lg:overflow-y-auto">
+              <div className="hidden lg:flex flex-col gap-4 min-h-0 lg:overflow-y-auto">
                 <FocusPanel onEntryClick={handleEntryClick} />
+              </div>
+
+              <div className="flex lg:hidden flex-col min-h-0">
+                {mobilePanel === 'chat' ? (
+                  <ChatUI onEntryClick={handleEntryClick} className="h-full" />
+                ) : (
+                  <FocusPanel onEntryClick={handleEntryClick} />
+                )}
               </div>
             </div>
 
@@ -215,6 +244,7 @@ function App() {
               entryPath={selectedEntryPath} 
               onClose={handleCloseModal} 
               onStartFocus={handleStartFocus}
+              onEntryClick={handleEntryClick}
             />
             <DeepFocusView entry={focusEntry} onClose={handleCloseFocus} />
           </EntriesProvider>
@@ -223,7 +253,33 @@ function App() {
 
       {/* Footer */}
       <footer className="border-t mt-auto">
-        <div className="w-full px-4 py-1 text-center text-[10px] text-muted-foreground leading-none">
+        {isAuthenticated && (
+          <div className="fixed bottom-0 left-0 right-0 lg:hidden border-t bg-background/95 backdrop-blur">
+            <div className="flex items-center justify-around gap-2 px-2 pt-1 pb-[calc(6px+env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                onClick={() => setMobilePanel('focus')}
+                className={`flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 text-xs ${
+                  mobilePanel === 'focus' ? 'text-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                <Target className="h-5 w-5" />
+                Focus
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobilePanel('chat')}
+                className={`flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 text-xs ${
+                  mobilePanel === 'chat' ? 'text-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                <MessageSquare className="h-5 w-5" />
+                Chat
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="hidden lg:block w-full px-4 py-1 text-center text-[10px] text-muted-foreground leading-none">
           Second Brain
         </div>
       </footer>

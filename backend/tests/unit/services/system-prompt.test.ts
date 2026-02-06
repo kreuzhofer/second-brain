@@ -41,16 +41,16 @@ describe('System Prompt Builder', () => {
       const indexContent = `# Knowledge Base Index
       
 ## People
-- john-doe.md - John Doe
+- people/john-doe - John Doe
 
 ## Projects
-- clientco-integration.md - ClientCo Integration`;
+- projects/clientco-integration - ClientCo Integration`;
 
       const result = buildSystemPrompt(indexContent, '');
       
       expect(result).toContain('Knowledge Base Index');
-      expect(result).toContain('john-doe.md');
-      expect(result).toContain('clientco-integration.md');
+      expect(result).toContain('people/john-doe');
+      expect(result).toContain('projects/clientco-integration');
     });
 
     it('should include conversation history', () => {

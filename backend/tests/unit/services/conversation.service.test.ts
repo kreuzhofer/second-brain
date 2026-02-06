@@ -199,11 +199,11 @@ describe('ConversationService', () => {
         conversation.id,
         'assistant',
         'I filed this as a project',
-        'projects/test-project.md',
+        'projects/test-project',
         0.85
       );
 
-      expect(message.filedEntryPath).toBe('projects/test-project.md');
+      expect(message.filedEntryPath).toBe('projects/test-project');
       expect(message.filedConfidence).toBe(0.85);
     });
 

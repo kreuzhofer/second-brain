@@ -6,7 +6,9 @@ import {
   EntryAlreadyExistsError,
   InvalidEntryDataError
 } from '../services/entry.service';
+import { getEntryLinkService } from '../services/entry-link.service';
 import { Category, EntryFilters } from '../types/entry.types';
+import type { BodyContentUpdate } from '../types/entry.types';
 
 export const entriesRouter = Router();
 
@@ -96,6 +98,47 @@ entriesRouter.post('/merge', async (req: Request, res: Response) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Failed to merge entries'
+      }
+    });
+  }
+});
+
+/**
+ * GET /api/entries/:path(*)
+ * Get a single entry by path
+ */
+entriesRouter.get('/:path(*)/links', async (req: Request, res: Response) => {
+  try {
+    const linkService = getEntryLinkService();
+    const path = req.params.path;
+
+    if (!path) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Entry path is required'
+        }
+      });
+      return;
+    }
+
+    const links = await linkService.getLinksForPath(path);
+    res.json(links);
+  } catch (error) {
+    if (error instanceof EntryNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: error.message
+        }
+      });
+      return;
+    }
+    console.error('Error reading entry links:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to read entry links'
       }
     });
   }
@@ -225,7 +268,10 @@ entriesRouter.patch('/:path(*)', async (req: Request, res: Response) => {
   try {
     const entryService = getEntryService();
     const path = req.params.path;
-    const updates = req.body;
+    const updates = req.body || {};
+    const hasContentUpdate = Object.prototype.hasOwnProperty.call(updates, 'content');
+    const content = hasContentUpdate ? updates.content : undefined;
+    const { content: _ignored, ...restUpdates } = updates;
 
     if (!path) {
       res.status(400).json({
@@ -237,7 +283,7 @@ entriesRouter.patch('/:path(*)', async (req: Request, res: Response) => {
       return;
     }
 
-    if (!updates || Object.keys(updates).length === 0) {
+    if (!hasContentUpdate && Object.keys(restUpdates).length === 0) {
       res.status(400).json({
         error: {
           code: 'VALIDATION_ERROR',
@@ -247,7 +293,21 @@ entriesRouter.patch('/:path(*)', async (req: Request, res: Response) => {
       return;
     }
 
-    const entry = await entryService.update(path, updates);
+    if (hasContentUpdate && typeof content !== 'string') {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Content must be a string'
+        }
+      });
+      return;
+    }
+
+    let bodyUpdate: BodyContentUpdate | undefined;
+    if (hasContentUpdate) {
+      bodyUpdate = { mode: 'replace', content: content as string };
+    }
+    const entry = await entryService.update(path, restUpdates, 'api', bodyUpdate);
     res.json(entry);
   } catch (error) {
     if (error instanceof EntryNotFoundError) {

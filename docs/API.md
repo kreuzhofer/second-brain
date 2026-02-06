@@ -141,7 +141,7 @@ GET /api/entries?category=projects&status=active
 {
   "entries": [
     {
-      "path": "projects/my-project.md",
+      "path": "projects/my-project",
       "name": "My Project",
       "category": "projects",
       "updated_at": "2026-01-26T10:00:00.000Z",
@@ -164,13 +164,31 @@ GET /api/entries/:path
 
 **Example**:
 ```
-GET /api/entries/projects/my-project.md
+GET /api/entries/projects/my-project
+
+GET /api/entries/:path/links
+GET /api/entries/projects/my-project/links
+
+Returns outgoing links (items this entry references) and incoming backlinks.
+Link paths omit the `.md` suffix.
+
+Response:
+```json
+{
+  "outgoing": [
+    { "path": "people/lina-haidu", "category": "people", "name": "Lina Haidu" }
+  ],
+  "incoming": [
+    { "path": "admin/call-lina-haidu", "category": "admin", "name": "Call Lina Haidu" }
+  ]
+}
+```
 ```
 
 **Response** (200 OK):
 ```json
 {
-  "path": "projects/my-project.md",
+  "path": "projects/my-project",
   "category": "projects",
   "entry": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -193,7 +211,7 @@ GET /api/entries/projects/my-project.md
 {
   "error": {
     "code": "NOT_FOUND",
-    "message": "Entry not found: projects/non-existent.md"
+    "message": "Entry not found: projects/non-existent"
   }
 }
 ```
@@ -282,7 +300,7 @@ The request body must include `category` and category-specific fields.
 **Response** (201 Created):
 ```json
 {
-  "path": "projects/new-project.md",
+  "path": "projects/new-project",
   "category": "projects",
   "entry": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -313,7 +331,7 @@ PATCH /api/entries/:path
 
 **Example**:
 ```
-PATCH /api/entries/projects/my-project.md
+PATCH /api/entries/projects/my-project
 ```
 
 **Request Body**:
@@ -327,7 +345,7 @@ PATCH /api/entries/projects/my-project.md
 **Response** (200 OK):
 ```json
 {
-  "path": "projects/my-project.md",
+  "path": "projects/my-project",
   "category": "projects",
   "entry": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -352,7 +370,7 @@ DELETE /api/entries/:path
 
 **Example**:
 ```
-DELETE /api/entries/projects/old-project.md
+DELETE /api/entries/projects/old-project
 ```
 
 **Response** (204 No Content): Empty response body
@@ -384,7 +402,7 @@ GET /api/search?query=design&category=projects&limit=10
 {
   "entries": [
     {
-      "path": "projects/website-redesign.md",
+      "path": "projects/website-redesign",
       "name": "Website Redesign",
       "category": "projects",
       "matchedField": "content",
@@ -413,7 +431,7 @@ POST /api/inbox/triage
 ```json
 {
   "action": "move",
-  "paths": ["inbox/20260126-101010-foo.md"],
+  "paths": ["inbox/20260126-101010-foo"],
   "targetCategory": "projects"
 }
 ```
@@ -422,7 +440,7 @@ POST /api/inbox/triage
 ```json
 {
   "action": "resolve",
-  "paths": ["inbox/20260126-101010-foo.md"]
+  "paths": ["inbox/20260126-101010-foo"]
 }
 ```
 
@@ -430,8 +448,8 @@ POST /api/inbox/triage
 ```json
 {
   "action": "merge",
-  "paths": ["inbox/20260126-101010-foo.md"],
-  "targetPath": "projects/my-project.md"
+  "paths": ["inbox/20260126-101010-foo"],
+  "targetPath": "projects/my-project"
 }
 ```
 
@@ -488,7 +506,7 @@ POST /api/focus/sessions
 **Request Body**:
 ```json
 {
-  "entryPath": "admin/renew-aws-certification.md",
+  "entryPath": "admin/renew-aws-certification",
   "durationSeconds": 1500,
   "startedAt": "2026-02-05T09:00:00.000Z",
   "endedAt": "2026-02-05T09:25:00.000Z",
@@ -505,7 +523,7 @@ POST /api/focus/progress
 
 **Request Body**:
 ```json
-{ "entryPath": "admin/renew-aws-certification.md", "note": "Booked exam date" }
+{ "entryPath": "admin/renew-aws-certification", "note": "Booked exam date" }
 ```
 
 **Response**: `204 No Content`
@@ -523,7 +541,7 @@ POST /api/focus/congrats
 **Request Body**:
 ```json
 {
-  "entryPath": "admin/renew-aws-certification.md",
+  "entryPath": "admin/renew-aws-certification",
   "entryName": "Renew AWS certification",
   "minutes": 25
 }
@@ -541,7 +559,7 @@ POST /api/focus/congrats
 Detect likely duplicates for a given entry or text.
 
 ```
-GET /api/duplicates?path=projects/my-project.md
+GET /api/duplicates?path=projects/my-project
 POST /api/duplicates
 ```
 
@@ -560,7 +578,7 @@ POST /api/duplicates
 {
   "duplicates": [
     {
-      "path": "projects/project-alpha.md",
+      "path": "projects/project-alpha",
       "name": "Project Alpha",
       "category": "projects",
       "matchedField": "semantic",
@@ -585,15 +603,15 @@ POST /api/entries/merge
 **Request Body**:
 ```json
 {
-  "targetPath": "projects/project-alpha.md",
-  "sourcePaths": ["projects/project-alpha-old.md"]
+  "targetPath": "projects/project-alpha",
+  "sourcePaths": ["projects/project-alpha-old"]
 }
 ```
 
 **Response** (200 OK):
 ```json
 {
-  "path": "projects/project-alpha.md",
+  "path": "projects/project-alpha",
   "category": "projects",
   "entry": { "name": "Project Alpha" },
   "content": "..."
@@ -621,7 +639,7 @@ GET /api/index
 
 | Name | Context | Last Touched |
 |------|---------|--------------|
-| [John Doe](people/john-doe.md) | Met at conference | 2026-01-20 |
+| [John Doe](people/john-doe) | Met at conference | 2026-01-20 |
 ...
 ```
 
@@ -649,7 +667,7 @@ POST /api/capture
 ```json
 {
   "entry": {
-    "path": "projects/new-project.md",
+    "path": "projects/new-project",
     "category": "projects",
     "entry": {
       "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -695,12 +713,12 @@ POST /api/chat
     "id": "uuid",
     "role": "assistant",
     "content": "Got it! I've filed...",
-    "filedEntryPath": "projects/clientco-integration.md",
+    "filedEntryPath": "projects/clientco-integration",
     "filedConfidence": 0.88,
     "createdAt": "2026-01-26T10:00:00.000Z"
   },
   "entry": {
-    "path": "projects/clientco-integration.md",
+    "path": "projects/clientco-integration",
     "category": "projects",
     "name": "ClientCo Integration",
     "confidence": 0.88
@@ -861,7 +879,7 @@ Example payload:
   "type": "entry.updated",
   "timestamp": "2026-02-04T10:00:00.000Z",
   "data": {
-    "path": "projects/my-project.md",
+    "path": "projects/my-project",
     "category": "projects",
     "channel": "api",
     "commitHash": "abc123"

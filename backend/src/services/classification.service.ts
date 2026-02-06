@@ -30,11 +30,6 @@ import { getCurrentDateString } from '../utils/date';
 const DEFAULT_TIMEOUT_MS = 30000;
 
 /**
- * Model to use for classification
- */
-const CLASSIFICATION_MODEL = 'gpt-4o-mini';
-
-/**
  * JSON schema for classification response
  * Used to instruct the LLM on the expected output format
  */
@@ -47,7 +42,7 @@ const CLASSIFICATION_SCHEMA = `{
     // For people: { "context": string, "followUps": string[], "relatedProjects": string[] }
     // For projects: { "status": "active"|"waiting"|"blocked"|"someday", "nextAction": string, "relatedPeople": string[], "dueDate"?: string }
     // For ideas: { "oneLiner": string, "relatedProjects": string[] }
-    // For admin: { "status": "pending", "dueDate"?: string }
+    // For admin: { "status": "pending", "dueDate"?: string, "relatedPeople": string[] }
   },
   "related_entries": ["slug1", "slug2"],
   "reasoning": "Brief explanation of classification decision",
@@ -121,11 +116,13 @@ export class InvalidClassificationResponseError extends Error {
 export class ClassificationAgent {
   private openai: OpenAI;
   private timeoutMs: number;
+  private model: string;
 
   constructor(openaiClient?: OpenAI, timeoutMs?: number) {
     const config = getConfig();
     this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY });
     this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.model = config.OPENAI_MODEL_CLASSIFICATION || 'gpt-4o-mini';
   }
 
   /**
@@ -196,6 +193,7 @@ Given a raw thought, classify it into one of these categories:
 
 Extract structured fields based on the category. Return JSON only.
 Today's date is ${today}. Convert relative dates (e.g. today, tomorrow, next week) to YYYY-MM-DD.
+For admin tasks, extract relatedPeople as an array of full names mentioned (empty array if none).
 
 Schema:
 ${CLASSIFICATION_SCHEMA}
@@ -254,7 +252,7 @@ ${context.indexContent || '(No existing entries)'}
     try {
       const response = await this.openai.chat.completions.create(
         {
-          model: CLASSIFICATION_MODEL,
+          model: this.model,
           messages: [
             {
               role: 'system',
@@ -473,6 +471,9 @@ ${context.indexContent || '(No existing entries)'}
       dueDate: fields.dueDate || fields.due_date
         ? String(fields.dueDate || fields.due_date)
         : undefined,
+      relatedPeople: this.normalizeStringArray(
+        fields.relatedPeople || fields.related_people
+      ),
     };
   }
 

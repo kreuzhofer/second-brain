@@ -146,6 +146,8 @@ export class IndexService {
     if (entries.length === 0) return '';
 
     const pending = entries.filter((entry) => entry.status === 'pending');
+    const done = entries.filter((entry) => entry.status === 'done');
+    const maxDoneEntries = 20;
 
     pending.sort((a, b) => {
       if (!a.due_date) return 1;
@@ -153,15 +155,39 @@ export class IndexService {
       return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
     });
 
-    let section = `## Admin – Pending (${pending.length})\n\n| Task | Due |\n| --- | --- |\n`;
+    let section = '';
 
-    for (const entry of pending) {
-      const name = `[${entry.name}](${entry._path})`;
-      const due = entry.due_date || '';
-      section += `| ${name} | ${due} |\n`;
+    if (pending.length > 0) {
+      section += `## Admin – Pending (${pending.length})\n\n| Task | Due |\n| --- | --- |\n`;
+
+      for (const entry of pending) {
+        const name = `[${entry.name}](${entry._path})`;
+        const due = entry.due_date || '';
+        section += `| ${name} | ${due} |\n`;
+      }
+
+      section += '\n';
     }
 
-    return section + '\n';
+    if (done.length > 0) {
+      const sortedDone = [...done].sort((a, b) => {
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      });
+      const recentDone = sortedDone.slice(0, maxDoneEntries);
+      const countLabel = done.length > maxDoneEntries
+        ? `${recentDone.length} of ${done.length}`
+        : `${recentDone.length}`;
+
+      section += `## Admin – Done (recent ${countLabel})\n\n| Task | Updated |\n| --- | --- |\n`;
+      for (const entry of recentDone) {
+        const name = `[${entry.name}](${entry._path})`;
+        const updated = entry.updated_at ? entry.updated_at.split('T')[0] : '';
+        section += `| ${name} | ${updated} |\n`;
+      }
+      section += '\n';
+    }
+
+    return section;
   }
 
   private generateInboxSection(entries: Array<EntrySummary & { _path: string }>): string {

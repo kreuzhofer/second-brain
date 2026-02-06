@@ -28,7 +28,6 @@ export class ActionExtractionError extends Error {
 }
 
 const DEFAULT_TIMEOUT_MS = 12000;
-const ACTION_MODEL = 'gpt-4o-mini';
 
 const ACTION_SYSTEM_PROMPT = `You extract concrete, actionable next steps from a user's text.
 Return JSON only. If there are no clear actions, return an empty actions array.
@@ -52,11 +51,13 @@ Output format:
 export class ActionExtractionService {
   private openai: OpenAI;
   private timeoutMs: number;
+  private model: string;
 
   constructor(openaiClient?: OpenAI, timeoutMs?: number) {
     const config = getConfig();
     this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY });
     this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.model = config.OPENAI_MODEL_ACTION_EXTRACTION || 'gpt-4o-mini';
   }
 
   async extractActions(
@@ -80,7 +81,7 @@ export class ActionExtractionService {
     const today = getCurrentDateString();
     const systemPrompt = `${ACTION_SYSTEM_PROMPT}\nToday's date is ${today}. Convert relative due dates to YYYY-MM-DD.`;
     const request = this.openai.chat.completions.create({
-      model: ACTION_MODEL,
+      model: this.model,
       messages: [
         { role: 'system', content: systemPrompt },
         {

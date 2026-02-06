@@ -47,7 +47,7 @@ describe('Category Field Extraction - Property Tests', () => {
    * - people: context, followUps, relatedProjects
    * - projects: status, nextAction, relatedPeople (dueDate optional)
    * - ideas: oneLiner, relatedProjects
-   * - admin: status (dueDate optional)
+   * - admin: status, relatedPeople (dueDate optional)
    * 
    * **Validates: Requirements 3.6**
    */
@@ -162,9 +162,10 @@ describe('Category Field Extraction - Property Tests', () => {
       fc.assert(
         fc.property(rawFieldsArbitrary, (rawFields) => {
           const fields = extractCategoryFields('admin', rawFields as Record<string, unknown>);
-          const adminFields = fields as { status: string };
+          const adminFields = fields as { status: string; relatedPeople: string[] };
           
           expect(adminFields.status).toBe('pending');
+          expect(Array.isArray(adminFields.relatedPeople)).toBe(true);
         }),
         { numRuns: 50 }
       );

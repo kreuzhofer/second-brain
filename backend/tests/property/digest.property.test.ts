@@ -529,6 +529,50 @@ describe('DigestService - Weekly Review Properties', () => {
       );
     });
   });
+
+  /**
+   * Property 10: Weekly Momentum Tip Appears When Provided
+   * Validates: Requirements 2.7
+   */
+  describe('Property 10: Weekly Momentum Tip Appears When Provided', () => {
+    it('should include the weekly momentum tip section when provided', () => {
+      fc.assert(
+        fc.property(
+          activityStatsArbitrary,
+          fc.array(openLoopArbitrary, { minLength: 0, maxLength: 3 }),
+          fc.array(suggestionArbitrary, { minLength: 0, maxLength: 3 }),
+          fc.string({ minLength: 10, maxLength: 100 }),
+          fc.string({ minLength: 5, maxLength: 60 }),
+          (stats, openLoops, suggestions, theme, tip) => {
+            const startDate = new Date('2026-01-20');
+            const endDate = new Date('2026-01-26');
+
+            const review = digestService.formatWeeklyReview(
+              startDate,
+              endDate,
+              stats,
+              openLoops,
+              suggestions,
+              theme,
+              tip
+            );
+
+            expect(review).toContain('**Weekly Momentum Tip:**');
+            expect(review).toContain(tip);
+
+            const suggestedIndex = review.indexOf('**Suggested Focus for Next Week:**');
+            const tipIndex = review.indexOf('**Weekly Momentum Tip:**');
+            const themeIndex = review.indexOf('**Theme I Noticed:**');
+            expect(suggestedIndex).toBeLessThan(tipIndex);
+            expect(tipIndex).toBeLessThan(themeIndex);
+
+            return true;
+          }
+        ),
+        { numRuns: 10 }
+      );
+    });
+  });
 });
 
 // ============================================

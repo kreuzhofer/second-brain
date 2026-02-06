@@ -92,6 +92,8 @@ export class ChatService {
   private toolExecutor: ToolExecutor;
   private openai: OpenAI;
   private confidenceThreshold: number;
+  private toolCallModel: string;
+  private finalResponseModel: string;
 
   constructor(
     conversationService?: ConversationService,
@@ -113,6 +115,8 @@ export class ChatService {
     this.toolExecutor = toolExecutor ?? getToolExecutor();
     this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY });
     this.confidenceThreshold = config.CONFIDENCE_THRESHOLD;
+    this.toolCallModel = config.OPENAI_MODEL_CHAT_TOOL_CALL || 'gpt-4o-mini';
+    this.finalResponseModel = config.OPENAI_MODEL_CHAT_FINAL_RESPONSE || 'gpt-4o-mini';
   }
 
   /**
@@ -198,7 +202,7 @@ export class ChatService {
 
     // 7. Call OpenAI with tools parameter
     let response = await this.openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: this.toolCallModel,
       messages,
       tools,
       tool_choice: 'auto'
@@ -208,6 +212,7 @@ export class ChatService {
     const toolCalls = response.choices[0]?.message?.tool_calls;
     const toolsUsed: string[] = [];
     let entryInfo: { path: string; category: Category; name: string; confidence: number } | undefined;
+    const toolErrors: Array<{ name: string; error: string }> = [];
 
     // 8. Handle tool_calls response by executing tools via ToolExecutor
     if (toolCalls && toolCalls.length > 0) {
@@ -245,6 +250,10 @@ export class ChatService {
           { channel, context }
         );
 
+        if (!result.success && result.error) {
+          toolErrors.push({ name: toolName, error: result.error });
+        }
+
         // If this was classify_and_capture and it succeeded, capture entry info
         if (toolName === 'classify_and_capture' && result.success && result.data) {
           const captureResult = result.data as CaptureResult;
@@ -265,22 +274,38 @@ export class ChatService {
         });
       }
 
+      const shouldAttemptReopenFallback = this.shouldAttemptReopenFallback(message, toolErrors);
+      if (shouldAttemptReopenFallback) {
+        const fallbackMessage = await this.buildReopenFallbackMessage(message);
+        if (fallbackMessage) {
+          assistantMessageContent = fallbackMessage;
+        }
+      }
+
       // 9. Send tool results back to OpenAI for final response
-      const messagesWithToolResults: OpenAI.Chat.ChatCompletionMessageParam[] = [
-        ...messages,
-        response.choices[0].message,
-        ...toolResults
-      ];
+      if (!assistantMessageContent || !this.isReopenFallbackMessage(assistantMessageContent)) {
+        const messagesWithToolResults: OpenAI.Chat.ChatCompletionMessageParam[] = [
+          ...messages,
+          response.choices[0].message,
+          ...toolResults
+        ];
 
-      const finalResponse = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: messagesWithToolResults
-      });
+        const finalResponse = await this.openai.chat.completions.create({
+          model: this.finalResponseModel,
+          messages: messagesWithToolResults
+        });
 
-      assistantMessageContent = finalResponse.choices[0]?.message?.content || '';
+        assistantMessageContent = finalResponse.choices[0]?.message?.content || '';
+      }
     }
 
     // 10. Handle conversational response (no tools) - content is already set
+    if ((!toolCalls || toolCalls.length === 0) && this.shouldAttemptReopenFallback(message, toolErrors)) {
+      const fallbackMessage = await this.buildReopenFallbackMessage(message);
+      if (fallbackMessage) {
+        assistantMessageContent = fallbackMessage;
+      }
+    }
 
     // Ensure we have content
     if (!assistantMessageContent) {
@@ -345,6 +370,91 @@ export class ChatService {
     }
 
     return parts.join('\n');
+  }
+
+  private shouldAttemptReopenFallback(
+    message: string,
+    toolErrors: Array<{ name: string; error: string }>
+  ): boolean {
+    if (!this.isReopenIntent(message)) {
+      return false;
+    }
+    if (toolErrors.length === 0) {
+      return true;
+    }
+    return toolErrors.some((err) => /not found/i.test(err.error));
+  }
+
+  private isReopenIntent(message: string): boolean {
+    const text = message.toLowerCase();
+    return [
+      'reopen',
+      're-open',
+      'bring back',
+      'undo',
+      'unmark',
+      'mark back',
+      'set back',
+      'restore',
+      'put back',
+      'move back'
+    ].some((phrase) => text.includes(phrase))
+      || /mark\s+.*(pending|todo|to do|in progress)/i.test(message);
+  }
+
+  private tokenize(text: string): string[] {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .split(' ')
+      .filter((token) => token.length > 1);
+  }
+
+  private scoreEntryMatch(message: string, entryName: string): number {
+    const messageTokens = new Set(this.tokenize(message));
+    const entryTokens = this.tokenize(entryName);
+    const overlap = entryTokens.filter((token) => messageTokens.has(token)).length;
+    const messageLower = message.toLowerCase();
+    const entryLower = entryName.toLowerCase();
+    const substringBoost = messageLower.includes(entryLower) ? entryTokens.length + 2 : 0;
+    return Math.max(overlap, substringBoost);
+  }
+
+  private async buildReopenFallbackMessage(message: string): Promise<string | null> {
+    const doneTasks = await this.entryService.list('admin', { status: 'done' });
+    if (doneTasks.length === 0) {
+      return null;
+    }
+
+    const scored = doneTasks
+      .map((entry) => ({
+        entry,
+        score: this.scoreEntryMatch(message, entry.name)
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    if (scored.length === 0) {
+      return null;
+    }
+
+    const top = scored[0];
+    const second = scored[1];
+    const isClearWinner = !second || top.score > second.score;
+
+    if (isClearWinner) {
+      return `I found a completed task that looks like a match: "${top.entry.name}" (${top.entry.path}). Want me to set it back to pending?`;
+    }
+
+    const topCandidates = scored.slice(0, 3);
+    const list = topCandidates
+      .map((item, index) => `${index + 1}. ${item.entry.name} (${item.entry.path})`)
+      .join('\n');
+    return `I found multiple completed tasks that could match. Which one should I reopen?\n${list}`;
+  }
+
+  private isReopenFallbackMessage(message: string): boolean {
+    return message.startsWith('I found a completed task') || message.startsWith('I found multiple completed tasks');
   }
 
   /**
@@ -627,7 +737,7 @@ export class ChatService {
     // Get the name for the new entry
     const name = existingEntry.name || existingEntry.suggested_name || 'untitled';
     const slug = generateSlug(name);
-    const newPath = `${targetCategory}/${slug}.md`;
+    const newPath = `${targetCategory}/${slug}`;
 
     // Transform fields for the new category
     const transformedData = this.transformFieldsForCategory(

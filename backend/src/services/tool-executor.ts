@@ -23,6 +23,8 @@ import { IndexService, getIndexService } from './index.service';
 import { ActionExtractionService, getActionExtractionService } from './action-extraction.service';
 import { DuplicateService, getDuplicateService, DuplicateHit } from './duplicate.service';
 import { OfflineQueueService, getOfflineQueueService } from './offline-queue.service';
+import { EntryLinkService, getEntryLinkService } from './entry-link.service';
+import { IntentAnalysisService, getIntentAnalysisService, UpdateIntentAnalysis } from './intent-analysis.service';
 import { CLASSIFICATION_SYSTEM_PROMPT } from './context.service';
 import { 
   Category, 
@@ -36,7 +38,7 @@ import {
   BodyContentUpdate,
   BodyContentMode
 } from '../types/entry.types';
-import { ContextWindow, ClassificationResult } from '../types/chat.types';
+import { ContextWindow, ClassificationResult, AdminFields } from '../types/chat.types';
 import { getConfig } from '../config/env';
 import { normalizeDueDate } from '../utils/date';
 
@@ -115,6 +117,7 @@ export interface UpdateEntryResult {
   updatedFields: string[];
   bodyUpdated?: boolean;
   bodyMode?: BodyContentMode;
+  warnings?: string[];
 }
 
 /**
@@ -179,6 +182,8 @@ export class ToolExecutor {
   private actionExtractionService?: ActionExtractionService;
   private duplicateService?: DuplicateService;
   private offlineQueueService?: OfflineQueueService;
+  private entryLinkService?: EntryLinkService;
+  private intentAnalysisService?: IntentAnalysisService;
 
   constructor(
     toolRegistry?: ToolRegistry,
@@ -189,7 +194,9 @@ export class ToolExecutor {
     indexService?: IndexService,
     actionExtractionService?: ActionExtractionService,
     duplicateService?: DuplicateService,
-    offlineQueueService?: OfflineQueueService
+    offlineQueueService?: OfflineQueueService,
+    entryLinkService?: EntryLinkService,
+    intentAnalysisService?: IntentAnalysisService
   ) {
     this.toolRegistry = toolRegistry || getToolRegistry();
     this.entryService = entryService || getEntryService();
@@ -200,6 +207,8 @@ export class ToolExecutor {
     this.actionExtractionService = actionExtractionService;
     this.duplicateService = duplicateService;
     this.offlineQueueService = offlineQueueService;
+    this.entryLinkService = entryLinkService || getEntryLinkService();
+    this.intentAnalysisService = intentAnalysisService;
   }
 
   /**
@@ -239,7 +248,7 @@ export class ToolExecutor {
           return await this.handleGenerateDigest(args);
         
         case 'update_entry':
-          return await this.handleUpdateEntry(args, channel);
+          return await this.handleUpdateEntry(args, channel, context);
         
         case 'move_entry':
           return await this.handleMoveEntry(args, channel);
@@ -294,6 +303,13 @@ export class ToolExecutor {
       this.offlineQueueService = getOfflineQueueService();
     }
     return this.offlineQueueService;
+  }
+
+  private getIntentAnalysisService(): IntentAnalysisService {
+    if (!this.intentAnalysisService) {
+      this.intentAnalysisService = getIntentAnalysisService();
+    }
+    return this.intentAnalysisService;
   }
 
   /**
@@ -398,6 +414,17 @@ export class ToolExecutor {
       ));
 
       createdEntry = await this.entryService.create(targetCategory, entryData, channel, bodyContent);
+
+      if (targetCategory === 'admin' && this.entryLinkService) {
+        const adminFields = classificationResult.fields as AdminFields;
+        if (adminFields.relatedPeople && adminFields.relatedPeople.length > 0) {
+          await this.entryLinkService.linkPeopleForEntry(
+            createdEntry,
+            adminFields.relatedPeople,
+            channel
+          );
+        }
+      }
     }
 
     // 6. Return CaptureResult
@@ -563,10 +590,20 @@ export class ToolExecutor {
    * @param args - Tool arguments { path: string, updates?: object, body_content?: object }
    * @returns ToolResult with UpdateEntryResult data
    */
-  private async handleUpdateEntry(args: Record<string, unknown>, channel: Channel): Promise<ToolResult> {
+  private async handleUpdateEntry(
+    args: Record<string, unknown>,
+    channel: Channel,
+    context?: ContextWindow
+  ): Promise<ToolResult> {
     const path = args.path as string;
-    const updates = (args.updates as Record<string, unknown>) || {};
+    let updates = (args.updates as Record<string, unknown>) || {};
     const bodyContentArg = args.body_content as { content: string; mode: string; section?: string } | undefined;
+    const warnings: string[] = [];
+    const lastUserMessage = context?.recentMessages
+      ?.slice()
+      .reverse()
+      .find((msg) => msg.role === 'user');
+    let intentAnalysis: UpdateIntentAnalysis | undefined;
 
     // Parse body_content into BodyContentUpdate if provided
     let bodyUpdate: BodyContentUpdate | undefined;
@@ -595,10 +632,62 @@ export class ToolExecutor {
       };
     }
 
-    // 1. Call entryService.update() with path, updates, and bodyUpdate
-    await this.entryService.update(path, updates, channel, bodyUpdate);
+    if (channel === 'chat' && lastUserMessage?.content) {
+      try {
+        intentAnalysis = await this.getIntentAnalysisService().analyzeUpdateIntent({
+          message: lastUserMessage.content,
+          path,
+          updates,
+          hasBodyUpdate: Boolean(bodyUpdate)
+        });
+      } catch {
+        warnings.push('Intent analysis unavailable; used heuristic parsing for update intent.');
+      }
+    }
 
-    // 2. Return UpdateEntryResult with path, updated fields, and body update info
+    if (!('name' in updates) && !('suggested_name' in updates)) {
+      if (intentAnalysis?.title) {
+        updates = { ...updates, name: intentAnalysis.title };
+      } else {
+        const inferredEdits = this.inferTitleAndNoteFromContext(context);
+        if (inferredEdits.title) {
+          updates = { ...updates, name: inferredEdits.title };
+        }
+        if (!bodyUpdate && inferredEdits.note) {
+          bodyUpdate = { content: inferredEdits.note, mode: 'append' };
+        }
+      }
+    }
+    if (!bodyUpdate && intentAnalysis?.note) {
+      bodyUpdate = { content: intentAnalysis.note, mode: 'append' };
+    }
+
+    const statusWarning = this.getStatusUpdateWarning(updates, context, channel, intentAnalysis);
+    if (statusWarning) {
+      const { status: _status, ...rest } = updates as Record<string, unknown>;
+      updates = rest;
+      warnings.push(statusWarning);
+    }
+
+    // 1. Call entryService.update() with path, updates, and bodyUpdate
+    const updatedEntry = await this.entryService.update(path, updates, channel, bodyUpdate);
+
+    // 2. Link related people for admin tasks when provided in updates
+    if (this.entryLinkService && updatedEntry.category === 'admin') {
+      const relatedPeople = (updates as any).related_people ?? (updates as any).relatedPeople;
+      const inferred = this.inferRelatedPeopleFromUpdate(
+        updatedEntry,
+        relatedPeople,
+        bodyUpdate,
+        context,
+        intentAnalysis?.relatedPeople
+      );
+      if (inferred.length > 0) {
+        await this.entryLinkService.linkPeopleForEntry(updatedEntry, inferred, channel);
+      }
+    }
+
+    // 3. Return UpdateEntryResult with path, updated fields, and body update info
     const result: UpdateEntryResult = {
       path,
       updatedFields: Object.keys(updates)
@@ -608,6 +697,9 @@ export class ToolExecutor {
     if (bodyUpdate) {
       result.bodyUpdated = true;
       result.bodyMode = bodyUpdate.mode;
+    }
+    if (warnings.length > 0) {
+      result.warnings = warnings;
     }
 
     return {
@@ -668,6 +760,208 @@ export class ToolExecutor {
       success: true,
       data: result
     };
+  }
+
+  private inferRelatedPeopleFromUpdate(
+    updatedEntry: EntryWithPath,
+    relatedPeople: unknown,
+    bodyUpdate: BodyContentUpdate | undefined,
+    context?: ContextWindow,
+    intentPeople?: string[]
+  ): string[] {
+    if (Array.isArray(relatedPeople) && relatedPeople.length > 0) {
+      return relatedPeople;
+    }
+
+    const textCandidates: string[] = [];
+    const entryName = (updatedEntry.entry as { name?: string })?.name;
+    if (entryName) textCandidates.push(entryName);
+    if (bodyUpdate?.content) textCandidates.push(bodyUpdate.content);
+
+    const lastUserMessage = context?.recentMessages
+      ?.slice()
+      .reverse()
+      .find((msg) => msg.role === 'user');
+    if (lastUserMessage?.content) {
+      textCandidates.push(lastUserMessage.content);
+    }
+
+    const extracted = new Set<string>();
+    for (const person of intentPeople || []) {
+      if (typeof person === 'string' && person.trim()) {
+        extracted.add(person.trim());
+      }
+    }
+    for (const text of textCandidates) {
+      for (const name of this.extractPersonNames(text)) {
+        extracted.add(name);
+      }
+    }
+
+    return Array.from(extracted);
+  }
+
+  private inferTitleAndNoteFromContext(context?: ContextWindow): { title?: string; note?: string } {
+    const lastUserMessage = context?.recentMessages
+      ?.slice()
+      .reverse()
+      .find((msg) => msg.role === 'user');
+    if (!lastUserMessage?.content) {
+      return {};
+    }
+
+    const message = lastUserMessage.content;
+    const titleFromQuotes = this.extractQuotedPhrase(
+      message,
+      /(update|rename|change)(?:\s+the)?(?:\s+(?:entry|task|item))?(?:\s+(?:title|name))?\s+(?:to|as)\s+["“]([^"”]+)["”]/i
+    );
+    const noteFromQuotes = this.extractQuotedPhrase(
+      message,
+      /(add|append|include)\s+(?:a\s+)?note(?:\s+that|\s+to)?\s+["“]([^"”]+)["”]/i
+    );
+
+    let title = titleFromQuotes;
+    let note = noteFromQuotes;
+
+    if (!title) {
+      const titleMatch = message.match(
+        /(update|rename|change)(?:\s+the)?(?:\s+(?:entry|task|item))?(?:\s+(?:title|name))?\s+(?:to|as)\s+([^.]+)(?:\.|$)/i
+      );
+      if (titleMatch?.[2]) {
+        title = titleMatch[2].trim();
+      }
+    }
+
+    if (!note) {
+      const noteMatch = message.match(
+        /(add|append|include)\s+(?:a\s+)?note(?:\s+that|\s+to)?\s+(.+)$/i
+      );
+      if (noteMatch?.[2]) {
+        note = noteMatch[2].trim();
+      }
+    }
+
+    if (title) {
+      title = title.replace(/\s+$/g, '');
+    }
+    if (note) {
+      note = note.replace(/\s+$/g, '').replace(/\.$/, '');
+    }
+
+    if (title && note && title === note) {
+      note = undefined;
+    }
+
+    return { title, note };
+  }
+
+  private getStatusUpdateWarning(
+    updates: Record<string, unknown>,
+    context: ContextWindow | undefined,
+    channel: Channel,
+    intentAnalysis?: UpdateIntentAnalysis
+  ): string | null {
+    if (!('status' in updates)) return null;
+    if (channel !== 'chat') return null;
+    if (intentAnalysis) {
+      if (intentAnalysis.statusChangeRequested) {
+        return null;
+      }
+      return 'Status update ignored because the user did not request a status change.';
+    }
+    const lastUserMessage = context?.recentMessages
+      ?.slice()
+      .reverse()
+      .find((msg) => msg.role === 'user');
+    if (!lastUserMessage?.content) {
+      return 'Status update ignored because no user message context was available.';
+    }
+    const text = lastUserMessage.content.toLowerCase();
+    const statusKeywords = [
+      'mark done',
+      'done',
+      'completed',
+      'complete',
+      'finished',
+      'reopen',
+      'pending',
+      'active',
+      'waiting',
+      'blocked'
+    ];
+    if (statusKeywords.some((keyword) => text.includes(keyword))) {
+      return null;
+    }
+    return 'Status update ignored because the user did not request a status change.';
+  }
+
+  private extractQuotedPhrase(text: string, regex: RegExp): string | undefined {
+    const match = text.match(regex);
+    if (!match?.[2]) {
+      return undefined;
+    }
+    return match[2].trim();
+  }
+
+  private extractPersonNames(text: string): string[] {
+    const results: string[] = [];
+    const verbs =
+      '(call|email|text|ping|meet|meeting with|meet with|talk to|chat with|follow up with|follow up|schedule|remind|pay)';
+    const regex = new RegExp(`\\b${verbs}\\s+([a-z][a-z]+(?:\\s+[a-z][a-z]+){0,3})`, 'gi');
+    const stopwords = new Set([
+      'the',
+      'a',
+      'an',
+      'about',
+      'regarding',
+      're',
+      'with',
+      'task',
+      'project',
+      'item',
+      'note',
+      'my',
+      'his',
+      'her',
+      'their',
+      'your',
+      'our',
+      'apology',
+      'apologies',
+      'sorry',
+      'delay',
+      'delays'
+    ]);
+
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(text)) !== null) {
+      const raw = match[2];
+      const words = raw
+        .split(/\s+/)
+        .map((word) => word.trim())
+        .filter(Boolean)
+        .filter((word) => !stopwords.has(word.toLowerCase()));
+
+      if (words.length === 0) {
+        continue;
+      }
+
+      const hasCapitalized = words.some((word) => /^(?:[A-Z][a-z].*|[A-Z]{2,})$/.test(word));
+      if (!hasCapitalized) {
+        continue;
+      }
+
+      const normalized = words
+        .slice(0, 3)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+
+      if (normalized.length > 1) {
+        results.push(normalized);
+      }
+    }
+
+    return results;
   }
 
   /**

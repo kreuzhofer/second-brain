@@ -297,7 +297,7 @@ describe('ToolExecutor - Update Entry Application Properties', () => {
             .map(s => s.replace(/[^a-z0-9]/g, '-').toLowerCase())
             .filter(s => s.length >= 3),
           async (category, slug) => {
-            const nonExistentPath = `${category}/${slug}-nonexistent.md`;
+            const nonExistentPath = `${category}/${slug}-nonexistent`;
             
             // Call update_entry with non-existent path
             const result = await toolExecutor.execute({

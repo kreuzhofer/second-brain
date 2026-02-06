@@ -88,7 +88,7 @@ function parseEntryPath(path: string): { category: Category; slug: string } {
 }
 
 function buildEntryPath(category: Category, slug: string): string {
-  return `${category}/${slug}.md`;
+  return `${category}/${slug}`;
 }
 
 

@@ -49,6 +49,7 @@ const DEFAULT_IDEAS_FIELDS: IdeasFields = {
  */
 const DEFAULT_ADMIN_FIELDS: AdminFields = {
   status: 'pending',
+  relatedPeople: [],
 };
 
 /**
@@ -142,6 +143,7 @@ export function extractIdeasFields(rawFields: Record<string, unknown>): IdeasFie
 export function extractAdminFields(rawFields: Record<string, unknown>): AdminFields {
   const result: AdminFields = {
     status: 'pending',
+    relatedPeople: normalizeStringArray(rawFields.relatedPeople || rawFields.related_people),
   };
 
   // Add optional dueDate if present
@@ -218,7 +220,7 @@ export function isIdeasFields(fields: CategoryFields): fields is IdeasFields {
  */
 export function isAdminFields(fields: CategoryFields): fields is AdminFields {
   const f = fields as AdminFields;
-  return f.status === 'pending';
+  return f.status === 'pending' && Array.isArray(f.relatedPeople);
 }
 
 /**
@@ -233,7 +235,7 @@ export function getRequiredFieldKeys(category: Category): string[] {
     case 'ideas':
       return ['oneLiner', 'relatedProjects'];
     case 'admin':
-      return ['status'];
+      return ['status', 'relatedPeople'];
     default:
       return [];
   }

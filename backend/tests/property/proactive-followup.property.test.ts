@@ -54,7 +54,7 @@ const toEntrySummary = (person: {
   last_touched: string | null;
 }, index: number): EntrySummary => ({
   id: `person-${index}`,
-  path: `people/person-${index}.md`,
+  path: `people/person-${index}`,
   name: person.name,
   category: 'people' as Category,
   updated_at: new Date().toISOString()

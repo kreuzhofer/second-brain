@@ -164,7 +164,7 @@ export class EmbeddingBackfillService {
         processed += 1;
 
         try {
-          const full = await this.entryService.read(`${entry.category}/${entry.slug}.md`);
+          const full = await this.entryService.read(`${entry.category}/${entry.slug}`);
           const entryName = (full.entry as any).name
             ?? (full.entry as any).suggested_name
             ?? entry.title;
@@ -197,7 +197,7 @@ export class EmbeddingBackfillService {
           updated += 1;
         } catch (error) {
           errors += 1;
-          console.error(`Embedding backfill failed for ${entry.category}/${entry.slug}.md:`, error);
+          console.error(`Embedding backfill failed for ${entry.category}/${entry.slug}:`, error);
         }
 
         if (this.config.sleepMs > 0) {

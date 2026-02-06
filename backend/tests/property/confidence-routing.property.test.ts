@@ -84,7 +84,7 @@ const createMockEntryService = () => {
         || dataObj.suggested_name?.toLowerCase().replace(/[^a-z0-9]+/g, '-')
         || 'test-entry';
       return {
-        path: `${category}/${slug}.md`,
+        path: `${category}/${slug}`,
         category,
         entry: { 
           ...data, 

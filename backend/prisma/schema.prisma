@@ -58,6 +58,10 @@ enum Operation {
   move
 }
 
+enum EntryLinkType {
+  mention
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -78,6 +82,7 @@ model User {
   digestPreferences  DigestPreference[]
   dailyTipStates     DailyTipState[]
   offlineQueueItems  OfflineQueueItem[]
+  entryLinks         EntryLink[]
 }
 
 model Conversation {
@@ -243,6 +248,8 @@ model Entry {
   embedding         EntryEmbedding?
   auditLogs         EntryAuditLog[]
   focusSessions     FocusSession[]
+  outgoingLinks     EntryLink[] @relation("EntryLinkSource")
+  incomingLinks     EntryLink[] @relation("EntryLinkTarget")
 
   @@unique([userId, category, slug])
   @@index([userId, category])
@@ -356,6 +363,22 @@ model EntryEmbedding {
   vector    Unsupported("vector(3072)")
   hash      String
   updatedAt DateTime @updatedAt
+}
+
+model EntryLink {
+  id            String        @id @default(uuid())
+  userId        String?
+  user          User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceEntryId String
+  sourceEntry   Entry         @relation("EntryLinkSource", fields: [sourceEntryId], references: [id], onDelete: Cascade)
+  targetEntryId String
+  targetEntry   Entry         @relation("EntryLinkTarget", fields: [targetEntryId], references: [id], onDelete: Cascade)
+  type          EntryLinkType @default(mention)
+  createdAt     DateTime      @default(now())
+
+  @@unique([sourceEntryId, targetEntryId, type])
+  @@index([userId, sourceEntryId])
+  @@index([userId, targetEntryId])
 }
 
 model DigestPreference {

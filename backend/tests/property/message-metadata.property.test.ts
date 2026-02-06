@@ -244,7 +244,7 @@ describe('Property Tests: Message Metadata Persistence', () => {
           async (category, name, confidence) => {
             // Generate expected entry path
             const slug = generateSlug(name);
-            const expectedPath = `${category}/${slug}.md`;
+            const expectedPath = `${category}/${slug}`;
 
             // Create mocks
             const mockOpenAI = createMockOpenAI();
@@ -299,7 +299,7 @@ describe('Property Tests: Message Metadata Persistence', () => {
           async (category, name, confidence) => {
             // Generate expected entry path
             const slug = generateSlug(name);
-            const expectedPath = `${category}/${slug}.md`;
+            const expectedPath = `${category}/${slug}`;
 
             // Create mocks
             const mockOpenAI = createMockOpenAI();
@@ -355,7 +355,7 @@ describe('Property Tests: Message Metadata Persistence', () => {
           async (category, name, confidence) => {
             // Generate expected entry path
             const slug = generateSlug(name);
-            const expectedPath = `${category}/${slug}.md`;
+            const expectedPath = `${category}/${slug}`;
 
             // Create mocks
             const mockOpenAI = createMockOpenAI();

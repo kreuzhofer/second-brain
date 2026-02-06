@@ -41,7 +41,7 @@ export function InputBar({ onSend, disabled }: InputBarProps) {
   };
 
   return (
-    <div className="flex-shrink-0 border-t p-4">
+    <div className="flex-shrink-0 border-t p-3 sm:p-4">
       <div className="flex gap-2">
         <Input
           ref={inputRef}
@@ -64,7 +64,7 @@ export function InputBar({ onSend, disabled }: InputBarProps) {
           )}
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground mt-2">
+      <p className="text-[11px] sm:text-xs text-muted-foreground mt-2 leading-tight">
         Tip: Use [project], [person], [idea], or [task] to hint the category
       </p>
     </div>

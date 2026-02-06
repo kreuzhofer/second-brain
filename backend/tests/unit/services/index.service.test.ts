@@ -174,6 +174,21 @@ describe('IndexService', () => {
       expect(indexContent).toContain('2026-02-01');
     });
 
+    it('should include recently done admin tasks', async () => {
+      await entryService.create('admin', {
+        name: 'Finished Task',
+        status: 'done',
+        source_channel: 'api',
+        confidence: 0.99
+      });
+
+      await indexService.regenerate();
+      const indexContent = await indexService.getIndexContent();
+
+      expect(indexContent).toContain('## Admin – Done');
+      expect(indexContent).toContain('[Finished Task]');
+    });
+
     it('should list inbox items with correct columns', async () => {
       await entryService.create('inbox', {
         original_text: 'Something to review',

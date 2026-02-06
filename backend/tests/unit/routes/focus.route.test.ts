@@ -36,12 +36,12 @@ describe('focus routes', () => {
   });
 
   it('validates session payload', async () => {
-    const res = await request(app).post('/focus/sessions').send({ entryPath: 'admin/task.md' });
+    const res = await request(app).post('/focus/sessions').send({ entryPath: 'admin/task' });
     expect(res.status).toBe(400);
   });
 
   it('validates progress payload', async () => {
-    const res = await request(app).post('/focus/progress').send({ entryPath: 'admin/task.md' });
+    const res = await request(app).post('/focus/progress').send({ entryPath: 'admin/task' });
     expect(res.status).toBe(400);
   });
 

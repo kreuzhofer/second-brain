@@ -48,7 +48,7 @@ const indexContentArbitrary = fc.oneof(
     }),
     { minLength: 1, maxLength: 10 }
   ).map(entries => 
-    entries.map(e => `- ${e.category}/${e.name}.md`).join('\n')
+    entries.map(e => `- ${e.category}/${e.name}`).join('\n')
   )
 );
 

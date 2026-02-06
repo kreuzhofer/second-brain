@@ -17,6 +17,7 @@
 - `npm run docker:up` starts the full Docker stack; `docker compose up -d db` starts just PostgreSQL.
 - Any app changes require a Docker rebuild and redeploy: `docker compose up -d --build`.
 - Always run database migrations outside the sandbox (escalated command).
+- Run Prisma migrations non-interactively with an explicit `--name` (do not wait for prompts).
 
 ## Coding Style & Naming Conventions
 - TypeScript across backend and frontend; follow existing patterns and ESLint rules.

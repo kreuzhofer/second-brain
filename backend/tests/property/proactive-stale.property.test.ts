@@ -35,7 +35,7 @@ const projectArbitrary = fc.record({
   name: fc.string({ minLength: 1, maxLength: 50 }).filter(s => s.trim().length > 0),
   status: fc.constantFrom('active', 'waiting', 'blocked', 'someday', 'done'),
   updated_at: fc.date({ min: new Date('2020-01-01'), max: new Date() }).map(d => d.toISOString()),
-  path: fc.string({ minLength: 1, maxLength: 30 }).filter(s => /[a-zA-Z0-9]/.test(s)).map(s => `projects/${s.replace(/[^a-zA-Z0-9]/g, '-')}.md`)
+  path: fc.string({ minLength: 1, maxLength: 30 }).filter(s => /[a-zA-Z0-9]/.test(s)).map(s => `projects/${s.replace(/[^a-zA-Z0-9]/g, '-')}`)
 });
 
 /**
@@ -258,7 +258,7 @@ describe('Property Tests: Stale Project Detection', () => {
               // Only use statuses that won't be considered stale
               status: fc.constantFrom('someday', 'done'),
               updated_at: fc.date({ min: new Date('2020-01-01'), max: new Date() }).map(d => d.toISOString()),
-              path: fc.string({ minLength: 1, maxLength: 30 }).filter(s => /[a-zA-Z0-9]/.test(s)).map(s => `projects/${s.replace(/[^a-zA-Z0-9]/g, '-')}.md`)
+              path: fc.string({ minLength: 1, maxLength: 30 }).filter(s => /[a-zA-Z0-9]/.test(s)).map(s => `projects/${s.replace(/[^a-zA-Z0-9]/g, '-')}`)
             }),
             { minLength: 0, maxLength: 5 }
           ),
@@ -313,7 +313,7 @@ describe('Property Tests: Stale Project Detection', () => {
                 min: new Date('2020-01-01'), 
                 max: new Date('2022-01-01') 
               }).map(d => d.toISOString()),
-              path: fc.string({ minLength: 1, maxLength: 30 }).filter(s => /[a-zA-Z0-9]/.test(s)).map(s => `projects/${s.replace(/[^a-zA-Z0-9]/g, '-')}.md`)
+              path: fc.string({ minLength: 1, maxLength: 30 }).filter(s => /[a-zA-Z0-9]/.test(s)).map(s => `projects/${s.replace(/[^a-zA-Z0-9]/g, '-')}`)
             }),
             { minLength: 1, maxLength: 15 }
           ),
@@ -350,7 +350,7 @@ describe('Property Tests: Stale Project Detection', () => {
               name: fc.string({ minLength: 1, maxLength: 30 }).filter(s => /[a-zA-Z]/.test(s)).map(s => s.trim() || 'Project'),
               status: fc.constantFrom('active', 'waiting', 'blocked') as fc.Arbitrary<'active' | 'waiting' | 'blocked'>,
               daysSinceUpdate: fc.integer({ min: 15, max: 365 }),
-              path: fc.constant('projects/test.md')
+              path: fc.constant('projects/test')
             }),
             { minLength: 1, maxLength: 5 }
           ),
@@ -389,7 +389,7 @@ describe('Property Tests: Stale Project Detection', () => {
                 min: new Date('2020-01-01'), 
                 max: new Date('2023-01-01') 
               }).map(d => d.toISOString()),
-              path: fc.string({ minLength: 1, maxLength: 30 }).filter(s => /[a-zA-Z0-9]/.test(s)).map(s => `projects/${s.replace(/[^a-zA-Z0-9]/g, '-')}.md`)
+              path: fc.string({ minLength: 1, maxLength: 30 }).filter(s => /[a-zA-Z0-9]/.test(s)).map(s => `projects/${s.replace(/[^a-zA-Z0-9]/g, '-')}`)
             }),
             { minLength: 2, maxLength: 10 }
           ),
@@ -430,7 +430,7 @@ describe('Property Tests: Stale Project Detection', () => {
               name: fc.string({ minLength: 1, maxLength: 30 }).filter(s => /[a-zA-Z]/.test(s)).map(s => s.trim() || 'Project'),
               status: fc.constantFrom('active', 'waiting', 'blocked') as fc.Arbitrary<'active' | 'waiting' | 'blocked'>,
               daysSinceUpdate: fc.integer({ min: 15, max: 365 }),
-              path: fc.constant('projects/test.md')
+              path: fc.constant('projects/test')
             }),
             { minLength: 1, maxLength: 5 }
           ),

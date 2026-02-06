@@ -94,11 +94,11 @@ export function SearchPanel({ onEntryClick, variant = 'panel' }: SearchPanelProp
               handleSearch();
             }
           }}
-          className={variant === 'header' ? 'h-9' : undefined}
+          className={variant === 'header' ? 'h-11 sm:h-9' : undefined}
         />
       </div>
       <select
-        className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+        className="h-11 rounded-md border border-input bg-background px-3 text-base sm:h-9 sm:text-sm"
         value={category}
         onChange={(event) => setCategory(event.target.value as Category | 'all')}
       >
@@ -108,7 +108,7 @@ export function SearchPanel({ onEntryClick, variant = 'panel' }: SearchPanelProp
           </option>
         ))}
       </select>
-      <Button onClick={handleSearch} disabled={isLoading} className="h-9">
+      <Button onClick={handleSearch} disabled={isLoading} className="h-11 sm:h-9">
         {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
       </Button>
     </div>

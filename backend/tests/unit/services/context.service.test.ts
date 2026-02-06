@@ -167,13 +167,13 @@ describe('ContextAssembler', () => {
         conversation.id,
         'assistant',
         'Filed entry',
-        'projects/test.md',
+        'projects/test',
         0.85
       );
 
       const context = await contextAssembler.assemble(conversation.id);
 
-      expect(context.recentMessages[0].filedEntryPath).toBe('projects/test.md');
+      expect(context.recentMessages[0].filedEntryPath).toBe('projects/test');
       expect(context.recentMessages[0].filedConfidence).toBe(0.85);
     });
   });

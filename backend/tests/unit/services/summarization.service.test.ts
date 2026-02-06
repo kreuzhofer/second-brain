@@ -18,6 +18,7 @@ import {
 } from '../../../src/services/conversation.service';
 import { Message } from '../../../src/types/chat.types';
 import { TEST_USER_ID } from '../../setup';
+import { getConfig } from '../../../src/config/env';
 
 // Mock OpenAI
 const mockCreate = jest.fn();
@@ -93,7 +94,7 @@ describe('SummarizationService', () => {
           conversationId: 'conv-1',
           role: 'assistant',
           content: 'I\'ve created a new project entry for Website Redesign',
-          filedEntryPath: 'projects/website-redesign.md',
+          filedEntryPath: 'projects/website-redesign',
           filedConfidence: 0.85,
           createdAt: new Date('2024-01-01T10:01:00Z'),
         },
@@ -105,7 +106,7 @@ describe('SummarizationService', () => {
       expect(mockCreate).toHaveBeenCalledTimes(1);
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'gpt-4o-mini',
+          model: getConfig().OPENAI_MODEL_SUMMARIZATION,
           temperature: 0.3,
           max_tokens: 500,
         })
@@ -119,7 +120,7 @@ describe('SummarizationService', () => {
           conversationId: 'conv-1',
           role: 'assistant',
           content: 'Filed as a project',
-          filedEntryPath: 'projects/test.md',
+          filedEntryPath: 'projects/test',
           filedConfidence: 0.9,
           createdAt: new Date('2024-01-01T10:00:00Z'),
         },
@@ -130,7 +131,7 @@ describe('SummarizationService', () => {
       const callArgs = mockCreate.mock.calls[0][0];
       const userContent = callArgs.messages[1].content;
       
-      expect(userContent).toContain('projects/test.md');
+      expect(userContent).toContain('projects/test');
       expect(userContent).toContain('0.90');
     });
 

@@ -8,7 +8,7 @@ export const duplicatesRouter = Router();
 const VALID_CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'admin', 'inbox'];
 
 /**
- * GET /api/duplicates?path=projects/foo.md
+ * GET /api/duplicates?path=projects/foo
  */
 duplicatesRouter.get('/', async (req: Request, res: Response) => {
   try {

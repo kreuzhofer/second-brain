@@ -242,13 +242,13 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   return (
     <Card className="flex">
       <div className="flex-1 min-w-0">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6">
           <div className="flex items-center gap-2">
             {activeTab === 'ideas' && <Lightbulb className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'people' && <User className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'inbox' && <Inbox className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'recent' && <FileText className="h-4 w-4 text-muted-foreground" />}
-            <CardTitle className="text-lg font-medium">{title}</CardTitle>
+            <CardTitle className="text-base sm:text-lg font-medium">{title}</CardTitle>
           </div>
           <div className="flex items-center gap-2">
             {activeTab === 'focus' && (
@@ -256,7 +256,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 <button
                   type="button"
                   onClick={() => setFocusSort('overdue')}
-                  className={`px-2 py-1 text-[11px] uppercase tracking-wide ${
+                  className={`px-2 py-1 text-[10px] sm:text-[11px] uppercase tracking-wide ${
                     focusSort === 'overdue' ? 'bg-foreground text-background' : 'text-muted-foreground'
                   }`}
                 >
@@ -265,7 +265,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 <button
                   type="button"
                   onClick={() => setFocusSort('newest')}
-                  className={`px-2 py-1 text-[11px] uppercase tracking-wide ${
+                  className={`px-2 py-1 text-[10px] sm:text-[11px] uppercase tracking-wide ${
                     focusSort === 'newest' ? 'bg-foreground text-background' : 'text-muted-foreground'
                   }`}
                 >
@@ -278,20 +278,20 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 sm:space-y-4 p-3 sm:p-6 pt-0">
         {activeTab === 'focus' && (
           <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-3 text-xs text-muted-foreground">
-              <div className="rounded-md border border-border p-2">
-                <div className="text-lg font-semibold text-foreground">{activeProjects}</div>
+            <div className="flex flex-wrap gap-2 text-[11px] sm:text-xs text-muted-foreground">
+              <div className="rounded-md border border-border px-3 py-2">
+                <div className="text-sm font-semibold text-foreground">{activeProjects}</div>
                 <div>Active projects</div>
               </div>
-              <div className="rounded-md border border-border p-2">
-                <div className="text-lg font-semibold text-foreground">{pendingAdmin}</div>
+              <div className="rounded-md border border-border px-3 py-2">
+                <div className="text-sm font-semibold text-foreground">{pendingAdmin}</div>
                 <div>Pending tasks</div>
               </div>
-              <div className="rounded-md border border-border p-2">
-                <div className="text-lg font-semibold text-foreground">{inboxCount}</div>
+              <div className="rounded-md border border-border px-3 py-2">
+                <div className="text-sm font-semibold text-foreground">{inboxCount}</div>
                 <div>Inbox items</div>
               </div>
             </div>
@@ -313,7 +313,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 key={item.path}
                 type="button"
                 onClick={() => onEntryClick(item.path)}
-                className="w-full rounded-md border border-border p-3 text-left hover:bg-accent transition-colors"
+                className="w-full min-h-[44px] rounded-md border border-border p-2.5 sm:p-3 text-left hover:bg-accent transition-colors"
               >
                 <div className="flex items-center gap-2">
                   {item.category === 'admin' ? (
@@ -353,7 +353,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                     <li key={entry.path}>
                       <button
                         onClick={() => onEntryClick(entry.path)}
-                        className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors text-left"
+                        className="w-full min-h-[44px] flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors text-left"
                       >
                         <div className="flex-shrink-0 text-muted-foreground">
                           {getCategoryIcon(entry.category)}
@@ -399,7 +399,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
               </Button>
               <div className="flex gap-2 items-center">
                 <select
-                  className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+                  className="h-11 rounded-md border border-input bg-background px-2 text-base sm:h-9 sm:text-sm"
                   value={targetCategory}
                   onChange={(event) => setTargetCategory(event.target.value as Category)}
                 >
@@ -420,8 +420,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
 
             <div className="flex flex-col gap-2">
               <input
-                className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                placeholder="Merge into entry path (e.g., projects/project-a.md)"
+                className="h-11 rounded-md border border-input bg-background px-3 text-base sm:h-9 sm:text-sm"
+                placeholder="Merge into entry path (e.g., projects/project-a)"
                 value={targetPath}
                 onChange={(event) => setTargetPath(event.target.value)}
               />
@@ -438,9 +438,10 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
               <>
                 <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
                   {(inboxExpanded ? inboxItems : inboxItems.slice(0, Math.max(maxItems, 6))).map((entry) => (
-                    <div key={entry.path} className="flex gap-3 rounded-md border border-border p-3">
+                    <div key={entry.path} className="flex gap-3 rounded-md border border-border p-3 min-h-[44px]">
                       <input
                         type="checkbox"
+                        className="h-5 w-5"
                         checked={inboxSelected.has(entry.path)}
                         onChange={() => toggleInboxSelection(entry.path)}
                       />
@@ -480,57 +481,28 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
         )}
         </CardContent>
       </div>
-      <div className="sticky top-4 self-start mt-4 mr-3 flex flex-col gap-2 shrink-0">
-        <button
-          type="button"
-          onClick={() => setActiveTab('focus')}
-          className={`rounded-md border px-2 py-2 text-xs uppercase tracking-wider transition-colors ${
-            activeTab === 'focus' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground'
-          }`}
-          style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
-        >
-          Focus
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('ideas')}
-          className={`rounded-md border px-2 py-2 text-xs uppercase tracking-wider transition-colors ${
-            activeTab === 'ideas' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground'
-          }`}
-          style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
-        >
-          Ideas
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('people')}
-          className={`rounded-md border px-2 py-2 text-xs uppercase tracking-wider transition-colors ${
-            activeTab === 'people' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground'
-          }`}
-          style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
-        >
-          People
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('inbox')}
-          className={`rounded-md border px-2 py-2 text-xs uppercase tracking-wider transition-colors ${
-            activeTab === 'inbox' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground'
-          }`}
-          style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
-        >
-          Inbox
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('recent')}
-          className={`rounded-md border px-2 py-2 text-xs uppercase tracking-wider transition-colors ${
-            activeTab === 'recent' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground'
-          }`}
-          style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
-        >
-          Recent
-        </button>
+      <div className="sticky top-3 self-start mt-3 mr-2 lg:top-4 lg:mt-4 lg:mr-3 flex flex-col shrink-0 max-h-[calc(100vh-140px)]">
+        <div className="rounded-md border border-border overflow-hidden max-h-[calc(100vh-140px)] overflow-y-auto">
+          {([
+            { key: 'focus', label: 'Focus' },
+            { key: 'ideas', label: 'Ideas' },
+            { key: 'people', label: 'People' },
+            { key: 'inbox', label: 'Inbox' },
+            { key: 'recent', label: 'Recent' }
+          ] as Array<{ key: typeof activeTab; label: string }>).map((tab, index, all) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center justify-center min-h-[44px] w-9 sm:w-10 px-1 py-2 text-[10px] uppercase tracking-wider transition-colors ${
+                activeTab === tab.key ? 'bg-foreground text-background' : 'bg-background text-muted-foreground'
+              } ${index < all.length - 1 ? 'border-b border-border' : ''}`}
+              style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
     </Card>
   );

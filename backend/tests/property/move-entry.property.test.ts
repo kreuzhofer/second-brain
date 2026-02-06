@@ -7,7 +7,7 @@
  * Tests correctness properties for move_entry tool behavior.
  * 
  * Property: For any valid entry path and target category, after calling move_entry:
- * - The entry SHALL exist at the new path `{targetCategory}/{slug}.md`
+ * - The entry SHALL exist at the new path `{targetCategory}/{slug}`
  * - The entry SHALL NOT exist at the original path
  * - The entry's frontmatter SHALL be transformed to match the target category schema
  */
@@ -124,7 +124,7 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
    * **Validates: Requirements 3.6**
    * 
    * For any valid entry path and target category, after calling move_entry:
-   * - The entry SHALL exist at the new path `{targetCategory}/{slug}.md`
+   * - The entry SHALL exist at the new path `{targetCategory}/{slug}`
    * - The entry SHALL NOT exist at the original path
    * - The entry's frontmatter SHALL be transformed to match the target category schema
    */
@@ -134,7 +134,7 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
      * Property 5.1: Entry exists at new path after move
      * **Validates: Requirements 3.6**
      */
-    it('should create entry at new path {targetCategory}/{slug}.md', async () => {
+    it('should create entry at new path {targetCategory}/{slug}', async () => {
       await fc.assert(
         fc.asyncProperty(
           differentCategoriesArbitrary,
@@ -146,7 +146,7 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
             const createdEntry = await entryService.create(sourceCategory, entryData);
             
             // Extract slug from original path
-            const originalSlug = createdEntry.path.split('/')[1].replace('.md', '');
+            const originalSlug = createdEntry.path.split('/')[1];
             
             // Call move_entry via ToolExecutor
             const moveResult = await toolExecutor.execute({
@@ -160,8 +160,8 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
             expect(moveResult.success).toBe(true);
             const moveData = moveResult.data as MoveEntryResult;
             
-            // Verify new path follows pattern {targetCategory}/{slug}.md
-            expect(moveData.newPath).toBe(`${targetCategory}/${originalSlug}.md`);
+            // Verify new path follows pattern {targetCategory}/{slug}
+            expect(moveData.newPath).toBe(`${targetCategory}/${originalSlug}`);
             expect(moveData.category).toBe(targetCategory);
             
             // Verify entry exists at new path using get_entry
@@ -386,8 +386,8 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
             // Verify newPath starts with target category
             expect(moveData.newPath.startsWith(`${targetCategory}/`)).toBe(true);
             
-            // Verify newPath ends with .md
-            expect(moveData.newPath.endsWith('.md')).toBe(true);
+            // Verify newPath does not end with .md
+            expect(moveData.newPath.endsWith('.md')).toBe(false);
             
             // Verify category matches target
             expect(moveData.category).toBe(targetCategory);
@@ -413,7 +413,7 @@ describe('ToolExecutor - Move Entry Path Change Properties', () => {
             .filter(s => s.length >= 3),
           async (sourceCategory, targetCategory, slug) => {
             await resetDatabase();
-            const nonExistentPath = `${sourceCategory}/${slug}-nonexistent.md`;
+            const nonExistentPath = `${sourceCategory}/${slug}-nonexistent`;
             
             // Call move_entry with non-existent path
             const result = await toolExecutor.execute({

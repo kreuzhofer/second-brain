@@ -18,7 +18,6 @@ export class EmbeddingError extends Error {
 }
 
 const DEFAULT_TIMEOUT_MS = 10000;
-const DEFAULT_MODEL = 'text-embedding-3-large';
 
 export class OpenAIEmbeddingService implements EmbeddingService {
   private openai: OpenAI;
@@ -29,7 +28,7 @@ export class OpenAIEmbeddingService implements EmbeddingService {
     const config = getConfig();
     this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY });
     this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.model = model ?? (process.env.EMBEDDING_MODEL || DEFAULT_MODEL);
+    this.model = model ?? config.OPENAI_MODEL_EMBEDDING ?? 'text-embedding-3-large';
   }
 
   async embed(text: string): Promise<number[]> {

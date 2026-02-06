@@ -8,7 +8,7 @@ describe('DuplicateService', () => {
       search: jest.fn().mockResolvedValue({
         entries: [
           {
-            path: 'projects/test.md',
+            path: 'projects/test',
             name: 'Test Project',
             category: 'projects',
             matchedField: 'semantic',
@@ -35,7 +35,7 @@ describe('DuplicateService', () => {
       search: jest.fn().mockResolvedValue({
         entries: [
           {
-            path: 'ideas/test-idea.md',
+            path: 'ideas/test-idea',
             name: 'Test Idea',
             category: 'ideas',
             matchedField: 'name',

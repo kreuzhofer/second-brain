@@ -54,6 +54,7 @@ export class OpenAIError extends Error {
 export class SummarizationService {
   private openai: OpenAI;
   private conversationService: ConversationService;
+  private model: string;
 
   constructor(
     openaiClient?: OpenAI,
@@ -62,6 +63,7 @@ export class SummarizationService {
     const config = getConfig();
     this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY });
     this.conversationService = conversationService ?? getConversationService();
+    this.model = config.OPENAI_MODEL_SUMMARIZATION || 'gpt-4o-mini';
   }
 
   /**
@@ -171,7 +173,7 @@ export class SummarizationService {
 
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: this.model,
         messages: [
           {
             role: 'system',

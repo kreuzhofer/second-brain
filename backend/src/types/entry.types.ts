@@ -90,6 +90,17 @@ export interface EntryWithPath {
   content: string;
 }
 
+export interface EntryLinkSummary {
+  path: string;
+  category: Category;
+  name: string;
+}
+
+export interface EntryLinksResponse {
+  outgoing: EntryLinkSummary[];
+  incoming: EntryLinkSummary[];
+}
+
 /**
  * Summary type for list operations
  */

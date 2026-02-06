@@ -110,7 +110,7 @@ describe('Chat Tools Integration', () => {
      */
     it('should execute classify_and_capture tool when LLM returns tool call', async () => {
       const toolCallId = 'call_capture_123';
-      const expectedPath = 'projects/test-project.md';
+      const expectedPath = 'projects/test-project';
       const expectedCategory: Category = 'projects';
       const expectedName = 'Test Project';
       const expectedConfidence = 0.85;
@@ -380,8 +380,8 @@ describe('Chat Tools Integration', () => {
       // Mock data for list_entries result
       const listEntriesResult: ListEntriesResult = {
         entries: [
-          { id: 'entry-project-a', path: 'projects/project-a.md', name: 'Project A', category: 'projects' as Category, updated_at: '2024-01-01T00:00:00Z' },
-          { id: 'entry-project-b', path: 'projects/project-b.md', name: 'Project B', category: 'projects' as Category, updated_at: '2024-01-01T00:00:00Z' }
+          { id: 'entry-project-a', path: 'projects/project-a', name: 'Project A', category: 'projects' as Category, updated_at: '2024-01-01T00:00:00Z' },
+          { id: 'entry-project-b', path: 'projects/project-b', name: 'Project B', category: 'projects' as Category, updated_at: '2024-01-01T00:00:00Z' }
         ],
         total: 2
       };
@@ -389,7 +389,7 @@ describe('Chat Tools Integration', () => {
       // Mock data for get_entry result
       const getEntryResult: GetEntryResult = {
         entry: {
-          path: 'projects/project-a.md',
+          path: 'projects/project-a',
           category: 'projects' as Category,
           entry: {
             id: 'test-id-123',
@@ -436,7 +436,7 @@ describe('Chat Tools Integration', () => {
                           type: 'function',
                           function: {
                             name: 'get_entry',
-                            arguments: JSON.stringify({ path: 'projects/project-a.md' })
+                            arguments: JSON.stringify({ path: 'projects/project-a' })
                           }
                         }
                       ]
@@ -517,7 +517,7 @@ describe('Chat Tools Integration', () => {
       expect(mockToolExecutor.execute).toHaveBeenCalledWith(
         {
           name: 'get_entry',
-          arguments: { path: 'projects/project-a.md' }
+          arguments: { path: 'projects/project-a' }
         },
         {
           channel: 'chat',
@@ -551,7 +551,7 @@ describe('Chat Tools Integration', () => {
      */
     it('should send error back to LLM when tool execution fails', async () => {
       const toolCallId = 'call_get_error_123';
-      const errorMessage = 'Entry not found: projects/nonexistent.md';
+      const errorMessage = 'Entry not found: projects/nonexistent';
 
       // Create mock OpenAI that returns a tool call, then handles error
       let openAICallCount = 0;
@@ -573,7 +573,7 @@ describe('Chat Tools Integration', () => {
                         type: 'function',
                         function: {
                           name: 'get_entry',
-                          arguments: JSON.stringify({ path: 'projects/nonexistent.md' })
+                          arguments: JSON.stringify({ path: 'projects/nonexistent' })
                         }
                       }]
                     },
@@ -620,7 +620,7 @@ describe('Chat Tools Integration', () => {
       // Process message
       const response = await chatService.processMessageWithTools(
         null,
-        'Show me the project at projects/nonexistent.md'
+        'Show me the project at projects/nonexistent'
       );
 
       // Verify OpenAI was called twice (initial + after tool error)
@@ -648,6 +648,96 @@ describe('Chat Tools Integration', () => {
 
       // Verify no entry was created
       expect(response.entry).toBeUndefined();
+    });
+
+    it('should offer to reopen a completed admin task when update_entry fails', async () => {
+      const toolCallId = 'call_update_error_123';
+      const errorMessage = 'Entry not found: admin/finish-q4-2025-tax-report';
+
+      let openAICallCount = 0;
+      const mockOpenAI = {
+        chat: {
+          completions: {
+            create: jest.fn().mockImplementation(() => {
+              openAICallCount++;
+
+              if (openAICallCount === 1) {
+                return Promise.resolve({
+                  choices: [{
+                    message: {
+                      role: 'assistant',
+                      content: null,
+                      tool_calls: [{
+                        id: toolCallId,
+                        type: 'function',
+                        function: {
+                          name: 'update_entry',
+                          arguments: JSON.stringify({
+                            path: 'admin/finish-q4-2025-tax-report',
+                            updates: { status: 'pending' }
+                          })
+                        }
+                      }]
+                    },
+                    finish_reason: 'tool_calls'
+                  }]
+                });
+              }
+
+              return Promise.resolve({
+                choices: [{
+                  message: {
+                    role: 'assistant',
+                    content: 'Fallback should have prevented a second call.'
+                  },
+                  finish_reason: 'stop'
+                }]
+              });
+            })
+          }
+        }
+      } as unknown as OpenAI;
+
+      const mockToolExecutor = {
+        execute: jest.fn().mockResolvedValue({
+          success: false,
+          error: errorMessage
+        })
+      } as unknown as ToolExecutor;
+
+      const mockEntryService = createMockEntryService() as any;
+      mockEntryService.list.mockResolvedValue([
+        {
+          id: 'done-1',
+          path: 'admin/finish-q4-2025-tax-report',
+          name: 'Finish Q4 2025 Tax Report',
+          category: 'admin',
+          updated_at: new Date().toISOString(),
+          status: 'done'
+        }
+      ]);
+
+      const chatService = new ChatService(
+        conversationService,
+        createMockContextAssembler(),
+        createMockClassificationAgent() as any,
+        createMockSummarizationService(),
+        mockEntryService,
+        getToolRegistry(),
+        mockToolExecutor,
+        mockOpenAI
+      );
+
+      const response = await chatService.processMessageWithTools(
+        null,
+        'Please bring back the task Finish Q4 2025 Tax Report'
+      );
+
+      expect(mockToolExecutor.execute).toHaveBeenCalledTimes(1);
+      expect(mockEntryService.list).toHaveBeenCalledWith('admin', { status: 'done' });
+      expect(openAICallCount).toBe(1);
+      expect(response.message.content).toContain('Finish Q4 2025 Tax Report');
+      expect(response.message.content.toLowerCase()).toContain('set it back to pending');
     });
 
     /**

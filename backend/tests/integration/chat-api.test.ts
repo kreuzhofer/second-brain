@@ -191,7 +191,7 @@ describe('Chat API Integration Tests', () => {
           conversationId: conversation.id,
           role: 'assistant',
           content: 'Filed your entry',
-          filedEntryPath: 'projects/test-project.md',
+          filedEntryPath: 'projects/test-project',
           filedConfidence: 0.85,
         },
       });
@@ -200,7 +200,7 @@ describe('Chat API Integration Tests', () => {
         .get(`/api/chat/conversations/${conversation.id}/messages`);
 
       expect(response.status).toBe(200);
-      expect(response.body.messages[0].filedEntryPath).toBe('projects/test-project.md');
+      expect(response.body.messages[0].filedEntryPath).toBe('projects/test-project');
       expect(response.body.messages[0].filedConfidence).toBe(0.85);
     });
   });

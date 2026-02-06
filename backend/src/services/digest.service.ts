@@ -107,16 +107,17 @@ export class DigestService {
       : { completedCount: 0 };
     
     // Daily momentum tip
-    let tip: string | undefined;
+    let tipResult: { tip: string; source: 'ai' | 'fallback' } | undefined;
     try {
-      tip = await this.dailyTipService.getNextTip();
+      tipResult = await this.dailyTipService.getNextTip('daily');
     } catch (error) {
       console.warn('DigestService: Failed to load daily tip', error);
-      tip = undefined;
+      tipResult = undefined;
     }
 
     // Format the digest
-    let digest = this.formatDailyDigest(topItems, staleItems, smallWins, tip);
+    const tipLabel = tipResult?.source === 'fallback' ? 'Daily Momentum Tip (fallback)' : 'Daily Momentum Tip';
+    let digest = this.formatDailyDigest(topItems, staleItems, smallWins, tipResult?.tip, tipLabel);
     if (prefs.maxWords) {
       digest = this.applyWordLimit(digest, prefs.maxWords);
     }
@@ -143,9 +144,28 @@ export class DigestService {
     
     // Identify theme
     const theme = prefs.includeTheme ? await this.identifyTheme(weekAgo, now, prefs) : 'Theme disabled for this digest.';
+
+    // Weekly momentum tip
+    let weeklyTipResult: { tip: string; source: 'ai' | 'fallback' } | undefined;
+    try {
+      weeklyTipResult = await this.dailyTipService.getNextTip('weekly');
+    } catch (error) {
+      console.warn('DigestService: Failed to load weekly tip', error);
+      weeklyTipResult = undefined;
+    }
     
     // Format the review
-    let review = this.formatWeeklyReview(weekAgo, now, stats, openLoops, suggestions, theme);
+    const weeklyTipLabel = weeklyTipResult?.source === 'fallback' ? 'Weekly Momentum Tip (fallback)' : 'Weekly Momentum Tip';
+    let review = this.formatWeeklyReview(
+      weekAgo,
+      now,
+      stats,
+      openLoops,
+      suggestions,
+      theme,
+      weeklyTipResult?.tip,
+      weeklyTipLabel
+    );
     if (prefs.maxWords) {
       review = this.applyWordLimit(review, prefs.maxWords);
     }
@@ -489,7 +509,8 @@ export class DigestService {
     topItems: TopItem[],
     staleItems: StaleInboxItem[],
     smallWins: { completedCount: number; nextTask?: string },
-    dailyTip?: string
+    dailyTip?: string,
+    dailyTipLabel: string = 'Daily Momentum Tip'
   ): string {
     const lines: string[] = [];
     
@@ -527,7 +548,7 @@ export class DigestService {
 
     if (dailyTip) {
       lines.push('');
-      lines.push('**Daily Momentum Tip:**');
+      lines.push(`**${dailyTipLabel}:**`);
       lines.push(`- ${dailyTip}`);
     }
 
@@ -547,7 +568,9 @@ export class DigestService {
     stats: ActivityStats,
     openLoops: OpenLoop[],
     suggestions: Suggestion[],
-    theme: string
+    theme: string,
+    weeklyTip?: string,
+    weeklyTipLabel: string = 'Weekly Momentum Tip'
   ): string {
     const lines: string[] = [];
     
@@ -588,6 +611,12 @@ export class DigestService {
       });
     }
     lines.push('');
+
+    if (weeklyTip) {
+      lines.push(`**${weeklyTipLabel}:**`);
+      lines.push(`- ${weeklyTip}`);
+      lines.push('');
+    }
 
     lines.push('**Theme I Noticed:**');
     lines.push(theme);

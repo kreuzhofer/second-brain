@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useEntries } from '@/state/entries';
+import { getMarkDoneButtonState } from './deep-focus-helpers';
 import {
   X,
   Play,
@@ -13,7 +14,8 @@ import {
   ThumbsUp,
   ThumbsDown,
   Volume2,
-  Timer
+  Timer,
+  Loader2
 } from 'lucide-react';
 
 const PRESET_MINUTES = [5, 10, 15, 20, 30, 45, 60];
@@ -45,6 +47,7 @@ export function DeepFocusView({ entry, onClose }: DeepFocusViewProps) {
   const [showProgressForm, setShowProgressForm] = useState(false);
   const [progressNote, setProgressNote] = useState('');
   const [updatingTitle, setUpdatingTitle] = useState(false);
+  const [isMarkingDone, setIsMarkingDone] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
@@ -70,6 +73,7 @@ export function DeepFocusView({ entry, onClose }: DeepFocusViewProps) {
       setStatusMessage(null);
       setShowProgressForm(false);
       setProgressNote('');
+      setIsMarkingDone(false);
       completedRef.current = false;
       loadTrack('auto');
     }
@@ -256,6 +260,8 @@ export function DeepFocusView({ entry, onClose }: DeepFocusViewProps) {
   };
 
   const handleMarkDone = async () => {
+    if (isMarkingDone) return;
+    setIsMarkingDone(true);
     try {
       const updated = await api.entries.update(entry.path, { status: 'done' });
       (entry.entry as any).status = updated.entry.status;
@@ -272,6 +278,8 @@ export function DeepFocusView({ entry, onClose }: DeepFocusViewProps) {
       void refresh();
     } catch (err) {
       setSessionError(err instanceof Error ? err.message : 'Failed to mark done');
+    } finally {
+      setIsMarkingDone(false);
     }
   };
 
@@ -336,6 +344,7 @@ export function DeepFocusView({ entry, onClose }: DeepFocusViewProps) {
 
   const title = String((entry.entry as any)?.name || 'Deep Focus');
   const notes = entry.content?.trim() || 'No notes yet.';
+  const markDoneState = getMarkDoneButtonState(isMarkingDone);
 
   const modal = (
     <div className="fixed inset-0 z-50 bg-background text-foreground">
@@ -376,7 +385,7 @@ export function DeepFocusView({ entry, onClose }: DeepFocusViewProps) {
                   <button
                     key={mins}
                     type="button"
-                    className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                    className={`min-h-[44px] rounded-md border px-2 py-1 text-xs font-medium ${
                       selectedMinutes === mins ? 'bg-foreground text-background' : 'text-muted-foreground'
                     }`}
                     onClick={() => {
@@ -405,7 +414,7 @@ export function DeepFocusView({ entry, onClose }: DeepFocusViewProps) {
                       }
                     }
                   }}
-                  className="h-9"
+                  className="h-11 sm:h-9"
                 />
                 <span className="text-xs text-muted-foreground">minutes</span>
               </div>
@@ -486,7 +495,12 @@ export function DeepFocusView({ entry, onClose }: DeepFocusViewProps) {
               <div className="rounded-2xl border border-border p-5 space-y-4 bg-muted/40">
                 <div className="text-sm font-medium">Session complete</div>
                 <div className="flex flex-wrap gap-2">
-                  <Button onClick={handleMarkDone}>Mark done</Button>
+                  <Button onClick={handleMarkDone} disabled={markDoneState.disabled} aria-busy={isMarkingDone}>
+                    {markDoneState.showSpinner && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    {markDoneState.label}
+                  </Button>
                   <Button variant="outline" onClick={() => setShowProgressForm((prev) => !prev)}>
                     Log progress
                   </Button>

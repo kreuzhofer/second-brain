@@ -5,7 +5,7 @@ describe('WebhookService', () => {
     const fetchMock = jest.fn();
     const service = new WebhookService({ urls: [] }, fetchMock as any);
 
-    await service.deliver(service.buildEvent('entry.created', { path: 'projects/test.md' }));
+    await service.deliver(service.buildEvent('entry.created', { path: 'projects/test' }));
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -17,7 +17,7 @@ describe('WebhookService', () => {
       fetchMock as any
     );
 
-    await service.deliver(service.buildEvent('entry.created', { path: 'projects/test.md' }));
+    await service.deliver(service.buildEvent('entry.created', { path: 'projects/test' }));
 
     const call = fetchMock.mock.calls[0];
     const headers = call[1].headers as Record<string, string>;
@@ -36,7 +36,7 @@ describe('WebhookService', () => {
       fetchMock as any
     );
 
-    await service.deliver(service.buildEvent('entry.updated', { path: 'projects/test.md' }));
+    await service.deliver(service.buildEvent('entry.updated', { path: 'projects/test' }));
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });

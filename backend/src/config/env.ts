@@ -16,6 +16,17 @@ export interface EnvConfig {
   // Optional with defaults
   TIMEZONE: string;
   PORT: number;
+
+  // OpenAI model configuration (optional with defaults)
+  OPENAI_MODEL_CHAT_TOOL_CALL: string;
+  OPENAI_MODEL_CHAT_FINAL_RESPONSE: string;
+  OPENAI_MODEL_CLASSIFICATION: string;
+  OPENAI_MODEL_SUMMARIZATION: string;
+  OPENAI_MODEL_ACTION_EXTRACTION: string;
+  OPENAI_MODEL_DAILY_TIP: string;
+  OPENAI_MODEL_FOCUS_CONGRATS: string;
+  OPENAI_MODEL_INTENT_ANALYSIS: string;
+  OPENAI_MODEL_EMBEDDING: string;
   
   // Chat configuration (optional with defaults)
   CONFIDENCE_THRESHOLD: number;
@@ -284,6 +295,17 @@ export function loadEnvConfig(): EnvConfig {
     JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '30d',
     TIMEZONE: process.env.TIMEZONE || 'Europe/Berlin',
     PORT: parseInt(process.env.PORT || '3000', 10),
+
+    // OpenAI model configuration
+    OPENAI_MODEL_CHAT_TOOL_CALL: process.env.OPENAI_MODEL_CHAT_TOOL_CALL || 'gpt-4o-mini',
+    OPENAI_MODEL_CHAT_FINAL_RESPONSE: process.env.OPENAI_MODEL_CHAT_FINAL_RESPONSE || 'gpt-4o-mini',
+    OPENAI_MODEL_CLASSIFICATION: process.env.OPENAI_MODEL_CLASSIFICATION || 'gpt-4o-mini',
+    OPENAI_MODEL_SUMMARIZATION: process.env.OPENAI_MODEL_SUMMARIZATION || 'gpt-4o-mini',
+    OPENAI_MODEL_ACTION_EXTRACTION: process.env.OPENAI_MODEL_ACTION_EXTRACTION || 'gpt-4o-mini',
+    OPENAI_MODEL_DAILY_TIP: process.env.OPENAI_MODEL_DAILY_TIP || 'gpt-4o-mini',
+    OPENAI_MODEL_FOCUS_CONGRATS: process.env.OPENAI_MODEL_FOCUS_CONGRATS || 'gpt-4o-mini',
+    OPENAI_MODEL_INTENT_ANALYSIS: process.env.OPENAI_MODEL_INTENT_ANALYSIS || 'gpt-4o-mini',
+    OPENAI_MODEL_EMBEDDING: process.env.OPENAI_MODEL_EMBEDDING || process.env.EMBEDDING_MODEL || 'text-embedding-3-large',
     
     // Chat configuration
     CONFIDENCE_THRESHOLD: parseFloat(process.env.CONFIDENCE_THRESHOLD || '0.6'),

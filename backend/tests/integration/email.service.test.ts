@@ -134,7 +134,7 @@ describe('EmailService Integration', () => {
         createdAt: new Date(),
       },
       entry: {
-        path: 'ideas/test-idea.md',
+        path: 'ideas/test-idea',
         category: 'ideas' as Category,
         name: 'Test Idea',
         confidence: 0.85,
@@ -173,7 +173,7 @@ describe('EmailService Integration', () => {
       
       expect(result.success).toBe(true);
       expect(result.conversationId).toBe('conv-1');
-      expect(result.entryPath).toBe('ideas/test-idea.md');
+      expect(result.entryPath).toBe('ideas/test-idea');
       expect(result.threadId).toBe('a1b2c3d4');
     });
 

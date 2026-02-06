@@ -16,6 +16,7 @@ interface MessageProps {
 
 export function Message({ message, onEntryClick }: MessageProps) {
   const isUser = message.role === 'user';
+  const displayPath = message.filedEntryPath?.replace(/\.md$/, '');
 
   return (
     <div
@@ -66,7 +67,7 @@ export function Message({ message, onEntryClick }: MessageProps) {
             )}
           >
             <FileText className="h-3 w-3" />
-            <span>{message.filedEntryPath}</span>
+            <span>{displayPath}</span>
             {message.filedConfidence !== undefined && (
               <span className="opacity-70">
                 ({Math.round(message.filedConfidence * 100)}%)

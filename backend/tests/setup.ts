@@ -54,7 +54,31 @@ async function ensureTestUser(): Promise<void> {
 }
 
 export async function resetDatabase(): Promise<void> {
-  await prisma.user.deleteMany({ where: { id: TEST_USER_ID } });
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('resetDatabase can only run when NODE_ENV is "test"');
+  }
+  await prisma.$transaction([
+    prisma.entryLink.deleteMany(),
+    prisma.entryEmbedding.deleteMany(),
+    prisma.entryRevision.deleteMany(),
+    prisma.entryLog.deleteMany(),
+    prisma.entrySection.deleteMany(),
+    prisma.entryTag.deleteMany(),
+    prisma.entryAuditLog.deleteMany(),
+    prisma.dailyTipState.deleteMany(),
+    prisma.offlineQueueItem.deleteMany(),
+    prisma.message.deleteMany(),
+    prisma.conversationSummary.deleteMany(),
+    prisma.conversation.deleteMany(),
+    prisma.projectDetails.deleteMany(),
+    prisma.adminTaskDetails.deleteMany(),
+    prisma.ideaDetails.deleteMany(),
+    prisma.personDetails.deleteMany(),
+    prisma.inboxDetails.deleteMany(),
+    prisma.focusSession.deleteMany(),
+    prisma.entry.deleteMany(),
+    prisma.tag.deleteMany()
+  ]);
   await ensureTestUser();
 }
 

@@ -18,6 +18,17 @@ export interface EntryWithPath {
   content: string;
 }
 
+export interface EntryLinkSummary {
+  path: string;
+  category: Category;
+  name: string;
+}
+
+export interface EntryLinksResponse {
+  outgoing: EntryLinkSummary[];
+  incoming: EntryLinkSummary[];
+}
+
 export interface EntrySummary {
   id: string;
   path: string;
@@ -226,6 +237,13 @@ class ApiClient {
      */
     get: async (path: string): Promise<EntryWithPath> => {
       return this.request<EntryWithPath>(`/entries/${path}`);
+    },
+
+    /**
+     * Get links for a single entry
+     */
+    links: async (path: string): Promise<EntryLinksResponse> => {
+      return this.request<EntryLinksResponse>(`/entries/${path}/links`);
     },
 
     /**

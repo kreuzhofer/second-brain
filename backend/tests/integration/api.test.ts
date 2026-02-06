@@ -103,7 +103,7 @@ describe('API Integration Tests', () => {
         })
         .expect(201);
 
-      expect(response.body.path).toBe('people/api-test-person.md');
+      expect(response.body.path).toBe('people/api-test-person');
       expect(response.body.entry.name).toBe('API Test Person');
     });
 
@@ -120,7 +120,7 @@ describe('API Integration Tests', () => {
         })
         .expect(201);
 
-      expect(response.body.path).toBe('projects/api-test-project.md');
+      expect(response.body.path).toBe('projects/api-test-project');
       expect(response.body.entry.status).toBe('active');
     });
 
@@ -207,7 +207,7 @@ describe('API Integration Tests', () => {
         });
 
       const response = await request(app)
-        .get('/api/entries/ideas/get-test-idea.md')
+        .get('/api/entries/ideas/get-test-idea')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
@@ -216,7 +216,7 @@ describe('API Integration Tests', () => {
 
     it('should return 404 for non-existent entry', async () => {
       const response = await request(app)
-        .get('/api/entries/people/non-existent.md')
+        .get('/api/entries/people/non-existent')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
 
@@ -239,7 +239,7 @@ describe('API Integration Tests', () => {
         });
 
       const response = await request(app)
-        .patch('/api/entries/admin/update-test-task.md')
+        .patch('/api/entries/admin/update-test-task')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           status: 'done'
@@ -249,9 +249,32 @@ describe('API Integration Tests', () => {
       expect(response.body.entry.status).toBe('done');
     });
 
+    it('should update entry notes content', async () => {
+      await request(app)
+        .post('/api/entries')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          category: 'projects',
+          name: 'Notes Update Project',
+          next_action: 'Add notes',
+          source_channel: 'api',
+          confidence: 0.9
+        });
+
+      const response = await request(app)
+        .patch('/api/entries/projects/notes-update-project')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          content: 'Updated notes from API test.'
+        })
+        .expect(200);
+
+      expect(response.body.content).toBe('Updated notes from API test.');
+    });
+
     it('should return 404 for non-existent entry', async () => {
       const response = await request(app)
-        .patch('/api/entries/admin/non-existent.md')
+        .patch('/api/entries/admin/non-existent')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           status: 'done'
@@ -263,7 +286,7 @@ describe('API Integration Tests', () => {
 
     it('should return 400 for empty update', async () => {
       const response = await request(app)
-        .patch('/api/entries/admin/update-test-task.md')
+        .patch('/api/entries/admin/update-test-task')
         .set('Authorization', `Bearer ${authToken}`)
         .send({})
         .expect(400);
@@ -287,20 +310,20 @@ describe('API Integration Tests', () => {
         });
 
       await request(app)
-        .delete('/api/entries/ideas/delete-test-idea.md')
+        .delete('/api/entries/ideas/delete-test-idea')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(204);
 
       // Verify it's deleted
       await request(app)
-        .get('/api/entries/ideas/delete-test-idea.md')
+        .get('/api/entries/ideas/delete-test-idea')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
     });
 
     it('should return 404 for non-existent entry', async () => {
       const response = await request(app)
-        .delete('/api/entries/ideas/non-existent.md')
+        .delete('/api/entries/ideas/non-existent')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
 

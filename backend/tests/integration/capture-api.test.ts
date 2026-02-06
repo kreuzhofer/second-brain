@@ -45,7 +45,7 @@ describe('Capture API Integration Tests', () => {
     const mockExecute = jest.fn().mockResolvedValue({
       success: true,
       data: {
-        path: 'projects/test-project.md',
+        path: 'projects/test-project',
         category: 'projects',
         name: 'Test Project',
         confidence: 0.9,
@@ -53,7 +53,7 @@ describe('Capture API Integration Tests', () => {
       }
     });
     const mockRead = jest.fn().mockResolvedValue({
-      path: 'projects/test-project.md',
+      path: 'projects/test-project',
       category: 'projects',
       entry: {
         id: 'test-id',
@@ -78,7 +78,7 @@ describe('Capture API Integration Tests', () => {
       .send({ text: 'Test project idea' });
 
     expect(response.status).toBe(201);
-    expect(response.body.entry.path).toBe('projects/test-project.md');
+    expect(response.body.entry.path).toBe('projects/test-project');
     expect(response.body.message).toContain('Filed as project');
     expect(response.body.clarificationNeeded).toBe(false);
   });

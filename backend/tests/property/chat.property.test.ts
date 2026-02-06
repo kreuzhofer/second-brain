@@ -263,7 +263,7 @@ describe('Chat Service - Property Tests', () => {
    * Property 7: Entry Move Operation
    * 
    * For any course correction request specifying a target category, after the operation completes:
-   * - The entry SHALL exist at the new path ({category}/{slug}.md)
+   * - The entry SHALL exist at the new path ({category}/{slug})
    * - The entry SHALL NOT exist at the original path
    * - A git commit SHALL be created recording the move
    * 
@@ -273,7 +273,7 @@ describe('Chat Service - Property Tests', () => {
    * operation is done in integration tests with actual file system and git operations.
    */
   describe('Property 7: Entry Move Operation', () => {
-    it('new path follows category/slug.md pattern', () => {
+    it('new path follows category/slug pattern', () => {
       fc.assert(
         fc.property(
           categoryArbitrary,
@@ -288,10 +288,10 @@ describe('Chat Service - Property Tests', () => {
             
             if (slug.length === 0) return true; // Skip empty slugs
             
-            const newPath = `${category}/${slug}.md`;
+            const newPath = `${category}/${slug}`;
             
             // Verify path structure
-            expect(newPath).toMatch(/^(people|projects|ideas|admin)\/[a-z0-9-]+\.md$/);
+            expect(newPath).toMatch(/^(people|projects|ideas|admin)\/[a-z0-9-]+$/);
           }
         ),
         { numRuns: 50 }
@@ -315,8 +315,8 @@ describe('Chat Service - Property Tests', () => {
             
             if (slug.length === 0) return true;
             
-            const oldPath = `${oldCategory}/${slug}.md`;
-            const newPath = `${newCategory}/${slug}.md`;
+            const oldPath = `${oldCategory}/${slug}`;
+            const newPath = `${newCategory}/${slug}`;
             
             expect(oldPath).not.toBe(newPath);
           }

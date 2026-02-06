@@ -95,16 +95,16 @@ export function ChatUI({ onEntryClick, className }: ChatUIProps) {
   }, []);
 
   return (
-    <Card className={cn('flex flex-col h-full min-h-[520px]', className)}>
-      <CardHeader className="flex-shrink-0 border-b">
+    <Card className={cn('flex flex-col h-full min-h-[360px] sm:min-h-[520px]', className)}>
+      <CardHeader className="flex-shrink-0 border-b p-4 sm:p-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5" />
-            <CardTitle className="text-lg">Chat</CardTitle>
+            <CardTitle className="text-base sm:text-lg">Chat</CardTitle>
           </div>
           <button
             onClick={handleNewConversation}
-            className="text-sm text-muted-foreground hover:text-foreground"
+            className="min-h-[44px] px-2 text-sm text-muted-foreground hover:text-foreground flex items-center"
           >
             New conversation
           </button>

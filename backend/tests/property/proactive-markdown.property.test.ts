@@ -128,7 +128,7 @@ const staleProjectArbitrary = fc.record({
     .map(s => s.replace(/\*/g, '')), // Remove asterisks to avoid breaking markdown
   status: fc.constantFrom('active', 'waiting', 'blocked') as fc.Arbitrary<'active' | 'waiting' | 'blocked'>,
   daysSinceUpdate: fc.integer({ min: 15, max: 365 }),
-  path: fc.constant('projects/test.md')
+  path: fc.constant('projects/test')
 });
 
 /**

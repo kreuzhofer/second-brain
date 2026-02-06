@@ -42,7 +42,7 @@ describe('EntryService', () => {
         confidence: 0.9
       });
 
-      expect(result.path).toBe('people/john-doe.md');
+      expect(result.path).toBe('people/john-doe');
       expect(result.category).toBe('people');
       expect(result.entry).toMatchObject({
         name: 'John Doe',
@@ -60,7 +60,7 @@ describe('EntryService', () => {
         confidence: 0.85
       });
 
-      expect(result.path).toBe('projects/test-project.md');
+      expect(result.path).toBe('projects/test-project');
       expect(result.category).toBe('projects');
       expect((result.entry as any).status).toBe('active');
     });
@@ -73,7 +73,7 @@ describe('EntryService', () => {
         confidence: 0.95
       });
 
-      expect(result.path).toBe('ideas/great-idea.md');
+      expect(result.path).toBe('ideas/great-idea');
       expect(result.category).toBe('ideas');
     });
 
@@ -85,7 +85,7 @@ describe('EntryService', () => {
         confidence: 0.99
       });
 
-      expect(result.path).toBe('admin/important-task.md');
+      expect(result.path).toBe('admin/important-task');
       expect((result.entry as any).status).toBe('pending');
     });
 
@@ -98,7 +98,7 @@ describe('EntryService', () => {
         source_channel: 'chat'
       });
 
-      expect(result.path).toMatch(/^inbox\/\d{8}-\d{6}-new-project\.md$/);
+      expect(result.path).toMatch(/^inbox\/\d{8}-\d{6}-new-project$/);
       expect((result.entry as any).status).toBe('needs_review');
     });
 
@@ -142,15 +142,15 @@ describe('EntryService', () => {
         confidence: 0.9
       });
 
-      const result = await entryService.read('people/jane-doe.md');
+      const result = await entryService.read('people/jane-doe');
 
-      expect(result.path).toBe('people/jane-doe.md');
+      expect(result.path).toBe('people/jane-doe');
       expect((result.entry as any).name).toBe('Jane Doe');
     });
 
     it('should throw EntryNotFoundError for non-existent entry', async () => {
       await expect(
-        entryService.read('people/non-existent.md')
+        entryService.read('people/non-existent')
       ).rejects.toThrow(EntryNotFoundError);
     });
   });
@@ -164,7 +164,7 @@ describe('EntryService', () => {
         confidence: 0.9
       });
 
-      const result = await entryService.update('people/update-test.md', {
+      const result = await entryService.update('people/update-test', {
         context: 'Updated'
       });
 
@@ -183,7 +183,7 @@ describe('EntryService', () => {
       // Wait a bit to ensure timestamp difference
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      const updated = await entryService.update('people/timestamp-test.md', {
+      const updated = await entryService.update('people/timestamp-test', {
         context: 'New context'
       });
 
@@ -199,7 +199,7 @@ describe('EntryService', () => {
         confidence: 0.9
       });
 
-      const result = await entryService.update('people/touch-test.md', {
+      const result = await entryService.update('people/touch-test', {
         context: 'Updated'
       });
 
@@ -208,7 +208,7 @@ describe('EntryService', () => {
 
     it('should throw EntryNotFoundError for non-existent entry', async () => {
       await expect(
-        entryService.update('people/non-existent.md', { context: 'test' })
+        entryService.update('people/non-existent', { context: 'test' })
       ).rejects.toThrow(EntryNotFoundError);
     });
 
@@ -222,7 +222,7 @@ describe('EntryService', () => {
       }, 'api', '## Notes\n\nSome important notes here.');
 
       // Update frontmatter only
-      const result = await entryService.update('people/content-test.md', {
+      const result = await entryService.update('people/content-test', {
         context: 'Updated context'
       });
 
@@ -240,7 +240,7 @@ describe('EntryService', () => {
         }, 'api', '## Notes\n\nOriginal content.');
 
         // Append new content
-        const result = await entryService.update('people/append-test.md', {}, 'api', {
+        const result = await entryService.update('people/append-test', {}, 'api', {
           content: 'New appended content.',
           mode: 'append'
         });
@@ -259,7 +259,7 @@ describe('EntryService', () => {
           confidence: 0.9
         });
 
-        const result = await entryService.update('people/append-empty-test.md', {}, 'api', {
+        const result = await entryService.update('people/append-empty-test', {}, 'api', {
           content: 'First content.',
           mode: 'append'
         });
@@ -277,7 +277,7 @@ describe('EntryService', () => {
         }, 'api', '## Notes\n\nOriginal content to be replaced.');
 
         // Replace content
-        const result = await entryService.update('people/replace-test.md', {}, 'api', {
+        const result = await entryService.update('people/replace-test', {}, 'api', {
           content: '## New Section\n\nCompletely new content.',
           mode: 'replace'
         });
@@ -296,7 +296,7 @@ describe('EntryService', () => {
         }, 'api', '## Notes\n\n- First note');
 
         // Append to Notes section
-        const result = await entryService.update('people/section-append-test.md', {}, 'api', {
+        const result = await entryService.update('people/section-append-test', {}, 'api', {
           content: '- Second note',
           mode: 'section',
           section: 'Notes'
@@ -316,7 +316,7 @@ describe('EntryService', () => {
         }, 'api', '## Notes\n\nSome notes here.');
 
         // Append to non-existent Log section
-        const result = await entryService.update('people/section-create-test.md', {}, 'api', {
+        const result = await entryService.update('people/section-create-test', {}, 'api', {
           content: 'First log entry',
           mode: 'section',
           section: 'Log'
@@ -338,7 +338,7 @@ describe('EntryService', () => {
         }, 'api', '## Log\n\n- 2026-01-01: Previous entry');
 
         // Append to Log section
-        const result = await entryService.update('people/log-date-test.md', {}, 'api', {
+        const result = await entryService.update('people/log-date-test', {}, 'api', {
           content: 'New log entry',
           mode: 'section',
           section: 'Log'
@@ -358,7 +358,7 @@ describe('EntryService', () => {
           confidence: 0.9
         }, 'api', '## Notes\n\nOriginal notes.');
 
-        const result = await entryService.update('people/frontmatter-preserve-test.md', {}, 'api', {
+        const result = await entryService.update('people/frontmatter-preserve-test', {}, 'api', {
           content: 'Additional notes.',
           mode: 'append'
         });
@@ -378,7 +378,7 @@ describe('EntryService', () => {
         });
 
         await expect(
-          entryService.update('people/section-error-test.md', {}, 'api', {
+          entryService.update('people/section-error-test', {}, 'api', {
             content: 'Some content',
             mode: 'section'
             // Missing section name
@@ -396,7 +396,7 @@ describe('EntryService', () => {
         }, 'api', '## Notes\n\nProject notes.\n\n## Log\n\n- 2026-01-01: Started');
 
         // Append to Notes section (not Log)
-        const result = await entryService.update('projects/multi-section-test.md', {}, 'api', {
+        const result = await entryService.update('projects/multi-section-test', {}, 'api', {
           content: 'More project notes.',
           mode: 'section',
           section: 'Notes'
@@ -419,16 +419,16 @@ describe('EntryService', () => {
         confidence: 0.9
       });
 
-      await entryService.delete('people/delete-test.md');
+      await entryService.delete('people/delete-test');
 
       await expect(
-        entryService.read('people/delete-test.md')
+        entryService.read('people/delete-test')
       ).rejects.toThrow(EntryNotFoundError);
     });
 
     it('should throw EntryNotFoundError for non-existent entry', async () => {
       await expect(
-        entryService.delete('people/non-existent.md')
+        entryService.delete('people/non-existent')
       ).rejects.toThrow(EntryNotFoundError);
     });
   });

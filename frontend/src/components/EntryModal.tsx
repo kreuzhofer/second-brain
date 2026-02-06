@@ -5,30 +5,53 @@
  * Requirements 11.1, 11.2, 11.3, 11.4
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { api, EntryWithPath } from '@/services/api';
-import { X, Loader2, FileText, User, Briefcase, Lightbulb, ClipboardList } from 'lucide-react';
+import { api, EntryWithPath, EntryLinksResponse } from '@/services/api';
+import { X, Loader2, FileText, User, Briefcase, Lightbulb, ClipboardList, Pencil, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { hasNotesChanges, resizeTextarea, shouldPromptUnsavedNotes } from '@/components/entry-modal-helpers';
 
 interface EntryModalProps {
   entryPath: string | null;
   onClose: () => void;
   onStartFocus?: (entry: EntryWithPath) => void;
+  onEntryClick?: (path: string) => void;
 }
 
-export function EntryModal({ entryPath, onClose, onStartFocus }: EntryModalProps) {
+export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: EntryModalProps) {
   const [entry, setEntry] = useState<EntryWithPath | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [links, setLinks] = useState<EntryLinksResponse | null>(null);
+  const [linksError, setLinksError] = useState<string | null>(null);
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState('');
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (entryPath) {
       loadEntry(entryPath);
+      loadLinks(entryPath);
     } else {
       setEntry(null);
+      setLinks(null);
+      setIsEditingNotes(false);
+      setNotesError(null);
     }
   }, [entryPath]);
+
+  useEffect(() => {
+    if (!entry || isEditingNotes) return;
+    setNotesDraft(entry.content ?? '');
+  }, [entry?.path, entry?.content, entry, isEditingNotes]);
+
+  useEffect(() => {
+    if (!isEditingNotes) return;
+    resizeTextarea(notesRef.current);
+  }, [isEditingNotes, notesDraft]);
 
   const loadEntry = async (path: string) => {
     setIsLoading(true);
@@ -40,6 +63,75 @@ export function EntryModal({ entryPath, onClose, onStartFocus }: EntryModalProps
       setError(err instanceof Error ? err.message : 'Failed to load entry');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadLinks = async (path: string) => {
+    setLinksError(null);
+    try {
+      const data = await api.entries.links(path);
+      setLinks(data);
+    } catch (err) {
+      setLinksError(err instanceof Error ? err.message : 'Failed to load links');
+    }
+  };
+
+  const startNotesEdit = () => {
+    setNotesError(null);
+    setNotesDraft(entry?.content ?? '');
+    setIsEditingNotes(true);
+  };
+
+  const cancelNotesEdit = () => {
+    setNotesError(null);
+    setNotesDraft(entry?.content ?? '');
+    setIsEditingNotes(false);
+  };
+
+  const confirmDiscardNotes = (): boolean => {
+    if (!shouldPromptUnsavedNotes(isEditingNotes, entry?.content, notesDraft)) {
+      return true;
+    }
+    return window.confirm('You have unsaved note changes. Discard them?');
+  };
+
+  const handleClose = async () => {
+    if (isSavingNotes) return;
+    if (!shouldPromptUnsavedNotes(isEditingNotes, entry?.content, notesDraft)) {
+      onClose();
+      return;
+    }
+    const shouldSave = window.confirm('You have unsaved note changes. Save them?');
+    if (shouldSave) {
+      await saveNotes();
+      if (!hasNotesChanges(entry?.content, notesDraft)) {
+        onClose();
+      }
+      return;
+    }
+    const discard = window.confirm('Discard unsaved note changes?');
+    if (discard) {
+      cancelNotesEdit();
+      onClose();
+    }
+  };
+
+  const saveNotes = async () => {
+    if (!entry || isSavingNotes) return;
+    if (!hasNotesChanges(entry.content, notesDraft)) {
+      setIsEditingNotes(false);
+      return;
+    }
+    setIsSavingNotes(true);
+    setNotesError(null);
+    try {
+      const updated = await api.entries.update(entry.path, { content: notesDraft });
+      setEntry(updated);
+      setIsEditingNotes(false);
+    } catch (err) {
+      setNotesError(err instanceof Error ? err.message : 'Failed to update notes');
+    } finally {
+      setIsSavingNotes(false);
     }
   };
 
@@ -104,7 +196,9 @@ export function EntryModal({ entryPath, onClose, onStartFocus }: EntryModalProps
     <div 
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) {
+          handleClose();
+        }
       }}
     >
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
@@ -169,17 +263,142 @@ export function EntryModal({ entryPath, onClose, onStartFocus }: EntryModalProps
                 </dl>
               </div>
 
-              {/* Content section */}
-              {entry.content && (
-                <div className="space-y-2">
-                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                    Notes
-                  </h3>
-                  <div className="prose prose-sm max-w-none">
-                    <p className="whitespace-pre-wrap">{entry.content}</p>
+              {/* Links section */}
+              {(links?.outgoing?.length || links?.incoming?.length) && (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                      Linked items
+                    </h3>
+                    {links?.outgoing?.length ? (
+                      <div className="mt-2 space-y-2">
+                        {links.outgoing.map((link) => (
+                          <button
+                            key={link.path}
+                            type="button"
+                            className="w-full text-left rounded-md border border-border p-2 hover:bg-muted transition-colors"
+                            onClick={() => onEntryClick?.(link.path)}
+                          >
+                            <div className="text-sm font-medium">{link.name}</div>
+                            <div className="text-xs text-muted-foreground capitalize">
+                              {link.category}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground mt-2">No linked items yet.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                      Backlinks
+                    </h3>
+                    {links?.incoming?.length ? (
+                      <div className="mt-2 space-y-2">
+                        {links.incoming.map((link) => (
+                          <button
+                            key={link.path}
+                            type="button"
+                            className="w-full text-left rounded-md border border-border p-2 hover:bg-muted transition-colors"
+                            onClick={() => onEntryClick?.(link.path)}
+                          >
+                            <div className="text-sm font-medium">{link.name}</div>
+                            <div className="text-xs text-muted-foreground capitalize">
+                              {link.category}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground mt-2">No backlinks yet.</p>
+                    )}
                   </div>
                 </div>
               )}
+
+              {linksError && (
+                <div className="text-sm text-destructive">
+                  {linksError}
+                </div>
+              )}
+
+              {/* Content section */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                    Notes
+                  </h3>
+                  <div className="flex items-center gap-1">
+                    {!isEditingNotes && (
+                      <button
+                        type="button"
+                        onClick={startNotesEdit}
+                        className="h-8 w-8 rounded-md border border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                        aria-label="Edit notes"
+                      >
+                        <Pencil className="h-4 w-4 mx-auto" />
+                      </button>
+                    )}
+                    {isEditingNotes && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={saveNotes}
+                          disabled={isSavingNotes || !hasNotesChanges(entry.content, notesDraft)}
+                          className="h-8 w-8 rounded-md border border-transparent text-emerald-600 hover:bg-emerald-50 disabled:opacity-40 transition-colors"
+                          aria-label="Save notes"
+                        >
+                          {isSavingNotes ? (
+                            <Loader2 className="h-4 w-4 mx-auto animate-spin" />
+                          ) : (
+                            <Check className="h-4 w-4 mx-auto" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirmDiscardNotes()) {
+                              cancelNotesEdit();
+                            }
+                          }}
+                          disabled={isSavingNotes}
+                          className="h-8 w-8 rounded-md border border-transparent text-rose-600 hover:bg-rose-50 disabled:opacity-40 transition-colors"
+                          aria-label="Discard notes changes"
+                        >
+                          <X className="h-4 w-4 mx-auto" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {notesError && (
+                  <p className="text-sm text-destructive">{notesError}</p>
+                )}
+
+                {isEditingNotes ? (
+                  <textarea
+                    ref={notesRef}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={notesDraft}
+                    onChange={(event) => {
+                      setNotesDraft(event.target.value);
+                      resizeTextarea(event.currentTarget);
+                    }}
+                    placeholder="Add notes..."
+                  />
+                ) : (
+                  <div className="prose prose-sm max-w-none">
+                    {entry.content ? (
+                      <p className="whitespace-pre-wrap">{entry.content}</p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No notes yet.</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -191,13 +410,13 @@ export function EntryModal({ entryPath, onClose, onStartFocus }: EntryModalProps
               <Button
                 onClick={() => {
                   onStartFocus(entry);
-                  onClose();
+                  handleClose();
                 }}
               >
                 Focus now
               </Button>
             )}
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={handleClose}>
               Close
             </Button>
           </div>

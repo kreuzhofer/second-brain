@@ -80,7 +80,7 @@ export function InboxTriagePanel({ onEntryClick, limit = 6 }: InboxTriagePanelPr
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg font-medium">Inbox Triage</CardTitle>
+        <CardTitle className="text-base sm:text-lg font-medium">Inbox Triage</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-2">
@@ -89,7 +89,7 @@ export function InboxTriagePanel({ onEntryClick, limit = 6 }: InboxTriagePanelPr
           </Button>
           <div className="flex gap-2 items-center">
             <select
-              className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+              className="h-11 rounded-md border border-input bg-background px-2 text-base sm:h-9 sm:text-sm"
               value={targetCategory}
               onChange={(event) => setTargetCategory(event.target.value as Category)}
             >
@@ -110,8 +110,8 @@ export function InboxTriagePanel({ onEntryClick, limit = 6 }: InboxTriagePanelPr
 
         <div className="flex flex-col gap-2">
           <input
-            className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-            placeholder="Merge into entry path (e.g., projects/project-a.md)"
+            className="h-11 rounded-md border border-input bg-background px-3 text-base sm:h-9 sm:text-sm"
+            placeholder="Merge into entry path (e.g., projects/project-a)"
             value={targetPath}
             onChange={(event) => setTargetPath(event.target.value)}
           />
@@ -136,9 +136,10 @@ export function InboxTriagePanel({ onEntryClick, limit = 6 }: InboxTriagePanelPr
           <>
             <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
               {(expanded ? inboxEntries : inboxEntries.slice(0, limit)).map((entry) => (
-              <div key={entry.path} className="flex gap-3 rounded-md border border-border p-3">
+              <div key={entry.path} className="flex gap-3 rounded-md border border-border p-3 min-h-[44px]">
                 <input
                   type="checkbox"
+                  className="h-5 w-5"
                   checked={selected.has(entry.path)}
                   onChange={() => toggleSelection(entry.path)}
                 />

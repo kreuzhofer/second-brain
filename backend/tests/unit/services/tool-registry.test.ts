@@ -298,7 +298,7 @@ describe('ToolRegistry', () => {
     describe('complex validations', () => {
       it('should validate update_entry with nested object', () => {
         const result = registry.validateArguments('update_entry', {
-          path: 'projects/test.md',
+          path: 'projects/test',
           updates: {
             status: 'active',
             next_action: 'Do something'
@@ -310,7 +310,7 @@ describe('ToolRegistry', () => {
 
       it('should validate update_entry with only path (no updates or body_content)', () => {
         const result = registry.validateArguments('update_entry', {
-          path: 'projects/test.md'
+          path: 'projects/test'
         });
         
         expect(result.valid).toBe(true);
@@ -318,7 +318,7 @@ describe('ToolRegistry', () => {
 
       it('should validate update_entry with body_content', () => {
         const result = registry.validateArguments('update_entry', {
-          path: 'projects/test.md',
+          path: 'projects/test',
           body_content: {
             content: 'New note content',
             mode: 'append'
@@ -330,7 +330,7 @@ describe('ToolRegistry', () => {
 
       it('should validate update_entry with body_content section mode', () => {
         const result = registry.validateArguments('update_entry', {
-          path: 'projects/test.md',
+          path: 'projects/test',
           body_content: {
             content: 'Log entry',
             mode: 'section',
@@ -343,7 +343,7 @@ describe('ToolRegistry', () => {
 
       it('should reject update_entry with invalid body_content mode', () => {
         const result = registry.validateArguments('update_entry', {
-          path: 'projects/test.md',
+          path: 'projects/test',
           body_content: {
             content: 'Some content',
             mode: 'invalid_mode'
@@ -366,7 +366,7 @@ describe('ToolRegistry', () => {
 
       it('should validate move_entry with valid target category', () => {
         const result = registry.validateArguments('move_entry', {
-          path: 'inbox/test.md',
+          path: 'inbox/test',
           targetCategory: 'projects'
         });
         
@@ -414,7 +414,7 @@ describe('ToolRegistry', () => {
 
     it('should validate delete_entry arguments correctly', () => {
       const validResult = registry.validateArguments('delete_entry', {
-        path: 'admin/grocery-shopping.md'
+        path: 'admin/grocery-shopping'
       });
       expect(validResult.valid).toBe(true);
 
