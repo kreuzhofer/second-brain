@@ -1920,9 +1920,9 @@ Reply with thoughts or adjustments.`;
         content: ''
       };
 
-      mockEntryService.update
-        .mockRejectedValueOnce(new Error('Entry not found: admin/api-smoke-alpha-docs'))
-        .mockResolvedValueOnce(updatedEntry);
+      mockEntryService.read
+        .mockRejectedValueOnce(new Error('Entry not found: admin/api-smoke-alpha-docs'));
+      mockEntryService.update.mockResolvedValue(updatedEntry);
       mockEntryService.list.mockResolvedValue([] as EntrySummary[]);
       mockSearchService.search = jest.fn().mockResolvedValue({
         entries: [
@@ -1965,21 +1965,104 @@ Reply with thoughts or adjustments.`;
       expect(result.success).toBe(true);
       const updateResult = result.data as UpdateEntryResult;
       expect(updateResult.path).toBe(resolvedPath);
-      expect(updateResult.warnings?.some((warning) => warning.includes('Requested path was not found'))).toBe(true);
-      expect(mockEntryService.update).toHaveBeenNthCalledWith(
-        1,
-        'admin/api-smoke-alpha-docs',
-        { name: 'Api smoke alpha docs' },
-        'chat',
-        undefined
-      );
-      expect(mockEntryService.update).toHaveBeenNthCalledWith(
-        2,
+      expect(updateResult.warnings?.some((warning) => warning.includes('Used matching entry'))).toBe(true);
+      expect(mockEntryService.update).toHaveBeenCalledTimes(1);
+      expect(mockEntryService.update).toHaveBeenCalledWith(
         resolvedPath,
         { name: 'Api smoke alpha docs' },
         'chat',
         undefined
       );
+      expect((updateResult as any).receipt).toMatchObject({
+        operation: 'update',
+        requestedPath: 'admin/api-smoke-alpha-docs',
+        resolvedPath
+      });
+      expect((updateResult as any).receipt.verification.verified).toBe(true);
+      expect((updateResult as any).receipt.verification.checks.length).toBeGreaterThan(0);
+    });
+
+    it('should include mutation receipt on successful update', async () => {
+      const updatedEntry: EntryWithPath = {
+        path: 'projects/test-project',
+        category: 'projects',
+        entry: {
+          id: 'entry-update-receipt',
+          name: 'Test Project',
+          tags: [],
+          created_at: '2024-01-01T12:00:00Z',
+          updated_at: '2024-01-02T12:00:00Z',
+          source_channel: 'api',
+          confidence: 0.9,
+          status: 'done',
+          next_action: 'Wrap up',
+          related_people: []
+        },
+        content: 'done'
+      };
+      mockEntryService.update.mockResolvedValue(updatedEntry);
+
+      const result = await toolExecutor.execute({
+        name: 'update_entry',
+        arguments: { path: 'projects/test-project', updates: { status: 'done' } }
+      });
+
+      expect(result.success).toBe(true);
+      const updateResult = result.data as UpdateEntryResult;
+      expect((updateResult as any).receipt).toMatchObject({
+        operation: 'update',
+        requestedPath: 'projects/test-project',
+        resolvedPath: 'projects/test-project'
+      });
+      expect((updateResult as any).receipt.verification.verified).toBe(true);
+    });
+
+    it('should fail update when post-mutation verification does not match requested status', async () => {
+      const mismatchedEntry: EntryWithPath = {
+        path: 'admin/pay-editor',
+        category: 'admin',
+        entry: {
+          id: 'entry-status-mismatch',
+          name: 'Pay editor',
+          tags: [],
+          created_at: '2024-01-01T12:00:00Z',
+          updated_at: '2024-01-02T12:00:00Z',
+          source_channel: 'chat',
+          confidence: 0.9,
+          status: 'done'
+        },
+        content: ''
+      };
+      mockEntryService.update.mockResolvedValue(mismatchedEntry);
+
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: {
+          path: 'admin/pay-editor',
+          updates: { status: 'pending' }
+        }
+      };
+
+      const result = await toolExecutor.execute(toolCall, {
+        channel: 'chat',
+        context: {
+          systemPrompt: 'Test',
+          indexContent: '',
+          summaries: [],
+          recentMessages: [
+            {
+              id: 'msg-status-verify',
+              conversationId: 'conv-1',
+              role: 'user' as const,
+              content: 'Set this back to pending',
+              createdAt: new Date()
+            }
+          ]
+        }
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Mutation verification failed');
     });
 
     it('should handle EntryNotFoundError gracefully', async () => {
@@ -2308,7 +2391,9 @@ Reply with thoughts or adjustments.`;
         },
         content: ''
       };
-      mockEntryService.read.mockResolvedValue(mockExistingEntry);
+      mockEntryService.read
+        .mockResolvedValueOnce(mockExistingEntry)
+        .mockRejectedValueOnce(new Error('Entry not found: admin/grocery-shopping'));
       mockEntryService.delete.mockResolvedValue(undefined);
 
       const toolCall: ToolCall = {
@@ -2326,6 +2411,12 @@ Reply with thoughts or adjustments.`;
       expect(deleteResult.category).toBe('admin');
       expect(mockEntryService.read).toHaveBeenCalledWith('admin/grocery-shopping');
       expect(mockEntryService.delete).toHaveBeenCalledWith('admin/grocery-shopping', 'api');
+      expect((deleteResult as any).receipt).toMatchObject({
+        operation: 'delete',
+        requestedPath: 'admin/grocery-shopping',
+        resolvedPath: 'admin/grocery-shopping'
+      });
+      expect((deleteResult as any).receipt.verification.verified).toBe(true);
     });
 
     it('should return error for non-existent entry', async () => {
@@ -2403,6 +2494,11 @@ Reply with thoughts or adjustments.`;
       expect(deleteResult.path).toBe('admin/api-smoke-alpha-task');
       expect(deleteResult.name).toBe('Api smoke alpha task');
       expect(mockEntryService.delete).toHaveBeenCalledWith('admin/api-smoke-alpha-task', 'chat');
+      expect((deleteResult as any).receipt).toMatchObject({
+        operation: 'delete',
+        requestedPath: 'admin/api-smoke-delete-target',
+        resolvedPath: 'admin/api-smoke-alpha-task'
+      });
     });
 
     it('should use suggested_name for inbox entries', async () => {
@@ -2422,7 +2518,9 @@ Reply with thoughts or adjustments.`;
         },
         content: ''
       };
-      mockEntryService.read.mockResolvedValue(mockInboxEntry);
+      mockEntryService.read
+        .mockResolvedValueOnce(mockInboxEntry)
+        .mockRejectedValueOnce(new Error('Entry not found: inbox/20240101120000-unclear-thought'));
       mockEntryService.delete.mockResolvedValue(undefined);
 
       const toolCall: ToolCall = {
@@ -2488,6 +2586,12 @@ Reply with thoughts or adjustments.`;
       expect(moveResult.oldPath).toBe('projects/test-project');
       expect(moveResult.newPath).toBe('ideas/test-project');
       expect(moveResult.category).toBe('ideas');
+      expect((moveResult as any).receipt).toMatchObject({
+        operation: 'move',
+        requestedPath: 'projects/test-project',
+        resolvedPath: 'projects/test-project'
+      });
+      expect((moveResult as any).receipt.verification.verified).toBe(true);
 
       // Verify move was called with correct args
       expect(mockEntryService.move).toHaveBeenCalledWith('projects/test-project', 'ideas', 'api');

@@ -15,6 +15,7 @@
     "build:frontend": "npm run build --workspace=frontend",
     "test": "npm run test --workspaces --if-present",
     "test:backend": "npm run test --workspace=backend",
+    "test:real-api": "dotenv_config_path=.env node -r dotenv/config testing/real-api/run-chat-scenarios.mjs",
     "lint": "npm run lint --workspaces --if-present",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",

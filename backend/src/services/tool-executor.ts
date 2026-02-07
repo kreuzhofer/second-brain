@@ -64,6 +64,17 @@ export interface ToolResult {
   error?: string;
 }
 
+export interface MutationReceipt {
+  operation: 'update' | 'move' | 'delete';
+  requestedPath: string;
+  resolvedPath: string;
+  verification: {
+    verified: boolean;
+    checks: string[];
+  };
+  timestamp: string;
+}
+
 // ============================================
 // Tool-Specific Result Types
 // ============================================
@@ -119,6 +130,7 @@ export interface UpdateEntryResult {
   bodyUpdated?: boolean;
   bodyMode?: BodyContentMode;
   warnings?: string[];
+  receipt?: MutationReceipt;
 }
 
 /**
@@ -129,6 +141,7 @@ export interface MoveEntryResult {
   oldPath: string;
   newPath: string;
   category: Category;
+  receipt?: MutationReceipt;
 }
 
 /**
@@ -155,6 +168,7 @@ export interface DeleteEntryResult {
   path: string;
   name: string;
   category: Category;
+  receipt?: MutationReceipt;
 }
 
 // ============================================
@@ -762,10 +776,20 @@ export class ToolExecutor {
       warnings.push(statusGuardrail.warning);
     }
 
-    // 1. Call entryService.update() with path, updates, and bodyUpdate
+    const preResolution = await this.resolveMutationPathBeforeMutation(path, {
+      operation: 'update',
+      channel,
+      context
+    });
+    if (preResolution.path !== path && preResolution.warning) {
+      warnings.push(preResolution.warning);
+      resultPath = preResolution.path;
+    }
+
+    // 1. Call entryService.update() with resolved path, updates, and bodyUpdate
     let updatedEntry: EntryWithPath;
     try {
-      updatedEntry = await this.entryService.update(path, updates, channel, bodyUpdate);
+      updatedEntry = await this.entryService.update(resultPath, updates, channel, bodyUpdate);
     } catch (error) {
       const fallback = await this.tryReopenCompletedTaskFallback(
         error,
@@ -782,7 +806,7 @@ export class ToolExecutor {
         warnings.push(fallback.warning);
       } else {
         const resolved = await this.resolveMutationSourcePath(
-          path,
+          resultPath,
           {
             operation: 'update',
             channel,
@@ -797,6 +821,14 @@ export class ToolExecutor {
         updatedEntry = await this.entryService.update(resolved.path, updates, channel, bodyUpdate);
         warnings.push(resolved.warning);
       }
+    }
+
+    const updateVerification = this.verifyUpdateMutation(resultPath, updatedEntry, updates, bodyUpdate);
+    if (!updateVerification.verified) {
+      return {
+        success: false,
+        error: `Mutation verification failed: ${updateVerification.checks.join(' | ')}`
+      };
     }
 
     // 2. Link related people for admin tasks when provided in updates
@@ -833,6 +865,7 @@ export class ToolExecutor {
     if (warnings.length > 0) {
       result.warnings = warnings;
     }
+    result.receipt = this.buildMutationReceipt('update', path, resultPath, updateVerification);
 
     return {
       success: true,
@@ -856,12 +889,20 @@ export class ToolExecutor {
     const targetCategory = args.targetCategory as Category;
     let sourcePath = path;
 
+    const preResolution = await this.resolveMutationPathBeforeMutation(path, {
+      operation: 'move',
+      targetCategory,
+      channel,
+      context
+    });
+    sourcePath = preResolution.path;
+
     // 1. Move entry using EntryService.move()
     let moveResult: EntryWithPath;
     try {
-      moveResult = await this.entryService.move(path, targetCategory, channel);
+      moveResult = await this.entryService.move(sourcePath, targetCategory, channel);
     } catch (error) {
-      const fallbackPath = await this.resolveMoveSourcePath(path, targetCategory, channel, context, error);
+      const fallbackPath = await this.resolveMoveSourcePath(sourcePath, targetCategory, channel, context, error);
       if (!fallbackPath) {
         throw error;
       }
@@ -869,11 +910,20 @@ export class ToolExecutor {
       moveResult = await this.entryService.move(fallbackPath, targetCategory, channel);
     }
 
+    const moveVerification = this.verifyMoveMutation(sourcePath, targetCategory, moveResult);
+    if (!moveVerification.verified) {
+      return {
+        success: false,
+        error: `Mutation verification failed: ${moveVerification.checks.join(' | ')}`
+      };
+    }
+
     // 2. Return MoveEntryResult
     const result: MoveEntryResult = {
       oldPath: sourcePath,
       newPath: moveResult.path,
-      category: targetCategory
+      category: targetCategory,
+      receipt: this.buildMutationReceipt('move', path, sourcePath, moveVerification)
     };
 
     return {
@@ -959,21 +1009,22 @@ export class ToolExecutor {
     if (options.channel !== 'chat') return null;
     if (!(options.error instanceof Error) || !/not found/i.test(options.error.message)) return null;
 
-    const userMessage = options.context?.recentMessages
-      ?.slice()
-      .reverse()
-      .find((msg) => msg.role === 'user')?.content;
-    if (!userMessage) return null;
+    const userMessages = (options.context?.recentMessages || [])
+      .filter((msg) => msg.role === 'user')
+      .slice(-4)
+      .map((msg) => msg.content)
+      .filter((content) => typeof content === 'string' && content.trim().length > 0);
+    if (userMessages.length === 0) return null;
 
     const queryCandidates = this.buildMutationQueryCandidates(
       options.operation,
-      userMessage,
+      userMessages,
       requestedPath
     );
     if (queryCandidates.length === 0) return null;
 
     const requestedTokens = new Set(this.tokenizeReclassification(requestedPath.split('/').slice(1).join(' ')));
-    const userTokens = new Set(this.tokenizeReclassification(userMessage));
+    const userTokens = new Set(this.tokenizeReclassification(userMessages.join(' ')));
     const scoredByPath = new Map<string, { candidate: SearchHit; score: number; query: string }>();
 
     for (const query of queryCandidates) {
@@ -1013,21 +1064,176 @@ export class ToolExecutor {
     };
   }
 
+  private async resolveMutationPathBeforeMutation(
+    requestedPath: string,
+    options: {
+      operation: 'update' | 'move' | 'delete';
+      targetCategory?: Category;
+      channel: Channel;
+      context?: ContextWindow;
+    }
+  ): Promise<{ path: string; warning?: string }> {
+    if (options.channel !== 'chat') {
+      return { path: requestedPath };
+    }
+
+    const existence = await this.detectPathExistence(requestedPath);
+    if (existence === 'exists' || existence === 'unknown') {
+      return { path: requestedPath };
+    }
+
+    const resolved = await this.resolveMutationSourcePath(requestedPath, {
+      ...options,
+      error: new Error(`Entry not found: ${requestedPath}`)
+    });
+    if (!resolved) {
+      return { path: requestedPath };
+    }
+
+    return resolved;
+  }
+
+  private async detectPathExistence(path: string): Promise<'exists' | 'missing' | 'unknown'> {
+    try {
+      const entry = await this.entryService.read(path);
+      if (entry && typeof entry.path === 'string') {
+        return 'exists';
+      }
+      return 'unknown';
+    } catch (error) {
+      if (error instanceof Error && /not found/i.test(error.message)) {
+        return 'missing';
+      }
+      return 'unknown';
+    }
+  }
+
+  private verifyUpdateMutation(
+    resolvedPath: string,
+    updatedEntry: EntryWithPath,
+    updates: Record<string, unknown>,
+    bodyUpdate?: BodyContentUpdate
+  ): { verified: boolean; checks: string[] } {
+    const checks: string[] = [];
+
+    if (updatedEntry.path === resolvedPath) {
+      checks.push(`path verified: ${resolvedPath}`);
+    } else {
+      checks.push(`path mismatch: expected ${resolvedPath}, got ${updatedEntry.path}`);
+      return { verified: false, checks };
+    }
+
+    if ('status' in updates) {
+      const expected = typeof updates.status === 'string' ? updates.status : undefined;
+      const actual = typeof (updatedEntry.entry as any).status === 'string'
+        ? (updatedEntry.entry as any).status
+        : undefined;
+      if (expected && actual === expected) {
+        checks.push(`status verified: ${expected}`);
+      } else {
+        checks.push(`status mismatch: expected ${expected || 'unknown'}, got ${actual || 'unknown'}`);
+        return { verified: false, checks };
+      }
+    }
+
+    if ('due_date' in updates) {
+      const expected = typeof updates.due_date === 'string' ? updates.due_date : undefined;
+      const actual = typeof (updatedEntry.entry as any).due_date === 'string'
+        ? (updatedEntry.entry as any).due_date
+        : undefined;
+      if (!expected || actual === expected) {
+        checks.push(`due_date verified: ${actual || 'unset'}`);
+      } else {
+        checks.push(`due_date mismatch: expected ${expected}, got ${actual || 'unset'}`);
+        return { verified: false, checks };
+      }
+    }
+
+    if (bodyUpdate?.content?.trim()) {
+      const content = updatedEntry.content || '';
+      if (!content.includes(bodyUpdate.content.trim())) {
+        checks.push('body content could not be strictly verified from stored content');
+      } else {
+        checks.push('body content verified');
+      }
+    }
+
+    return { verified: true, checks };
+  }
+
+  private verifyMoveMutation(
+    sourcePath: string,
+    targetCategory: Category,
+    movedEntry: EntryWithPath
+  ): { verified: boolean; checks: string[] } {
+    const checks: string[] = [];
+    checks.push(`source path: ${sourcePath}`);
+
+    if (movedEntry.category !== targetCategory) {
+      checks.push(`category mismatch: expected ${targetCategory}, got ${movedEntry.category}`);
+      return { verified: false, checks };
+    }
+    checks.push(`category verified: ${targetCategory}`);
+
+    if (!movedEntry.path.startsWith(`${targetCategory}/`)) {
+      checks.push(`new path mismatch: ${movedEntry.path}`);
+      return { verified: false, checks };
+    }
+    checks.push(`new path verified: ${movedEntry.path}`);
+
+    return { verified: true, checks };
+  }
+
+  private async verifyDeleteMutation(path: string): Promise<{ verified: boolean; checks: string[] }> {
+    const checks: string[] = [];
+    const existence = await this.detectPathExistence(path);
+
+    if (existence === 'missing') {
+      checks.push(`entry deleted: ${path}`);
+      return { verified: true, checks };
+    }
+
+    if (existence === 'exists') {
+      checks.push(`entry still exists after delete: ${path}`);
+      return { verified: false, checks };
+    }
+
+    checks.push(`post-delete read check unavailable, accepted as best effort for ${path}`);
+    return { verified: true, checks };
+  }
+
+  private buildMutationReceipt(
+    operation: 'update' | 'move' | 'delete',
+    requestedPath: string,
+    resolvedPath: string,
+    verification: { verified: boolean; checks: string[] }
+  ): MutationReceipt {
+    return {
+      operation,
+      requestedPath,
+      resolvedPath,
+      verification,
+      timestamp: new Date().toISOString()
+    };
+  }
+
   private buildMutationQueryCandidates(
     operation: 'update' | 'move' | 'delete',
-    userMessage: string,
+    userMessages: string[],
     requestedPath: string
   ): string[] {
     const candidates = new Set<string>();
-    for (const phrase of this.extractQuotedPhrases(userMessage)) {
-      candidates.add(phrase);
-    }
+    for (const message of userMessages) {
+      for (const phrase of this.extractQuotedPhrases(message)) {
+        candidates.add(phrase);
+      }
 
-    const opQuery = operation === 'move'
-      ? this.extractReclassificationQuery(userMessage)
-      : this.extractMutationQuery(userMessage, operation);
-    if (opQuery) {
-      candidates.add(opQuery);
+      const opQuery = operation === 'move'
+        ? this.extractReclassificationQuery(message)
+        : this.extractMutationQuery(message, operation);
+      if (opQuery) {
+        candidates.add(opQuery);
+      }
     }
 
     const slugCandidate = requestedPath.split('/').slice(1).join(' ').replace(/[-_]+/g, ' ').trim();
@@ -1620,16 +1826,21 @@ export class ToolExecutor {
     context?: ContextWindow
   ): Promise<ToolResult> {
     const path = args.path as string;
-    let resolvedPath = path;
+    const preResolution = await this.resolveMutationPathBeforeMutation(path, {
+      operation: 'delete',
+      channel,
+      context
+    });
+    let resolvedPath = preResolution.path;
 
     // 1. Read entry first to get name for response (Requirement 3.3)
     // This will throw EntryNotFoundError if entry doesn't exist (Requirement 3.4)
     let existing: EntryWithPath;
     try {
-      existing = await this.entryService.read(path);
+      existing = await this.entryService.read(resolvedPath);
     } catch (error) {
       const resolved = await this.resolveMutationSourcePath(
-        path,
+        resolvedPath,
         {
           operation: 'delete',
           channel,
@@ -1654,12 +1865,20 @@ export class ToolExecutor {
     // 2. Delete the entry (Requirement 3.2)
     // EntryService.delete() handles index regeneration and git commit (Requirement 3.5)
     await this.entryService.delete(resolvedPath, channel);
+    const deleteVerification = await this.verifyDeleteMutation(resolvedPath);
+    if (!deleteVerification.verified) {
+      return {
+        success: false,
+        error: `Mutation verification failed: ${deleteVerification.checks.join(' | ')}`
+      };
+    }
 
     // 3. Return DeleteEntryResult with path and name (Requirement 3.3)
     const result: DeleteEntryResult = {
       path: resolvedPath,
       name,
-      category
+      category,
+      receipt: this.buildMutationReceipt('delete', path, resolvedPath, deleteVerification)
     };
 
     return {

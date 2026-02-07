@@ -1,0 +1,44 @@
+{
+  "name": "Mutation Reliability Core",
+  "steps": [
+    {
+      "name": "capture_admin_task",
+      "type": "chat",
+      "message": "Capture this as [admin] task: Real API reliability smoke {{RUN_ID}}.",
+      "autoConfirmCapture": true,
+      "retryOnMissingSave": true,
+      "retryOnMissingSaveMessage": "Capture this now as an [admin] task. Do not ask a follow-up question. The task text is: Real API reliability smoke {{RUN_ID}}.",
+      "save": {
+        "ENTRY_PATH": "entry.path|message.filedEntryPath"
+      },
+      "expect": {}
+    },
+    {
+      "name": "verify_captured_entry",
+      "type": "entry",
+      "path": "{{ENTRY_PATH}}",
+      "expect": {
+        "category": "admin",
+        "status": "pending"
+      }
+    },
+    {
+      "name": "update_title_and_note",
+      "type": "chat",
+      "message": "Update the entry at path {{ENTRY_PATH}}. Set the title to \"Real API reliability updated {{RUN_ID}}\" and add a note that says validate deterministic mutation receipts.",
+      "autoConfirm": true,
+      "retryOnAssistantError": true,
+      "retryOnAssistantErrorMessage": "Update entry {{ENTRY_PATH}}. Set name to Real API reliability updated {{RUN_ID}} and append note: validate deterministic mutation receipts.",
+      "expect": {}
+    },
+    {
+      "name": "verify_updated_entry",
+      "type": "entry",
+      "path": "{{ENTRY_PATH}}",
+      "expect": {
+        "category": "admin",
+        "status": "pending"
+      }
+    }
+  ]
+}
