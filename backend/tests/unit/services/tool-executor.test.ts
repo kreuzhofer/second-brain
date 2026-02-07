@@ -1902,6 +1902,86 @@ Reply with thoughts or adjustments.`;
       expect(mockEntryService.update).toHaveBeenCalledWith('projects/test-project', { status: 'done' }, 'api', undefined);
     });
 
+    it('should resolve update path by searching when requested path does not exist', async () => {
+      const resolvedPath = 'admin/api-smoke-alpha-task';
+      const updatedEntry: EntryWithPath = {
+        path: resolvedPath,
+        category: 'admin',
+        entry: {
+          id: 'test-id-resolved-update',
+          name: 'Api smoke alpha docs',
+          tags: [],
+          created_at: '2024-01-01T12:00:00Z',
+          updated_at: '2024-01-02T12:00:00Z',
+          source_channel: 'chat',
+          confidence: 0.9,
+          status: 'pending'
+        },
+        content: ''
+      };
+
+      mockEntryService.update
+        .mockRejectedValueOnce(new Error('Entry not found: admin/api-smoke-alpha-docs'))
+        .mockResolvedValueOnce(updatedEntry);
+      mockEntryService.list.mockResolvedValue([] as EntrySummary[]);
+      mockSearchService.search = jest.fn().mockResolvedValue({
+        entries: [
+          {
+            path: resolvedPath,
+            name: 'Api smoke alpha task',
+            category: 'admin',
+            matchedField: 'name',
+            snippet: 'Api smoke alpha task'
+          }
+        ],
+        total: 1
+      });
+
+      const context = {
+        systemPrompt: 'Test system prompt',
+        indexContent: '# Index\n\nTest index content',
+        summaries: [],
+        recentMessages: [
+          {
+            id: 'msg-update-resolve',
+            conversationId: 'conv-1',
+            role: 'user' as const,
+            content: 'Update "Api smoke alpha task" title to "Api smoke alpha docs".',
+            createdAt: new Date()
+          }
+        ]
+      };
+
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: {
+          path: 'admin/api-smoke-alpha-docs',
+          updates: { name: 'Api smoke alpha docs' }
+        }
+      };
+
+      const result = await toolExecutor.execute(toolCall, { channel: 'chat', context });
+
+      expect(result.success).toBe(true);
+      const updateResult = result.data as UpdateEntryResult;
+      expect(updateResult.path).toBe(resolvedPath);
+      expect(updateResult.warnings?.some((warning) => warning.includes('Requested path was not found'))).toBe(true);
+      expect(mockEntryService.update).toHaveBeenNthCalledWith(
+        1,
+        'admin/api-smoke-alpha-docs',
+        { name: 'Api smoke alpha docs' },
+        'chat',
+        undefined
+      );
+      expect(mockEntryService.update).toHaveBeenNthCalledWith(
+        2,
+        resolvedPath,
+        { name: 'Api smoke alpha docs' },
+        'chat',
+        undefined
+      );
+    });
+
     it('should handle EntryNotFoundError gracefully', async () => {
       mockEntryService.update.mockRejectedValue(new Error('Entry not found: projects/non-existent'));
 
@@ -2262,6 +2342,67 @@ Reply with thoughts or adjustments.`;
       expect(result.error).toContain('Entry not found');
       expect(mockEntryService.read).toHaveBeenCalledWith('projects/non-existent');
       expect(mockEntryService.delete).not.toHaveBeenCalled();
+    });
+
+    it('should resolve delete path by searching when requested path does not exist', async () => {
+      mockEntryService.read
+        .mockRejectedValueOnce(new Error('Entry not found: admin/api-smoke-delete-target'))
+        .mockResolvedValueOnce({
+          path: 'admin/api-smoke-alpha-task',
+          category: 'admin',
+          entry: {
+            id: 'entry-delete-resolved',
+            name: 'Api smoke alpha task',
+            tags: [],
+            created_at: '2024-01-01T12:00:00Z',
+            updated_at: '2024-01-02T12:00:00Z',
+            source_channel: 'chat',
+            confidence: 0.9,
+            status: 'pending'
+          },
+          content: ''
+        } as EntryWithPath);
+      mockSearchService.search = jest.fn().mockResolvedValue({
+        entries: [
+          {
+            path: 'admin/api-smoke-alpha-task',
+            name: 'Api smoke alpha task',
+            category: 'admin',
+            matchedField: 'name',
+            snippet: 'Api smoke alpha task'
+          }
+        ],
+        total: 1
+      });
+      mockEntryService.delete.mockResolvedValue(undefined);
+
+      const context = {
+        systemPrompt: 'Test system prompt',
+        indexContent: '# Index\n\nTest index content',
+        summaries: [],
+        recentMessages: [
+          {
+            id: 'msg-delete-resolve',
+            conversationId: 'conv-1',
+            role: 'user' as const,
+            content: 'Delete "Api smoke alpha task".',
+            createdAt: new Date()
+          }
+        ]
+      };
+
+      const toolCall: ToolCall = {
+        name: 'delete_entry',
+        arguments: { path: 'admin/api-smoke-delete-target' }
+      };
+
+      const result = await toolExecutor.execute(toolCall, { channel: 'chat', context });
+
+      expect(result.success).toBe(true);
+      const deleteResult = result.data as DeleteEntryResult;
+      expect(deleteResult.path).toBe('admin/api-smoke-alpha-task');
+      expect(deleteResult.name).toBe('Api smoke alpha task');
+      expect(mockEntryService.delete).toHaveBeenCalledWith('admin/api-smoke-alpha-task', 'chat');
     });
 
     it('should use suggested_name for inbox entries', async () => {

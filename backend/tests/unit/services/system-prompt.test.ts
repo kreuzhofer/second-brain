@@ -155,6 +155,13 @@ User: Tell me more about ClientCo`;
       const result = buildSystemPrompt('', '');
       expect(result).toMatch(/Today's date is \d{4}-\d{2}-\d{2}/);
     });
+
+    it('should instruct search-before-mutate flow when path is missing', () => {
+      const result = buildSystemPrompt('', '');
+      expect(result).toContain('When updating, moving, or deleting and you only have a title/name');
+      expect(result).toContain('first call search_entries');
+      expect(result).toContain('then call update_entry, move_entry, or delete_entry');
+    });
   });
 
   describe('SYSTEM_PROMPT_TEMPLATE_FOR_TESTING', () => {

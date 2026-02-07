@@ -664,6 +664,11 @@ export class ChatService {
   }
 
   private buildQuickReplies(content: string): QuickReplyOption[] | undefined {
+    const disambiguationReplies = this.buildDisambiguationQuickReplies(content);
+    if (disambiguationReplies) {
+      return disambiguationReplies;
+    }
+
     const lower = content.toLowerCase();
     if (this.isCapturePrompt(content)) {
       return [
@@ -680,6 +685,22 @@ export class ChatService {
       ];
     }
     return undefined;
+  }
+
+  private buildDisambiguationQuickReplies(content: string): QuickReplyOption[] | undefined {
+    const matches = Array.from(content.matchAll(/^\s*(\d+)\.\s+/gm));
+    if (matches.length < 2) {
+      return undefined;
+    }
+    return matches
+      .slice(0, 3)
+      .map((match) => match[1])
+      .filter((num) => num.length > 0)
+      .map((num) => ({
+        id: `select_${num}`,
+        label: `Use #${num}`,
+        message: num
+      }));
   }
 
   /**

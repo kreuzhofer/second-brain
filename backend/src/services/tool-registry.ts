@@ -169,7 +169,7 @@ export class ToolRegistry {
       type: 'function',
       function: {
         name: 'update_entry',
-        description: 'Update an existing entry. Use when you need to change metadata fields like status, due_date, or next_action. Use "updates" to change metadata fields like status, due_date, next_action. Use "body_content" only to add notes or log entries to the body. To mark a task done, use updates: {status: "done"}. To add a note, use body_content with mode "section". If the update mentions people for an admin task, include updates.related_people as an array of full names.',
+        description: 'Update an existing entry. Use when you need to change metadata fields like status, due_date, or next_action. Use "updates" to change metadata fields like status, due_date, next_action. Use "body_content" only to add notes or log entries to the body. To mark a task done, use updates: {status: "done"}. To add a note, use body_content with mode "section". If the update mentions people for an admin task, include updates.related_people as an array of full names. If only title/name is known and not full path, call search_entries first and then update_entry with the resolved path.',
         parameters: {
           type: 'object',
           properties: {
@@ -213,7 +213,7 @@ export class ToolRegistry {
       type: 'function',
       function: {
         name: 'move_entry',
-        description: 'Move an entry to a different category. Use when the user wants to reclassify an entry (e.g., "actually that should be a project" or "move this to ideas").',
+        description: 'Move an entry to a different category. Use when the user wants to reclassify an entry (e.g., "actually that should be a project" or "move this to ideas"). If only title/name is known and not full path, call search_entries first and then move_entry with the resolved path.',
         parameters: {
           type: 'object',
           properties: {
@@ -266,7 +266,7 @@ export class ToolRegistry {
       type: 'function',
       function: {
         name: 'delete_entry',
-        description: 'Delete an entry from the knowledge base. Use when the user explicitly asks to remove, delete, or get rid of an entry.',
+        description: 'Delete an entry from the knowledge base. Use when the user explicitly asks to remove, delete, or get rid of an entry. If only title/name is known and not full path, call search_entries first and then delete_entry with the resolved path.',
         parameters: {
           type: 'object',
           properties: {

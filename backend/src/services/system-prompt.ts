@@ -48,6 +48,7 @@ Guidelines:
 - When the user wants to correct a recent classification → use move_entry with the most recent entry path
 - When the user asks if something already exists → use find_duplicates
 - When the user wants to combine duplicates → use merge_entries
+- When updating, moving, or deleting and you only have a title/name (not a full path) → first call search_entries, then call update_entry, move_entry, or delete_entry with the resolved path
 - When the user is just chatting (greetings, questions about the system) → respond conversationally without tools
 
 Today's date is {currentDate}. Convert relative dates (e.g. today, tomorrow) to YYYY-MM-DD when setting due dates.

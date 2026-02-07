@@ -283,7 +283,7 @@ export class ToolExecutor {
           return await this.handleSearchEntries(args);
         
         case 'delete_entry':
-          return await this.handleDeleteEntry(args, channel);
+          return await this.handleDeleteEntry(args, channel, context);
 
         case 'find_duplicates':
           return await this.handleFindDuplicates(args);
@@ -776,12 +776,27 @@ export class ToolExecutor {
         context,
         intentAnalysis
       );
-      if (!fallback) {
-        throw error;
+      if (fallback) {
+        updatedEntry = fallback.updatedEntry;
+        resultPath = fallback.resolvedPath;
+        warnings.push(fallback.warning);
+      } else {
+        const resolved = await this.resolveMutationSourcePath(
+          path,
+          {
+            operation: 'update',
+            channel,
+            context,
+            error
+          }
+        );
+        if (!resolved) {
+          throw error;
+        }
+        resultPath = resolved.path;
+        updatedEntry = await this.entryService.update(resolved.path, updates, channel, bodyUpdate);
+        warnings.push(resolved.warning);
       }
-      updatedEntry = fallback.updatedEntry;
-      resultPath = fallback.resolvedPath;
-      warnings.push(fallback.warning);
     }
 
     // 2. Link related people for admin tasks when provided in updates
@@ -874,47 +889,17 @@ export class ToolExecutor {
     context: ContextWindow | undefined,
     error: unknown
   ): Promise<string | null> {
-    if (channel !== 'chat') return null;
-    if (!(error instanceof Error) || !/not found/i.test(error.message)) return null;
-
-    const userMessage = context?.recentMessages
-      ?.slice()
-      .reverse()
-      .find((msg) => msg.role === 'user')?.content;
-    if (!userMessage) return null;
-
-    const query = this.extractReclassificationQuery(userMessage);
-    if (!query) return null;
-
-    const searchResult = await this.searchService.search(query, { limit: 10 });
-    const candidates = searchResult.entries.filter((entry) => entry.category !== targetCategory);
-    if (candidates.length === 0) {
-      return null;
-    }
-
-    const queryTokens = new Set(this.tokenizeReclassification(query));
-    const requestedTokens = new Set(this.tokenizeReclassification(requestedPath.split('/').slice(1).join(' ')));
-    const scored = candidates
-      .map((candidate) => ({
-        candidate,
-        score: this.scoreMoveCandidate(candidate, queryTokens, requestedTokens)
-      }))
-      .filter((item) => item.score > 0)
-      .sort((a, b) => b.score - a.score);
-
-    if (scored.length === 0) {
-      return null;
-    }
-
-    if (scored.length > 1 && scored[0].score === scored[1].score) {
-      const options = scored
-        .slice(0, 3)
-        .map((item) => `${item.candidate.name} (${item.candidate.path})`)
-        .join(', ');
-      throw new Error(`Multiple entries match reclassification request: ${options}`);
-    }
-
-    return scored[0].candidate.path;
+    const resolved = await this.resolveMutationSourcePath(
+      requestedPath,
+      {
+        operation: 'move',
+        targetCategory,
+        channel,
+        context,
+        error
+      }
+    );
+    return resolved?.path ?? null;
   }
 
   private extractReclassificationQuery(message: string): string | null {
@@ -958,12 +943,147 @@ export class ToolExecutor {
     queryTokens: Set<string>,
     requestedTokens: Set<string>
   ): number {
+    return this.scoreMutationCandidate(candidate, queryTokens, requestedTokens);
+  }
+
+  private async resolveMutationSourcePath(
+    requestedPath: string,
+    options: {
+      operation: 'update' | 'move' | 'delete';
+      targetCategory?: Category;
+      channel: Channel;
+      context?: ContextWindow;
+      error: unknown;
+    }
+  ): Promise<{ path: string; warning: string } | null> {
+    if (options.channel !== 'chat') return null;
+    if (!(options.error instanceof Error) || !/not found/i.test(options.error.message)) return null;
+
+    const userMessage = options.context?.recentMessages
+      ?.slice()
+      .reverse()
+      .find((msg) => msg.role === 'user')?.content;
+    if (!userMessage) return null;
+
+    const queryCandidates = this.buildMutationQueryCandidates(
+      options.operation,
+      userMessage,
+      requestedPath
+    );
+    if (queryCandidates.length === 0) return null;
+
+    const requestedTokens = new Set(this.tokenizeReclassification(requestedPath.split('/').slice(1).join(' ')));
+    const userTokens = new Set(this.tokenizeReclassification(userMessage));
+    const scoredByPath = new Map<string, { candidate: SearchHit; score: number; query: string }>();
+
+    for (const query of queryCandidates) {
+      const searchResult = await this.searchService.search(query, { limit: 10 });
+      const filtered = options.targetCategory
+        ? searchResult.entries.filter((entry) => entry.category !== options.targetCategory)
+        : searchResult.entries;
+      const queryTokens = new Set(this.tokenizeReclassification(query));
+      for (const candidate of filtered) {
+        const score = this.scoreMutationCandidate(candidate, queryTokens, requestedTokens, userTokens);
+        if (score <= 0) continue;
+        const existing = scoredByPath.get(candidate.path);
+        if (!existing || score > existing.score) {
+          scoredByPath.set(candidate.path, { candidate, score, query });
+        }
+      }
+    }
+
+    const scored = Array.from(scoredByPath.values()).sort((a, b) => b.score - a.score);
+    if (scored.length === 0) return null;
+
+    if (scored.length > 1 && scored[0].score === scored[1].score) {
+      const optionsList = scored
+        .slice(0, 3)
+        .map((item, index) => `${index + 1}. ${item.candidate.name} (${item.candidate.path})`)
+        .join('\n');
+      const actionLabel = options.operation === 'move'
+        ? 'reclassify'
+        : options.operation;
+      throw new Error(`Multiple entries match your ${actionLabel} request. Which one should I use?\n${optionsList}`);
+    }
+
+    const winner = scored[0].candidate;
+    return {
+      path: winner.path,
+      warning: `Requested path was not found. Used matching entry "${winner.name}" (${winner.path}).`
+    };
+  }
+
+  private buildMutationQueryCandidates(
+    operation: 'update' | 'move' | 'delete',
+    userMessage: string,
+    requestedPath: string
+  ): string[] {
+    const candidates = new Set<string>();
+    for (const phrase of this.extractQuotedPhrases(userMessage)) {
+      candidates.add(phrase);
+    }
+
+    const opQuery = operation === 'move'
+      ? this.extractReclassificationQuery(userMessage)
+      : this.extractMutationQuery(userMessage, operation);
+    if (opQuery) {
+      candidates.add(opQuery);
+    }
+
+    const slugCandidate = requestedPath.split('/').slice(1).join(' ').replace(/[-_]+/g, ' ').trim();
+    if (slugCandidate.length > 0) {
+      candidates.add(slugCandidate);
+    }
+
+    return Array.from(candidates).filter((value) => value.trim().length > 0);
+  }
+
+  private extractMutationQuery(message: string, operation: 'update' | 'delete'): string | null {
+    if (operation === 'delete') {
+      const deleteMatch = message.match(
+        /(?:delete|remove|drop|archive)\s+(?:the\s+)?(?:entry|task|item|project|idea|person)?\s*["“]?([^"”?.!]+)["”]?/i
+      );
+      if (deleteMatch?.[1]?.trim()) {
+        return deleteMatch[1].trim();
+      }
+      return null;
+    }
+
+    const updateMatch = message.match(
+      /(?:update|rename|change|edit|set)\s+(?:the\s+)?(?:entry|task|item|project|idea|person)?\s*["“]?([^"”?.!]+)["”]?\s+(?:to|as|with)\b/i
+    );
+    if (updateMatch?.[1]?.trim()) {
+      return updateMatch[1].trim();
+    }
+    return null;
+  }
+
+  private extractQuotedPhrases(message: string): string[] {
+    const matches = message.matchAll(/["“]([^"”]+)["”]/g);
+    const phrases: string[] = [];
+    for (const match of matches) {
+      if (match[1]?.trim()) {
+        phrases.push(match[1].trim());
+      }
+    }
+    return phrases;
+  }
+
+  private scoreMutationCandidate(
+    candidate: SearchHit,
+    queryTokens: Set<string>,
+    requestedTokens: Set<string>,
+    userTokens?: Set<string>
+  ): number {
     const nameTokens = this.tokenizeReclassification(candidate.name);
     const pathTokens = this.tokenizeReclassification(candidate.path);
     const overlapQuery = nameTokens.filter((token) => queryTokens.has(token)).length;
-    const overlapPath = pathTokens.filter((token) => requestedTokens.has(token)).length;
+    const overlapRequestedPath = pathTokens.filter((token) => requestedTokens.has(token)).length;
+    const overlapUser = userTokens
+      ? nameTokens.filter((token) => userTokens.has(token)).length
+      : 0;
     const exactNameBoost = queryTokens.size > 0 && queryTokens.size === overlapQuery ? 3 : 0;
-    return overlapQuery * 3 + overlapPath + exactNameBoost;
+    return overlapQuery * 3 + overlapRequestedPath + overlapUser + exactNameBoost;
   }
 
   /**
@@ -1494,12 +1614,35 @@ export class ToolExecutor {
    * @param args - Tool arguments { path: string }
    * @returns ToolResult with DeleteEntryResult data
    */
-  private async handleDeleteEntry(args: Record<string, unknown>, channel: Channel): Promise<ToolResult> {
+  private async handleDeleteEntry(
+    args: Record<string, unknown>,
+    channel: Channel,
+    context?: ContextWindow
+  ): Promise<ToolResult> {
     const path = args.path as string;
+    let resolvedPath = path;
 
     // 1. Read entry first to get name for response (Requirement 3.3)
     // This will throw EntryNotFoundError if entry doesn't exist (Requirement 3.4)
-    const existing = await this.entryService.read(path);
+    let existing: EntryWithPath;
+    try {
+      existing = await this.entryService.read(path);
+    } catch (error) {
+      const resolved = await this.resolveMutationSourcePath(
+        path,
+        {
+          operation: 'delete',
+          channel,
+          context,
+          error
+        }
+      );
+      if (!resolved) {
+        throw error;
+      }
+      resolvedPath = resolved.path;
+      existing = await this.entryService.read(resolved.path);
+    }
     const category = existing.category;
     
     // Get name based on category type
@@ -1510,11 +1653,11 @@ export class ToolExecutor {
 
     // 2. Delete the entry (Requirement 3.2)
     // EntryService.delete() handles index regeneration and git commit (Requirement 3.5)
-    await this.entryService.delete(path, channel);
+    await this.entryService.delete(resolvedPath, channel);
 
     // 3. Return DeleteEntryResult with path and name (Requirement 3.3)
     const result: DeleteEntryResult = {
-      path,
+      path: resolvedPath,
       name,
       category
     };

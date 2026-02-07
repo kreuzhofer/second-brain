@@ -553,6 +553,52 @@ describe('Chat Tools Integration', () => {
         { id: 'confirm_no', label: 'No', message: 'No' }
       ]);
     });
+
+    it('should attach disambiguation quick replies for numbered options', async () => {
+      const assistantPrompt = [
+        'I found multiple entries that could match. Which one should I update?',
+        '1. Finish Q4 2025 Tax Report (admin/finish-q4-2025-tax-report)',
+        '2. Finish Q4 2025 Tax Review (admin/finish-q4-2025-tax-review)'
+      ].join('\n');
+
+      const mockOpenAI = {
+        chat: {
+          completions: {
+            create: jest.fn().mockResolvedValue({
+              choices: [{
+                message: {
+                  role: 'assistant',
+                  content: assistantPrompt,
+                  tool_calls: undefined
+                },
+                finish_reason: 'stop'
+              }]
+            })
+          }
+        }
+      } as unknown as OpenAI;
+
+      const chatService = new ChatService(
+        conversationService,
+        createMockContextAssembler(),
+        createMockClassificationAgent() as any,
+        createMockSummarizationService(),
+        createMockEntryService() as any,
+        getToolRegistry(),
+        { execute: jest.fn() } as unknown as ToolExecutor,
+        mockOpenAI
+      );
+
+      const response = await chatService.processMessageWithTools(
+        null,
+        'Update the Q4 tax item'
+      );
+
+      expect(response.message.quickReplies).toEqual([
+        { id: 'select_1', label: 'Use #1', message: '1' },
+        { id: 'select_2', label: 'Use #2', message: '2' }
+      ]);
+    });
   });
 
   // ============================================
