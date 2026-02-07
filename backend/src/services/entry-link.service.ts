@@ -1,13 +1,14 @@
 import { getPrismaClient } from '../lib/prisma';
-import { Category, Channel, EntryWithPath } from '../types/entry.types';
+import {
+  Category,
+  Channel,
+  EntryWithPath,
+  EntryGraphEdge,
+  EntryGraphResponse,
+  EntryLinkSummary
+} from '../types/entry.types';
 import { EntryNotFoundError, EntryService, generateSlug } from './entry.service';
 import { requireUserId } from '../context/user-context';
-
-export interface EntryLinkSummary {
-  path: string;
-  category: Category;
-  name: string;
-}
 
 export interface EntryLinksResponse {
   outgoing: EntryLinkSummary[];
@@ -16,6 +17,14 @@ export interface EntryLinksResponse {
 
 function buildEntryPath(category: Category, slug: string): string {
   return `${category}/${slug}`;
+}
+
+function toEntrySummary(category: string, slug: string, title: string): EntryLinkSummary {
+  return {
+    path: buildEntryPath(category as Category, slug),
+    category: category as Category,
+    name: title
+  };
 }
 
 function parseEntryPath(path: string): { category: Category; slug: string } {
@@ -109,6 +118,44 @@ export class EntryLinkService {
     });
   }
 
+  async linkProjectsForEntry(entry: EntryWithPath, projectNamesOrSlugs: string[]): Promise<void> {
+    const userId = requireUserId();
+    const unique = normalizePeopleNames(projectNamesOrSlugs);
+    if (unique.length === 0) return;
+
+    const sourceEntryId = (entry.entry as { id?: string }).id;
+    if (!sourceEntryId) return;
+
+    const targetEntryIds: string[] = [];
+    for (const ref of unique) {
+      const slug = generateSlug(ref);
+      const existing = await this.prisma.entry.findUnique({
+        where: {
+          userId_category_slug: {
+            userId,
+            category: 'projects',
+            slug
+          }
+        }
+      });
+      if (existing) {
+        targetEntryIds.push(existing.id);
+      }
+    }
+
+    if (targetEntryIds.length === 0) return;
+
+    await this.prisma.entryLink.createMany({
+      data: targetEntryIds.map((targetEntryId) => ({
+        userId,
+        sourceEntryId,
+        targetEntryId,
+        type: 'mention'
+      })),
+      skipDuplicates: true
+    });
+  }
+
   async getLinksForPath(path: string): Promise<EntryLinksResponse> {
     const userId = requireUserId();
     const { category, slug } = parseEntryPath(path);
@@ -132,19 +179,69 @@ export class EntryLinkService {
       })
     ]);
 
-    const outgoing = outgoingLinks.map((link) => ({
-      path: buildEntryPath(link.targetEntry.category as Category, link.targetEntry.slug),
-      category: link.targetEntry.category as Category,
-      name: link.targetEntry.title
-    }));
+    const outgoing = outgoingLinks.map((link) =>
+      toEntrySummary(link.targetEntry.category, link.targetEntry.slug, link.targetEntry.title)
+    );
 
-    const incoming = incomingLinks.map((link) => ({
-      path: buildEntryPath(link.sourceEntry.category as Category, link.sourceEntry.slug),
-      category: link.sourceEntry.category as Category,
-      name: link.sourceEntry.title
-    }));
+    const incoming = incomingLinks.map((link) =>
+      toEntrySummary(link.sourceEntry.category, link.sourceEntry.slug, link.sourceEntry.title)
+    );
 
     return { outgoing, incoming };
+  }
+
+  async getGraphForPath(path: string): Promise<EntryGraphResponse> {
+    const userId = requireUserId();
+    const { category, slug } = parseEntryPath(path);
+
+    const entry = await this.prisma.entry.findUnique({
+      where: { userId_category_slug: { userId, category, slug } }
+    });
+
+    if (!entry) {
+      throw new EntryNotFoundError(path);
+    }
+
+    const [outgoingLinks, incomingLinks] = await Promise.all([
+      this.prisma.entryLink.findMany({
+        where: { userId, sourceEntryId: entry.id },
+        include: { targetEntry: true }
+      }),
+      this.prisma.entryLink.findMany({
+        where: { userId, targetEntryId: entry.id },
+        include: { sourceEntry: true }
+      })
+    ]);
+
+    const center = toEntrySummary(entry.category, entry.slug, entry.title);
+    const nodesByPath = new Map<string, EntryLinkSummary>([[center.path, center]]);
+    const edges: EntryGraphEdge[] = [];
+
+    for (const link of outgoingLinks) {
+      const target = toEntrySummary(link.targetEntry.category, link.targetEntry.slug, link.targetEntry.title);
+      nodesByPath.set(target.path, target);
+      edges.push({
+        source: center.path,
+        target: target.path,
+        type: 'mention'
+      });
+    }
+
+    for (const link of incomingLinks) {
+      const source = toEntrySummary(link.sourceEntry.category, link.sourceEntry.slug, link.sourceEntry.title);
+      nodesByPath.set(source.path, source);
+      edges.push({
+        source: source.path,
+        target: center.path,
+        type: 'mention'
+      });
+    }
+
+    return {
+      center,
+      nodes: Array.from(nodesByPath.values()),
+      edges
+    };
   }
 }
 

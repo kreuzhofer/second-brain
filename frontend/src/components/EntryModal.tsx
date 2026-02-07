@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { api, EntryWithPath, EntryLinksResponse } from '@/services/api';
+import { api, EntryWithPath, EntryLinksResponse, EntryGraphResponse } from '@/services/api';
 import { X, Loader2, FileText, User, Briefcase, Lightbulb, ClipboardList, Pencil, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { hasNotesChanges, resizeTextarea, shouldPromptUnsavedNotes } from '@/components/entry-modal-helpers';
@@ -25,6 +25,8 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
   const [error, setError] = useState<string | null>(null);
   const [links, setLinks] = useState<EntryLinksResponse | null>(null);
   const [linksError, setLinksError] = useState<string | null>(null);
+  const [graph, setGraph] = useState<EntryGraphResponse | null>(null);
+  const [graphError, setGraphError] = useState<string | null>(null);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [notesDraft, setNotesDraft] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
@@ -35,9 +37,11 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
     if (entryPath) {
       loadEntry(entryPath);
       loadLinks(entryPath);
+      loadGraph(entryPath);
     } else {
       setEntry(null);
       setLinks(null);
+      setGraph(null);
       setIsEditingNotes(false);
       setNotesError(null);
     }
@@ -73,6 +77,16 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
       setLinks(data);
     } catch (err) {
       setLinksError(err instanceof Error ? err.message : 'Failed to load links');
+    }
+  };
+
+  const loadGraph = async (path: string) => {
+    setGraphError(null);
+    try {
+      const data = await api.entries.graph(path);
+      setGraph(data);
+    } catch (err) {
+      setGraphError(err instanceof Error ? err.message : 'Failed to load graph');
     }
   };
 
@@ -264,63 +278,103 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
               </div>
 
               {/* Links section */}
-              {(links?.outgoing?.length || links?.incoming?.length) && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                      Linked items
-                    </h3>
-                    {links?.outgoing?.length ? (
-                      <div className="mt-2 space-y-2">
-                        {links.outgoing.map((link) => (
-                          <button
-                            key={link.path}
-                            type="button"
-                            className="w-full text-left rounded-md border border-border p-2 hover:bg-muted transition-colors"
-                            onClick={() => onEntryClick?.(link.path)}
-                          >
-                            <div className="text-sm font-medium">{link.name}</div>
-                            <div className="text-xs text-muted-foreground capitalize">
-                              {link.category}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground mt-2">No linked items yet.</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                      Backlinks
-                    </h3>
-                    {links?.incoming?.length ? (
-                      <div className="mt-2 space-y-2">
-                        {links.incoming.map((link) => (
-                          <button
-                            key={link.path}
-                            type="button"
-                            className="w-full text-left rounded-md border border-border p-2 hover:bg-muted transition-colors"
-                            onClick={() => onEntryClick?.(link.path)}
-                          >
-                            <div className="text-sm font-medium">{link.name}</div>
-                            <div className="text-xs text-muted-foreground capitalize">
-                              {link.category}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground mt-2">No backlinks yet.</p>
-                    )}
-                  </div>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                    Linked items
+                  </h3>
+                  {links?.outgoing?.length ? (
+                    <div className="mt-2 space-y-2">
+                      {links.outgoing.map((link) => (
+                        <button
+                          key={link.path}
+                          type="button"
+                          className="w-full text-left rounded-md border border-border p-2 hover:bg-muted transition-colors"
+                          onClick={() => onEntryClick?.(link.path)}
+                        >
+                          <div className="text-sm font-medium">{link.name}</div>
+                          <div className="text-xs text-muted-foreground capitalize">
+                            {link.category}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-2">No linked items yet.</p>
+                  )}
                 </div>
-              )}
+
+                <div>
+                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                    Backlinks
+                  </h3>
+                  {links?.incoming?.length ? (
+                    <div className="mt-2 space-y-2">
+                      {links.incoming.map((link) => (
+                        <button
+                          key={link.path}
+                          type="button"
+                          className="w-full text-left rounded-md border border-border p-2 hover:bg-muted transition-colors"
+                          onClick={() => onEntryClick?.(link.path)}
+                        >
+                          <div className="text-sm font-medium">{link.name}</div>
+                          <div className="text-xs text-muted-foreground capitalize">
+                            {link.category}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-2">No backlinks yet.</p>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                    Entity graph
+                  </h3>
+                  {graph ? (
+                    <>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        {graph.nodes.length - 1} connected item(s), {graph.edges.length} link(s)
+                      </p>
+                      <div className="mt-2 rounded-md border border-border p-3">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Center</div>
+                        <div className="text-sm font-medium mt-1">{graph.center.name}</div>
+                        <div className="text-xs text-muted-foreground capitalize">{graph.center.category}</div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {graph.nodes
+                            .filter((node) => node.path !== graph.center.path)
+                            .map((node) => (
+                              <button
+                                key={node.path}
+                                type="button"
+                                className="rounded-full border border-border px-3 py-1 text-xs hover:bg-muted transition-colors"
+                                onClick={() => onEntryClick?.(node.path)}
+                              >
+                                {node.name}
+                              </button>
+                            ))}
+                          {graph.nodes.length <= 1 && (
+                            <span className="text-sm text-muted-foreground">No connected items yet.</span>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-2">No graph data available yet.</p>
+                  )}
+                </div>
+              </div>
 
               {linksError && (
                 <div className="text-sm text-destructive">
                   {linksError}
+                </div>
+              )}
+              {graphError && (
+                <div className="text-sm text-destructive">
+                  {graphError}
                 </div>
               )}
 

@@ -85,3 +85,5 @@ This document tracks the next MVP scope and progress.
 - 2026-02-06: Added tool-call guardrail audit step before mutating chat tools (`classify_and_capture`, `update_entry`, `move_entry`, `delete_entry`, `merge_entries`) with fail-closed behavior on guardrail mismatch or guardrail failure.
 - 2026-02-06: Added dedicated tool guardrail model config key `OPENAI_MODEL_TOOL_GUARDRAIL` and wired service-level validation prompts.
 - 2026-02-06: Verification: full backend test suite passed (`73/73` suites, `859` tests).
+- 2026-02-06: Entity Graph + Backlinks MVP (phase 1): added `/api/entries/:path/graph`, graph retrieval in `EntryLinkService`, and a new graph section in entry modal (center + connected nodes + edge counts).
+- 2026-02-06: Expanded auto-linking during capture/update beyond admin-only flows: project/person/idea updates can now create people links from LLM intent extraction and link referenced projects via `related_projects`.

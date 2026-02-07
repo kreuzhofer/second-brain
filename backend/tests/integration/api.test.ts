@@ -5,6 +5,7 @@ import { entriesRouter } from '../../src/routes/entries';
 import { healthRouter } from '../../src/routes/health';
 import { indexRouter } from '../../src/routes/index-route';
 import { authMiddleware } from '../../src/middleware/auth';
+import { EntryLinkService } from '../../src/services/entry-link.service';
 
 // Mock the config module
 jest.mock('../../src/config/env', () => ({
@@ -217,6 +218,50 @@ describe('API Integration Tests', () => {
     it('should return 404 for non-existent entry', async () => {
       const response = await request(app)
         .get('/api/entries/people/non-existent')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(404);
+
+      expect(response.body.error.code).toBe('NOT_FOUND');
+    });
+  });
+
+  describe('GET /api/entries/:path/graph', () => {
+    it('should return graph data with center node and links', async () => {
+      const createResponse = await request(app)
+        .post('/api/entries')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          category: 'admin',
+          name: 'Call Lina Haidu',
+          status: 'pending',
+          source_channel: 'api',
+          confidence: 0.9
+        })
+        .expect(201);
+
+      const linkService = new EntryLinkService();
+      await linkService.linkPeopleForEntry(createResponse.body, ['Lina Haidu'], 'api');
+
+      const graphResponse = await request(app)
+        .get('/api/entries/admin/call-lina-haidu/graph')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(graphResponse.body.center.path).toBe('admin/call-lina-haidu');
+      expect(graphResponse.body.nodes.length).toBeGreaterThanOrEqual(2);
+      expect(
+        graphResponse.body.edges.some(
+          (edge: any) =>
+            edge.source === 'admin/call-lina-haidu' &&
+            edge.target === 'people/lina-haidu' &&
+            edge.type === 'mention'
+        )
+      ).toBe(true);
+    });
+
+    it('should return 404 for non-existent graph entry', async () => {
+      const response = await request(app)
+        .get('/api/entries/admin/non-existent/graph')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
 

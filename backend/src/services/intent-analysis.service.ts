@@ -13,6 +13,7 @@ export interface UpdateIntentAnalysis {
   title?: string;
   note?: string;
   relatedPeople: string[];
+  relatedProjects: string[];
   statusChangeRequested: boolean;
   requestedStatus?: string;
   confidence: number;
@@ -36,6 +37,7 @@ Output schema:
   "title": "string or null",
   "note": "string or null",
   "related_people": ["string"],
+  "related_projects": ["string"],
   "status_change_requested": true | false,
   "requested_status": "pending|done|active|waiting|blocked|someday|needs_review|null",
   "confidence": 0.0-1.0
@@ -46,6 +48,7 @@ Rules:
 - "note" should only be set if user explicitly asks to add/append/include a note/log/comment.
 - "status_change_requested" must be false unless the user explicitly asks to mark/complete/reopen/change status.
 - Do not classify entities as people unless they are names or direct contacts.
+- Use "related_projects" for explicit project references only.
 - Keep note concise and without wrapping quotes.`;
 
 export class IntentAnalysisService {
@@ -124,6 +127,12 @@ export class IntentAnalysisService {
           .map((value: string) => value.trim())
           .filter((value: string) => value.length > 0)
       : [];
+    const relatedProjects = Array.isArray(parsed.related_projects)
+      ? parsed.related_projects
+          .filter((value: unknown) => typeof value === 'string')
+          .map((value: string) => value.trim())
+          .filter((value: string) => value.length > 0)
+      : [];
 
     return {
       title: typeof parsed.title === 'string' && parsed.title.trim().length > 0
@@ -133,6 +142,7 @@ export class IntentAnalysisService {
         ? parsed.note.trim()
         : undefined,
       relatedPeople,
+      relatedProjects,
       statusChangeRequested: parsed.status_change_requested === true,
       requestedStatus: typeof parsed.requested_status === 'string' && parsed.requested_status.trim().length > 0
         ? parsed.requested_status.trim()

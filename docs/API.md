@@ -165,24 +165,6 @@ GET /api/entries/:path
 **Example**:
 ```
 GET /api/entries/projects/my-project
-
-GET /api/entries/:path/links
-GET /api/entries/projects/my-project/links
-
-Returns outgoing links (items this entry references) and incoming backlinks.
-Link paths omit the `.md` suffix.
-
-Response:
-```json
-{
-  "outgoing": [
-    { "path": "people/lina-haidu", "category": "people", "name": "Lina Haidu" }
-  ],
-  "incoming": [
-    { "path": "admin/call-lina-haidu", "category": "admin", "name": "Call Lina Haidu" }
-  ]
-}
-```
 ```
 
 **Response** (200 OK):
@@ -213,6 +195,56 @@ Response:
     "code": "NOT_FOUND",
     "message": "Entry not found: projects/non-existent"
   }
+}
+```
+
+---
+
+### Get Entry Links and Backlinks
+
+Get outgoing links (items this entry references) and incoming backlinks.
+
+```
+GET /api/entries/:path/links
+GET /api/entries/projects/my-project/links
+```
+
+Paths in responses omit the `.md` suffix.
+
+**Response** (200 OK):
+```json
+{
+  "outgoing": [
+    { "path": "people/lina-haidu", "category": "people", "name": "Lina Haidu" }
+  ],
+  "incoming": [
+    { "path": "admin/call-lina-haidu", "category": "admin", "name": "Call Lina Haidu" }
+  ]
+}
+```
+
+---
+
+### Get Entry Graph
+
+Get lightweight graph data for an entry: center node, connected nodes, and directed edges.
+
+```
+GET /api/entries/:path/graph
+GET /api/entries/admin/call-lina-haidu/graph
+```
+
+**Response** (200 OK):
+```json
+{
+  "center": { "path": "admin/call-lina-haidu", "category": "admin", "name": "Call Lina Haidu" },
+  "nodes": [
+    { "path": "admin/call-lina-haidu", "category": "admin", "name": "Call Lina Haidu" },
+    { "path": "people/lina-haidu", "category": "people", "name": "Lina Haidu" }
+  ],
+  "edges": [
+    { "source": "admin/call-lina-haidu", "target": "people/lina-haidu", "type": "mention" }
+  ]
 }
 ```
 

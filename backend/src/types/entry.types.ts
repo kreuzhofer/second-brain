@@ -101,6 +101,18 @@ export interface EntryLinksResponse {
   incoming: EntryLinkSummary[];
 }
 
+export interface EntryGraphEdge {
+  source: string;
+  target: string;
+  type: 'mention';
+}
+
+export interface EntryGraphResponse {
+  center: EntryLinkSummary;
+  nodes: EntryLinkSummary[];
+  edges: EntryGraphEdge[];
+}
+
 /**
  * Summary type for list operations
  */

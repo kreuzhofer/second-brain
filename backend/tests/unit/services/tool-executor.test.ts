@@ -571,6 +571,85 @@ describe('ToolExecutor', () => {
       );
     });
 
+    it('should link related people when updating project entries from intent analysis', async () => {
+      const mockUpdatedEntry: EntryWithPath = {
+        path: 'projects/aws-goals-2026',
+        category: 'projects',
+        entry: {
+          id: 'updated-id-project-link',
+          name: '2026 Goals for AWS',
+          tags: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          source_channel: 'api',
+          confidence: 0.9,
+          status: 'active',
+          next_action: 'Draft weekly plan'
+        } as any,
+        content: ''
+      };
+      mockEntryService.update.mockResolvedValue(mockUpdatedEntry);
+
+      const mockEntryLinkService = {
+        linkPeopleForEntry: jest.fn().mockResolvedValue(undefined)
+      } as any;
+      const mockIntentService = {
+        analyzeUpdateIntent: jest.fn().mockResolvedValue({
+          title: undefined,
+          note: 'Schedule a call with Chris',
+          relatedPeople: ['Chris'],
+          statusChangeRequested: false,
+          confidence: 0.92
+        })
+      } as any;
+
+      toolExecutor = new ToolExecutor(
+        mockToolRegistry,
+        mockEntryService,
+        mockClassificationAgent,
+        mockDigestService,
+        mockSearchService,
+        mockIndexService,
+        mockActionExtractionService,
+        mockDuplicateService,
+        mockOfflineQueueService,
+        mockEntryLinkService,
+        mockIntentService
+      );
+
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: {
+          path: mockUpdatedEntry.path,
+          updates: {}
+        }
+      };
+
+      const context = {
+        systemPrompt: 'Test system prompt',
+        indexContent: '# Index\n\nTest index content',
+        summaries: [],
+        recentMessages: [
+          {
+            id: 'msg-project-link',
+            conversationId: 'conv-1',
+            role: 'user' as const,
+            content: 'Add a note to include Chris in this project.',
+            createdAt: new Date()
+          }
+        ]
+      };
+
+      const result = await toolExecutor.execute(toolCall, { channel: 'chat', context });
+
+      expect(result.success).toBe(true);
+      expect(mockEntryLinkService.linkPeopleForEntry).toHaveBeenCalledWith(
+        mockUpdatedEntry,
+        ['Chris'],
+        'chat'
+      );
+    });
+
     it('should infer related people from the user message when updating admin tasks', async () => {
       const mockUpdatedEntry: EntryWithPath = {
         path: 'admin/call-lina-haidu',

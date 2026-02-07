@@ -145,6 +145,47 @@ entriesRouter.get('/:path(*)/links', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/entries/:path(*)/graph
+ * Get graph data (center node + neighbors + directed edges) for an entry path
+ */
+entriesRouter.get('/:path(*)/graph', async (req: Request, res: Response) => {
+  try {
+    const linkService = getEntryLinkService();
+    const path = req.params.path;
+
+    if (!path) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Entry path is required'
+        }
+      });
+      return;
+    }
+
+    const graph = await linkService.getGraphForPath(path);
+    res.json(graph);
+  } catch (error) {
+    if (error instanceof EntryNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: error.message
+        }
+      });
+      return;
+    }
+    console.error('Error reading entry graph:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to read entry graph'
+      }
+    });
+  }
+});
+
+/**
  * GET /api/entries/:path(*)
  * Get a single entry by path
  */

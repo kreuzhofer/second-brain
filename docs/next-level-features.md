@@ -3,7 +3,7 @@
 This document captures post-MVP enhancements we can return to after closing current spec gaps.
 
 ## Intelligence and Linking
-- Entity graph across people/projects/ideas with auto-links and backlink views.
+- Entity graph across people/projects/ideas with auto-links and backlink views. (In progress: lightweight graph API + modal graph view + cross-category people/project linking)
 - Duplicate detection with merge flows and conflict resolution.
 - Semantic + keyword hybrid search with highlights and ranking.
 - Action extraction that turns vague notes into concrete next actions.

@@ -487,14 +487,14 @@ export class ToolExecutor {
 
       createdEntry = await this.entryService.create(targetCategory, entryData, channel, bodyContent);
 
-      if (targetCategory === 'admin' && this.entryLinkService) {
-        const adminFields = classificationResult.fields as AdminFields;
-        if (adminFields.relatedPeople && adminFields.relatedPeople.length > 0) {
-          await this.entryLinkService.linkPeopleForEntry(
-            createdEntry,
-            adminFields.relatedPeople,
-            channel
-          );
+      if (this.entryLinkService) {
+        const relatedPeople = this.inferRelatedPeopleFromCapture(classificationResult);
+        if (relatedPeople.length > 0) {
+          await this.entryLinkService.linkPeopleForEntry(createdEntry, relatedPeople, channel);
+        }
+        const relatedProjects = this.inferRelatedProjectsFromCapture(classificationResult);
+        if (relatedProjects.length > 0) {
+          await this.entryLinkService.linkProjectsForEntry(createdEntry, relatedProjects);
         }
       }
     }
@@ -764,7 +764,7 @@ export class ToolExecutor {
     }
 
     // 2. Link related people for admin tasks when provided in updates
-    if (this.entryLinkService && updatedEntry.category === 'admin') {
+    if (this.entryLinkService) {
       const relatedPeople = (updates as any).related_people ?? (updates as any).relatedPeople;
       const inferred = this.inferRelatedPeopleFromUpdate(
         updatedEntry,
@@ -775,6 +775,11 @@ export class ToolExecutor {
       );
       if (inferred.length > 0) {
         await this.entryLinkService.linkPeopleForEntry(updatedEntry, inferred, channel);
+      }
+
+      const projectRefs = this.inferRelatedProjectsFromUpdate(updates, intentAnalysis);
+      if (projectRefs.length > 0) {
+        await this.entryLinkService.linkProjectsForEntry(updatedEntry, projectRefs);
       }
     }
 
@@ -1004,6 +1009,46 @@ export class ToolExecutor {
     }
 
     return Array.from(extracted);
+  }
+
+  private inferRelatedPeopleFromCapture(result: ClassificationResult): string[] {
+    const fields = (result.fields || {}) as unknown as Record<string, unknown>;
+    const fromRelatedPeople = this.normalizeStringArray(fields.relatedPeople ?? fields.related_people);
+    if (fromRelatedPeople.length > 0) {
+      return fromRelatedPeople;
+    }
+
+    if (result.category === 'admin') {
+      const adminFields = result.fields as AdminFields;
+      return this.normalizeStringArray((adminFields as any).relatedPeople);
+    }
+    return [];
+  }
+
+  private inferRelatedProjectsFromCapture(result: ClassificationResult): string[] {
+    const fields = (result.fields || {}) as unknown as Record<string, unknown>;
+    return this.normalizeStringArray(fields.relatedProjects ?? fields.related_projects);
+  }
+
+  private inferRelatedProjectsFromUpdate(
+    updates: Record<string, unknown>,
+    intentAnalysis?: UpdateIntentAnalysis
+  ): string[] {
+    const fromUpdates = this.normalizeStringArray((updates as any).related_projects ?? (updates as any).relatedProjects);
+    if (fromUpdates.length > 0) {
+      return fromUpdates;
+    }
+    return this.normalizeStringArray(intentAnalysis?.relatedProjects);
+  }
+
+  private normalizeStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
   }
 
   private inferTitleAndNoteFromContext(context?: ContextWindow): { title?: string; note?: string } {
