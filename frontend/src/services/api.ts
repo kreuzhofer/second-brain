@@ -136,6 +136,11 @@ export interface ChatMessage {
   content: string;
   filedEntryPath?: string;
   filedConfidence?: number;
+  quickReplies?: Array<{
+    id: string;
+    label: string;
+    message: string;
+  }>;
   createdAt: string;
 }
 

@@ -14,6 +14,8 @@ import {
   Conversation,
   Message,
   ClassificationResult,
+  ContextWindow,
+  QuickReplyOption,
 } from '../types/chat.types';
 import { Category, Channel } from '../types/entry.types';
 import { ConversationService, getConversationService } from './conversation.service';
@@ -183,6 +185,16 @@ export class ChatService {
     // 3. Assemble context using existing ContextAssembler
     const context = await this.contextAssembler.assemble(conversation.id);
 
+    const confirmationCaptureResponse = await this.tryHandleCaptureConfirmationFollowUp(
+      conversation.id,
+      message,
+      channel,
+      context
+    );
+    if (confirmationCaptureResponse) {
+      return confirmationCaptureResponse;
+    }
+
     // 4. Build system prompt with tool schemas
     // Format conversation history for the system prompt
     const conversationHistory = this.formatConversationHistory(
@@ -314,6 +326,7 @@ export class ChatService {
     }
 
     // 11. Store assistant message with entry metadata if applicable
+    const quickReplies = this.buildQuickReplies(assistantMessageContent);
     const assistantMessage = await this.conversationService.addMessage(
       conversation.id,
       'assistant',
@@ -334,6 +347,7 @@ export class ChatService {
         content: assistantMessageContent,
         filedEntryPath: entryInfo?.path,
         filedConfidence: entryInfo?.confidence,
+        quickReplies,
         createdAt: assistantMessage.createdAt,
       },
       entry: entryInfo,
@@ -488,6 +502,184 @@ export class ChatService {
 
   private isReopenFallbackMessage(message: string): boolean {
     return message.startsWith('I found a completed task') || message.startsWith('I found multiple completed tasks');
+  }
+
+  private async tryHandleCaptureConfirmationFollowUp(
+    conversationId: string,
+    message: string,
+    channel: Channel,
+    context: ContextWindow
+  ): Promise<ChatResponse | null> {
+    const sourceMessage = this.extractPendingCaptureSource(context.recentMessages);
+    if (!sourceMessage) {
+      return null;
+    }
+
+    if (this.isCaptureDecline(message)) {
+      const declineText = "Okay, I won't save it.";
+      const assistantMessage = await this.conversationService.addMessage(
+        conversationId,
+        'assistant',
+        declineText
+      );
+      await this.summarizationService.checkAndSummarize(conversationId);
+      return {
+        conversationId,
+        message: {
+          id: assistantMessage.id,
+          role: 'assistant',
+          content: declineText,
+          createdAt: assistantMessage.createdAt
+        },
+        clarificationNeeded: false
+      } as ChatResponse;
+    }
+
+    if (!this.isCaptureConfirmation(message)) {
+      return null;
+    }
+
+    const hints = this.extractCategoryHintFromConfirmation(message);
+    const result = await this.toolExecutor.execute(
+      {
+        name: 'classify_and_capture',
+        arguments: hints
+          ? { text: sourceMessage, hints }
+          : { text: sourceMessage }
+      },
+      { channel, context }
+    );
+
+    if (!result.success || !result.data) {
+      return null;
+    }
+
+    const captureResult = result.data as CaptureResult;
+    const entryInfo = captureResult.queued
+      ? undefined
+      : {
+          path: captureResult.path,
+          category: captureResult.category,
+          name: captureResult.name,
+          confidence: captureResult.confidence
+        };
+
+    const responseText = this.buildFollowUpCaptureResponse(captureResult);
+    const assistantMessage = await this.conversationService.addMessage(
+      conversationId,
+      'assistant',
+      responseText,
+      entryInfo?.path,
+      entryInfo?.confidence
+    );
+
+    await this.summarizationService.checkAndSummarize(conversationId);
+
+    return {
+      conversationId,
+      message: {
+        id: assistantMessage.id,
+        role: 'assistant',
+        content: responseText,
+        filedEntryPath: entryInfo?.path,
+        filedConfidence: entryInfo?.confidence,
+        createdAt: assistantMessage.createdAt
+      },
+      entry: entryInfo,
+      clarificationNeeded: entryInfo?.category === 'inbox',
+      toolsUsed: ['classify_and_capture']
+    } as ChatResponse;
+  }
+
+  private extractPendingCaptureSource(recentMessages: Message[]): string | null {
+    if (!recentMessages || recentMessages.length < 3) {
+      return null;
+    }
+
+    const lastIndex = recentMessages.length - 1;
+    const lastMessage = recentMessages[lastIndex];
+    const previousAssistant = recentMessages[lastIndex - 1];
+    const previousUser = recentMessages[lastIndex - 2];
+
+    if (!lastMessage || lastMessage.role !== 'user') return null;
+    if (!previousAssistant || previousAssistant.role !== 'assistant') return null;
+    if (!previousUser || previousUser.role !== 'user') return null;
+
+    if (!this.isCapturePrompt(previousAssistant.content)) {
+      return null;
+    }
+
+    return previousUser.content.trim().length > 0 ? previousUser.content : null;
+  }
+
+  private isCapturePrompt(content: string): boolean {
+    const text = content.toLowerCase();
+    return (
+      text.includes('would you like me to capture') ||
+      text.includes('want me to capture') ||
+      text.includes('would you like me to save') ||
+      text.includes('want me to save') ||
+      text.includes('capture that as') ||
+      text.includes('save that as') ||
+      (text.includes('would you like me') && text.includes('capture'))
+    );
+  }
+
+  private isCaptureConfirmation(message: string): boolean {
+    const text = message.trim().toLowerCase();
+    if (text.length === 0) return false;
+    if (/\b(no|nope|nah|don['’]?t|do not|stop|cancel)\b/i.test(text)) {
+      return false;
+    }
+    return (
+      /\b(yes|yeah|yep|sure|ok|okay|please do|do it|go ahead|save it|capture it)\b/i.test(text) ||
+      /\bas\s+an?\s+(admin(?:\s+task)?|task|project|idea|person|people|inbox)\b/i.test(text)
+    );
+  }
+
+  private isCaptureDecline(message: string): boolean {
+    const text = message.trim().toLowerCase();
+    return /\b(no|nope|nah|don['’]?t|do not|stop|cancel)\b/i.test(text);
+  }
+
+  private extractCategoryHintFromConfirmation(message: string): string | undefined {
+    const text = message.toLowerCase();
+    if (/\b(admin(?:\s+task)?|task)\b/.test(text)) return '[admin]';
+    if (/\bproject\b/.test(text)) return '[project]';
+    if (/\bidea\b/.test(text)) return '[idea]';
+    if (/\b(person|people)\b/.test(text)) return '[person]';
+    if (/\binbox\b/.test(text)) return '[inbox]';
+    return undefined;
+  }
+
+  private buildFollowUpCaptureResponse(result: CaptureResult): string {
+    if (result.queued) {
+      return result.message || 'I queued that capture and will process it when the model is available.';
+    }
+    let typeLabel = result.category === 'admin' ? 'task' : result.category.slice(0, -1);
+    if (result.category === 'inbox') {
+      typeLabel = 'inbox item';
+    }
+    return `Done. I captured "${result.name}" as a ${typeLabel}. You can find it at ${result.path}.`;
+  }
+
+  private buildQuickReplies(content: string): QuickReplyOption[] | undefined {
+    const lower = content.toLowerCase();
+    if (this.isCapturePrompt(content)) {
+      return [
+        { id: 'capture_admin', label: 'Yes, task', message: 'Yes as an admin task' },
+        { id: 'capture_project', label: 'Yes, project', message: 'Yes as a project' },
+        { id: 'capture_idea', label: 'Yes, idea', message: 'Yes as an idea' },
+        { id: 'capture_no', label: 'No', message: 'No, do not save that' }
+      ];
+    }
+    if (lower.includes('would you like me') || lower.includes('want me to')) {
+      return [
+        { id: 'confirm_yes', label: 'Yes', message: 'Yes' },
+        { id: 'confirm_no', label: 'No', message: 'No' }
+      ];
+    }
+    return undefined;
   }
 
   /**

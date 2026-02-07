@@ -216,7 +216,69 @@ describe('ToolExecutor', () => {
       expect(mockToolGuardrailService.validateToolCall).toHaveBeenCalledWith({
         toolName: 'update_entry',
         args: { path: 'admin/pay-editor', updates: { status: 'done' } },
-        userMessage: 'Update the title to "Pay Chris, my editor for his video edits".'
+        userMessage: expect.stringContaining(
+          'Update the title to "Pay Chris, my editor for his video edits".'
+        )
+      });
+    });
+
+    it('should provide compact recent conversation context to the guardrail', async () => {
+      mockToolGuardrailService.validateToolCall.mockResolvedValueOnce({
+        allowed: false,
+        reason: 'Need stronger confirmation',
+        confidence: 0.7
+      });
+
+      const toolCall: ToolCall = {
+        name: 'classify_and_capture',
+        arguments: { text: 'Draft the one-pager by Sunday' }
+      };
+
+      const context = {
+        systemPrompt: 'Test system prompt',
+        indexContent: '# Index\n\nTest index content',
+        summaries: [],
+        recentMessages: [
+          {
+            id: 'msg-1',
+            conversationId: 'conv-1',
+            role: 'user' as const,
+            content: 'I need to start drafting the first version of the retail demo one pagers by Sunday evening',
+            createdAt: new Date()
+          },
+          {
+            id: 'msg-2',
+            conversationId: 'conv-1',
+            role: 'assistant' as const,
+            content: 'Would you like me to capture that as a task for you?',
+            createdAt: new Date()
+          },
+          {
+            id: 'msg-3',
+            conversationId: 'conv-1',
+            role: 'user' as const,
+            content: 'Yes as an admin task',
+            createdAt: new Date()
+          }
+        ]
+      };
+
+      await toolExecutor.execute(toolCall, { channel: 'chat', context });
+
+      expect(mockToolGuardrailService.validateToolCall).toHaveBeenCalledWith({
+        toolName: 'classify_and_capture',
+        args: { text: 'Draft the one-pager by Sunday' },
+        userMessage: expect.stringContaining('Current user message: Yes as an admin task')
+      });
+      expect(mockToolGuardrailService.validateToolCall).toHaveBeenCalledWith({
+        toolName: 'classify_and_capture',
+        args: { text: 'Draft the one-pager by Sunday' },
+        userMessage: expect.stringContaining('assistant: Would you like me to capture that as a task for you?')
+      });
+      expect(mockToolGuardrailService.validateToolCall).toHaveBeenCalledWith({
+        toolName: 'classify_and_capture',
+        args: { text: 'Draft the one-pager by Sunday' },
+        userMessage: expect.stringContaining('user: I need to start drafting the first version of the retail demo one pagers by Sunday evening')
       });
     });
 

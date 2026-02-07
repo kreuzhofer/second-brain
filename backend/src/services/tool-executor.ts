@@ -372,16 +372,37 @@ export class ToolExecutor {
       return { run: false };
     }
 
-    const userMessage = context?.recentMessages
-      ?.slice()
-      .reverse()
-      .find((msg) => msg.role === 'user')?.content;
+    const userMessage = this.buildGuardrailContextMessage(context);
 
     if (!userMessage) {
       return { run: false };
     }
 
     return { run: true, message: userMessage };
+  }
+
+  private buildGuardrailContextMessage(context?: ContextWindow): string | undefined {
+    if (!context?.recentMessages || context.recentMessages.length === 0) {
+      return undefined;
+    }
+
+    const latestUserMessage = context.recentMessages
+      .slice()
+      .reverse()
+      .find((msg) => msg.role === 'user')?.content;
+    if (!latestUserMessage) {
+      return undefined;
+    }
+
+    const compactRecent = context.recentMessages
+      .slice(-6)
+      .map((msg) => `${msg.role}: ${msg.content}`);
+
+    return [
+      `Current user message: ${latestUserMessage}`,
+      'Recent conversation context:',
+      ...compactRecent
+    ].join('\n');
   }
 
   /**

@@ -13,10 +13,11 @@ import { Loader2 } from 'lucide-react';
 interface MessageListProps {
   messages: ChatMessage[];
   onEntryClick: (path: string) => void;
+  onQuickReply?: (message: string) => void;
   isLoading?: boolean;
 }
 
-export function MessageList({ messages, onEntryClick, isLoading }: MessageListProps) {
+export function MessageList({ messages, onEntryClick, onQuickReply, isLoading }: MessageListProps) {
   const listRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to newest message
@@ -46,6 +47,8 @@ export function MessageList({ messages, onEntryClick, isLoading }: MessageListPr
           key={message.id} 
           message={message} 
           onEntryClick={onEntryClick}
+          onQuickReply={onQuickReply}
+          disableQuickReplies={Boolean(isLoading)}
         />
       ))}
       {isLoading && (

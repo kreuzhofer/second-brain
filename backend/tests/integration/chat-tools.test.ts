@@ -226,6 +226,7 @@ describe('Chat Tools Integration', () => {
 
       // Verify toolsUsed is populated
       expect(response.toolsUsed).toContain('classify_and_capture');
+      expect(response.message.quickReplies).toBeUndefined();
 
       // Verify message metadata is stored
       const messages = await conversationService.getMessages(response.conversationId);
@@ -297,6 +298,7 @@ describe('Chat Tools Integration', () => {
 
       // Verify response content
       expect(response.message.content).toBe(expectedResponse);
+      expect(response.message.quickReplies).toBeUndefined();
 
       // Verify no entry was created
       expect(response.entry).toBeUndefined();
@@ -360,6 +362,196 @@ describe('Chat Tools Integration', () => {
       
       expect(storedUserMessage?.content).toBe(userMessage);
       expect(storedAssistantMessage?.content).toBe(assistantResponse);
+    });
+
+    it('should capture the previous user intent when user confirms in a follow-up turn', async () => {
+      const firstTurnAssistant =
+        'It sounds like a task. Would you like me to capture that as a task for you?';
+      const expectedPath = 'admin/retail-demo-one-pagers';
+      const expectedName = 'Draft retail demo one-pagers';
+
+      const mockOpenAI = {
+        chat: {
+          completions: {
+            create: jest.fn().mockResolvedValue({
+              choices: [{
+                message: {
+                  role: 'assistant',
+                  content: firstTurnAssistant,
+                  tool_calls: undefined
+                },
+                finish_reason: 'stop'
+              }]
+            })
+          }
+        }
+      } as unknown as OpenAI;
+
+      const mockToolExecutor = {
+        execute: jest.fn().mockResolvedValue({
+          success: true,
+          data: {
+            path: expectedPath,
+            category: 'admin',
+            name: expectedName,
+            confidence: 0.91,
+            clarificationNeeded: false
+          } satisfies CaptureResult
+        })
+      } as unknown as ToolExecutor;
+
+      const contextAssembler = {
+        assemble: jest.fn().mockImplementation(async (conversationId: string) => ({
+          systemPrompt: 'Test system prompt',
+          indexContent: '# Index\n\nTest index content',
+          summaries: [],
+          recentMessages: await conversationService.getMessages(conversationId)
+        }))
+      } as unknown as ContextAssembler;
+
+      const chatService = new ChatService(
+        conversationService,
+        contextAssembler,
+        createMockClassificationAgent() as any,
+        createMockSummarizationService(),
+        createMockEntryService() as any,
+        getToolRegistry(),
+        mockToolExecutor,
+        mockOpenAI
+      );
+
+      const first = await chatService.processMessageWithTools(
+        null,
+        'I need to start drafting the first version of the retail demo one pagers by Sunday evening'
+      );
+      expect(first.message.quickReplies).toEqual([
+        { id: 'capture_admin', label: 'Yes, task', message: 'Yes as an admin task' },
+        { id: 'capture_project', label: 'Yes, project', message: 'Yes as a project' },
+        { id: 'capture_idea', label: 'Yes, idea', message: 'Yes as an idea' },
+        { id: 'capture_no', label: 'No', message: 'No, do not save that' }
+      ]);
+      const second = await chatService.processMessageWithTools(
+        first.conversationId,
+        'Yes as an admin task'
+      );
+
+      expect(mockOpenAI.chat.completions.create).toHaveBeenCalledTimes(1);
+      expect(mockToolExecutor.execute).toHaveBeenCalledTimes(1);
+      expect(mockToolExecutor.execute).toHaveBeenCalledWith(
+        {
+          name: 'classify_and_capture',
+          arguments: expect.objectContaining({
+            text: 'I need to start drafting the first version of the retail demo one pagers by Sunday evening',
+            hints: expect.stringContaining('admin')
+          })
+        },
+        expect.objectContaining({
+          channel: 'chat'
+        })
+      );
+      expect(second.entry?.path).toBe(expectedPath);
+      expect(second.message.content).toContain(expectedName);
+      expect(second.message.quickReplies).toBeUndefined();
+    });
+
+    it('should not force capture when follow-up turn declines confirmation', async () => {
+      const firstTurnAssistant =
+        'It sounds like a task. Would you like me to capture that as a task for you?';
+      const mockOpenAI = {
+        chat: {
+          completions: {
+            create: jest.fn().mockResolvedValue({
+              choices: [{
+                message: {
+                  role: 'assistant',
+                  content: firstTurnAssistant,
+                  tool_calls: undefined
+                },
+                finish_reason: 'stop'
+              }]
+            })
+          }
+        }
+      } as unknown as OpenAI;
+
+      const mockToolExecutor = {
+        execute: jest.fn()
+      } as unknown as ToolExecutor;
+
+      const contextAssembler = {
+        assemble: jest.fn().mockImplementation(async (conversationId: string) => ({
+          systemPrompt: 'Test system prompt',
+          indexContent: '# Index\n\nTest index content',
+          summaries: [],
+          recentMessages: await conversationService.getMessages(conversationId)
+        }))
+      } as unknown as ContextAssembler;
+
+      const chatService = new ChatService(
+        conversationService,
+        contextAssembler,
+        createMockClassificationAgent() as any,
+        createMockSummarizationService(),
+        createMockEntryService() as any,
+        getToolRegistry(),
+        mockToolExecutor,
+        mockOpenAI
+      );
+
+      const first = await chatService.processMessageWithTools(
+        null,
+        'I need to draft retail demo one pagers by Sunday evening'
+      );
+      const second = await chatService.processMessageWithTools(
+        first.conversationId,
+        'No, do not save that'
+      );
+
+      expect(mockOpenAI.chat.completions.create).toHaveBeenCalledTimes(1);
+      expect(mockToolExecutor.execute).not.toHaveBeenCalled();
+      expect(second.message.content).toBe("Okay, I won't save it.");
+      expect(second.entry).toBeUndefined();
+    });
+
+    it('should attach generic yes-no quick replies for non-capture assistant confirmations', async () => {
+      const assistantPrompt = 'Would you like me to help you phrase that better?';
+      const mockOpenAI = {
+        chat: {
+          completions: {
+            create: jest.fn().mockResolvedValue({
+              choices: [{
+                message: {
+                  role: 'assistant',
+                  content: assistantPrompt,
+                  tool_calls: undefined
+                },
+                finish_reason: 'stop'
+              }]
+            })
+          }
+        }
+      } as unknown as OpenAI;
+
+      const chatService = new ChatService(
+        conversationService,
+        createMockContextAssembler(),
+        createMockClassificationAgent() as any,
+        createMockSummarizationService(),
+        createMockEntryService() as any,
+        getToolRegistry(),
+        { execute: jest.fn() } as unknown as ToolExecutor,
+        mockOpenAI
+      );
+
+      const response = await chatService.processMessageWithTools(
+        null,
+        'Can you help me with this wording?'
+      );
+
+      expect(response.message.quickReplies).toEqual([
+        { id: 'confirm_yes', label: 'Yes', message: 'Yes' },
+        { id: 'confirm_no', label: 'No', message: 'No' }
+      ]);
     });
   });
 

@@ -104,7 +104,14 @@ export interface Message {
   content: string;
   filedEntryPath?: string;
   filedConfidence?: number;
+  quickReplies?: QuickReplyOption[];
   createdAt: Date;
+}
+
+export interface QuickReplyOption {
+  id: string;
+  label: string;
+  message: string;
 }
 
 /**
@@ -139,6 +146,7 @@ export interface AssistantMessage {
   content: string;
   filedEntryPath?: string;
   filedConfidence?: number;
+  quickReplies?: QuickReplyOption[];
   createdAt: Date;
 }
 
@@ -210,6 +218,7 @@ export interface ChatApiResponse {
     content: string;
     filedEntryPath?: string;
     filedConfidence?: number;
+    quickReplies?: QuickReplyOption[];
     createdAt: string;
   };
   entry?: {
@@ -245,6 +254,7 @@ export interface MessagesResponse {
     content: string;
     filedEntryPath?: string;
     filedConfidence?: number;
+    quickReplies?: QuickReplyOption[];
     createdAt: string;
   }[];
 }

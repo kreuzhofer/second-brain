@@ -12,9 +12,11 @@ import { FileText, User, Bot } from 'lucide-react';
 interface MessageProps {
   message: ChatMessage;
   onEntryClick: (path: string) => void;
+  onQuickReply?: (message: string) => void;
+  disableQuickReplies?: boolean;
 }
 
-export function Message({ message, onEntryClick }: MessageProps) {
+export function Message({ message, onEntryClick, onQuickReply, disableQuickReplies }: MessageProps) {
   const isUser = message.role === 'user';
   const displayPath = message.filedEntryPath?.replace(/\.md$/, '');
 
@@ -88,6 +90,26 @@ export function Message({ message, onEntryClick }: MessageProps) {
             minute: '2-digit',
           })}
         </span>
+
+        {!!message.quickReplies?.length && message.role === 'assistant' && onQuickReply && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {message.quickReplies.map((reply) => (
+              <button
+                key={reply.id}
+                type="button"
+                disabled={disableQuickReplies}
+                onClick={() => onQuickReply(reply.message)}
+                className={cn(
+                  'min-h-[44px] rounded-full border px-3 text-xs transition-colors',
+                  'border-border bg-background hover:bg-muted',
+                  disableQuickReplies ? 'opacity-60 cursor-not-allowed' : ''
+                )}
+              >
+                {reply.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

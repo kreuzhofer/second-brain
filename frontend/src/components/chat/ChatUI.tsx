@@ -114,6 +114,7 @@ export function ChatUI({ onEntryClick, className }: ChatUIProps) {
         <MessageList 
           messages={messages} 
           onEntryClick={onEntryClick}
+          onQuickReply={handleSendMessage}
           isLoading={isLoading}
         />
         {error && (

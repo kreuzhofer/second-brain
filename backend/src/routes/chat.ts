@@ -52,6 +52,7 @@ chatRouter.post('/', async (req: Request, res: Response) => {
         content: response.message.content,
         filedEntryPath: response.message.filedEntryPath,
         filedConfidence: response.message.filedConfidence,
+        quickReplies: response.message.quickReplies,
         createdAt: response.message.createdAt.toISOString(),
       },
       entry: response.entry ? {
@@ -158,6 +159,7 @@ chatRouter.get('/conversations/:id/messages', async (req: Request, res: Response
         content: msg.content,
         filedEntryPath: msg.filedEntryPath || undefined,
         filedConfidence: msg.filedConfidence || undefined,
+        quickReplies: msg.quickReplies,
         createdAt: msg.createdAt.toISOString(),
       })),
     };
