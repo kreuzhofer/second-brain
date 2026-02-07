@@ -26,6 +26,7 @@ export interface EnvConfig {
   OPENAI_MODEL_DAILY_TIP: string;
   OPENAI_MODEL_FOCUS_CONGRATS: string;
   OPENAI_MODEL_INTENT_ANALYSIS: string;
+  OPENAI_MODEL_TOOL_GUARDRAIL: string;
   OPENAI_MODEL_EMBEDDING: string;
   
   // Chat configuration (optional with defaults)
@@ -305,6 +306,7 @@ export function loadEnvConfig(): EnvConfig {
     OPENAI_MODEL_DAILY_TIP: process.env.OPENAI_MODEL_DAILY_TIP || 'gpt-4o-mini',
     OPENAI_MODEL_FOCUS_CONGRATS: process.env.OPENAI_MODEL_FOCUS_CONGRATS || 'gpt-4o-mini',
     OPENAI_MODEL_INTENT_ANALYSIS: process.env.OPENAI_MODEL_INTENT_ANALYSIS || 'gpt-4o-mini',
+    OPENAI_MODEL_TOOL_GUARDRAIL: process.env.OPENAI_MODEL_TOOL_GUARDRAIL || 'gpt-4o-mini',
     OPENAI_MODEL_EMBEDDING: process.env.OPENAI_MODEL_EMBEDDING || process.env.EMBEDDING_MODEL || 'text-embedding-3-large',
     
     // Chat configuration

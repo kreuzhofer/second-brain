@@ -55,6 +55,10 @@ This document tracks the next MVP scope and progress.
 - Adaptive Digests: Completed
 - Daily Momentum Tip: Completed
 - Offline Queue: Completed
+- Intent Reliability MVP: In Progress
+- Intent Guardrails (status alignment + unauthorized status blocking): Completed
+- Reopen Fallback in `update_entry` (done-task recovery + disambiguation): Completed
+- Tool-Call Guardrail Audit (cheap model, pre-execution for mutating chat tools): Completed
 - Notes Editing (Entry Modal): Completed
 - People Linking (Admin Tasks): Improved (verb + name filters, reduced false positives)
 - Link Paths (no `.md`): Completed
@@ -75,3 +79,9 @@ This document tracks the next MVP scope and progress.
 - 2026-02-06: Entry notes are now editable in the modal with unobtrusive edit/save/cancel controls and auto-resizing editor.
 - 2026-02-06: Removed `.md` from canonical entry links/paths while keeping backward-compatible parsing.
 - 2026-02-06: Improved people inference for admin task updates (added pay verb, capitalized-name filter, expanded stopwords).
+- 2026-02-06: Added intent reliability safeguards in `update_entry`: status is aligned to explicit intent when tool args disagree, implicit status changes are blocked, and reopen requests now fallback to completed-task matching when the requested path is not found.
+- 2026-02-06: Added ambiguous reopen disambiguation error from `update_entry` when multiple completed tasks are equally likely matches.
+- 2026-02-06: Verification: full backend test suite passed (`73/73` suites, `856` tests).
+- 2026-02-06: Added tool-call guardrail audit step before mutating chat tools (`classify_and_capture`, `update_entry`, `move_entry`, `delete_entry`, `merge_entries`) with fail-closed behavior on guardrail mismatch or guardrail failure.
+- 2026-02-06: Added dedicated tool guardrail model config key `OPENAI_MODEL_TOOL_GUARDRAIL` and wired service-level validation prompts.
+- 2026-02-06: Verification: full backend test suite passed (`73/73` suites, `859` tests).

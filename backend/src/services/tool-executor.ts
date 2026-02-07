@@ -25,6 +25,7 @@ import { DuplicateService, getDuplicateService, DuplicateHit } from './duplicate
 import { OfflineQueueService, getOfflineQueueService } from './offline-queue.service';
 import { EntryLinkService, getEntryLinkService } from './entry-link.service';
 import { IntentAnalysisService, getIntentAnalysisService, UpdateIntentAnalysis } from './intent-analysis.service';
+import { ToolGuardrailService, getToolGuardrailService } from './tool-guardrail.service';
 import { CLASSIFICATION_SYSTEM_PROMPT } from './context.service';
 import { 
   Category, 
@@ -184,6 +185,7 @@ export class ToolExecutor {
   private offlineQueueService?: OfflineQueueService;
   private entryLinkService?: EntryLinkService;
   private intentAnalysisService?: IntentAnalysisService;
+  private toolGuardrailService?: Pick<ToolGuardrailService, 'validateToolCall'>;
 
   constructor(
     toolRegistry?: ToolRegistry,
@@ -196,7 +198,8 @@ export class ToolExecutor {
     duplicateService?: DuplicateService,
     offlineQueueService?: OfflineQueueService,
     entryLinkService?: EntryLinkService,
-    intentAnalysisService?: IntentAnalysisService
+    intentAnalysisService?: IntentAnalysisService,
+    toolGuardrailService?: Pick<ToolGuardrailService, 'validateToolCall'>
   ) {
     this.toolRegistry = toolRegistry || getToolRegistry();
     this.entryService = entryService || getEntryService();
@@ -209,6 +212,7 @@ export class ToolExecutor {
     this.offlineQueueService = offlineQueueService;
     this.entryLinkService = entryLinkService || getEntryLinkService();
     this.intentAnalysisService = intentAnalysisService;
+    this.toolGuardrailService = toolGuardrailService;
   }
 
   /**
@@ -232,6 +236,28 @@ export class ToolExecutor {
       };
     }
 
+    const guardrailCheck = this.shouldRunToolGuardrail(name, channel, context);
+    if (guardrailCheck.run && guardrailCheck.message) {
+      try {
+        const decision = await this.getToolGuardrailService().validateToolCall({
+          toolName: name,
+          args,
+          userMessage: guardrailCheck.message
+        });
+        if (!decision.allowed) {
+          return {
+            success: false,
+            error: `Tool call blocked by guardrail: ${decision.reason || 'mismatch with user intent'}`
+          };
+        }
+      } catch (error) {
+        return {
+          success: false,
+          error: `Tool guardrail check failed: ${error instanceof Error ? error.message : 'unknown error'}`
+        };
+      }
+    }
+
     // Dispatch to appropriate handler
     try {
       switch (name) {
@@ -251,7 +277,7 @@ export class ToolExecutor {
           return await this.handleUpdateEntry(args, channel, context);
         
         case 'move_entry':
-          return await this.handleMoveEntry(args, channel);
+          return await this.handleMoveEntry(args, channel, context);
         
         case 'search_entries':
           return await this.handleSearchEntries(args);
@@ -310,6 +336,52 @@ export class ToolExecutor {
       this.intentAnalysisService = getIntentAnalysisService();
     }
     return this.intentAnalysisService;
+  }
+
+  private getToolGuardrailService(): Pick<ToolGuardrailService, 'validateToolCall'> {
+    if (this.toolGuardrailService) {
+      return this.toolGuardrailService;
+    }
+    if (process.env.NODE_ENV === 'test') {
+      this.toolGuardrailService = {
+        validateToolCall: async () => ({ allowed: true, confidence: 1 })
+      };
+      return this.toolGuardrailService;
+    }
+    this.toolGuardrailService = getToolGuardrailService();
+    return this.toolGuardrailService;
+  }
+
+  private shouldRunToolGuardrail(
+    toolName: string,
+    channel: Channel,
+    context?: ContextWindow
+  ): { run: boolean; message?: string } {
+    if (channel !== 'chat') {
+      return { run: false };
+    }
+
+    const mutatingTools = new Set([
+      'classify_and_capture',
+      'update_entry',
+      'move_entry',
+      'delete_entry',
+      'merge_entries'
+    ]);
+    if (!mutatingTools.has(toolName)) {
+      return { run: false };
+    }
+
+    const userMessage = context?.recentMessages
+      ?.slice()
+      .reverse()
+      .find((msg) => msg.role === 'user')?.content;
+
+    if (!userMessage) {
+      return { run: false };
+    }
+
+    return { run: true, message: userMessage };
   }
 
   /**
@@ -596,6 +668,7 @@ export class ToolExecutor {
     context?: ContextWindow
   ): Promise<ToolResult> {
     const path = args.path as string;
+    let resultPath = path;
     let updates = (args.updates as Record<string, unknown>) || {};
     const bodyContentArg = args.body_content as { content: string; mode: string; section?: string } | undefined;
     const warnings: string[] = [];
@@ -662,15 +735,33 @@ export class ToolExecutor {
       bodyUpdate = { content: intentAnalysis.note, mode: 'append' };
     }
 
-    const statusWarning = this.getStatusUpdateWarning(updates, context, channel, intentAnalysis);
-    if (statusWarning) {
-      const { status: _status, ...rest } = updates as Record<string, unknown>;
-      updates = rest;
-      warnings.push(statusWarning);
+    const statusGuardrail = this.applyStatusGuardrails(updates, context, channel, intentAnalysis);
+    updates = statusGuardrail.updates;
+    if (statusGuardrail.warning) {
+      warnings.push(statusGuardrail.warning);
     }
 
     // 1. Call entryService.update() with path, updates, and bodyUpdate
-    const updatedEntry = await this.entryService.update(path, updates, channel, bodyUpdate);
+    let updatedEntry: EntryWithPath;
+    try {
+      updatedEntry = await this.entryService.update(path, updates, channel, bodyUpdate);
+    } catch (error) {
+      const fallback = await this.tryReopenCompletedTaskFallback(
+        error,
+        path,
+        updates,
+        bodyUpdate,
+        channel,
+        context,
+        intentAnalysis
+      );
+      if (!fallback) {
+        throw error;
+      }
+      updatedEntry = fallback.updatedEntry;
+      resultPath = fallback.resolvedPath;
+      warnings.push(fallback.warning);
+    }
 
     // 2. Link related people for admin tasks when provided in updates
     if (this.entryLinkService && updatedEntry.category === 'admin') {
@@ -689,7 +780,7 @@ export class ToolExecutor {
 
     // 3. Return UpdateEntryResult with path, updated fields, and body update info
     const result: UpdateEntryResult = {
-      path,
+      path: resultPath,
       updatedFields: Object.keys(updates)
     };
 
@@ -715,16 +806,31 @@ export class ToolExecutor {
    * @param args - Tool arguments { path: string, targetCategory: string }
    * @returns ToolResult with MoveEntryResult data
    */
-  private async handleMoveEntry(args: Record<string, unknown>, channel: Channel): Promise<ToolResult> {
+  private async handleMoveEntry(
+    args: Record<string, unknown>,
+    channel: Channel,
+    context?: ContextWindow
+  ): Promise<ToolResult> {
     const path = args.path as string;
     const targetCategory = args.targetCategory as Category;
+    let sourcePath = path;
 
     // 1. Move entry using EntryService.move()
-    const moveResult = await this.entryService.move(path, targetCategory, channel);
+    let moveResult: EntryWithPath;
+    try {
+      moveResult = await this.entryService.move(path, targetCategory, channel);
+    } catch (error) {
+      const fallbackPath = await this.resolveMoveSourcePath(path, targetCategory, channel, context, error);
+      if (!fallbackPath) {
+        throw error;
+      }
+      sourcePath = fallbackPath;
+      moveResult = await this.entryService.move(fallbackPath, targetCategory, channel);
+    }
 
     // 2. Return MoveEntryResult
     const result: MoveEntryResult = {
-      oldPath: path,
+      oldPath: sourcePath,
       newPath: moveResult.path,
       category: targetCategory
     };
@@ -733,6 +839,105 @@ export class ToolExecutor {
       success: true,
       data: result
     };
+  }
+
+  private async resolveMoveSourcePath(
+    requestedPath: string,
+    targetCategory: Category,
+    channel: Channel,
+    context: ContextWindow | undefined,
+    error: unknown
+  ): Promise<string | null> {
+    if (channel !== 'chat') return null;
+    if (!(error instanceof Error) || !/not found/i.test(error.message)) return null;
+
+    const userMessage = context?.recentMessages
+      ?.slice()
+      .reverse()
+      .find((msg) => msg.role === 'user')?.content;
+    if (!userMessage) return null;
+
+    const query = this.extractReclassificationQuery(userMessage);
+    if (!query) return null;
+
+    const searchResult = await this.searchService.search(query, { limit: 10 });
+    const candidates = searchResult.entries.filter((entry) => entry.category !== targetCategory);
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const queryTokens = new Set(this.tokenizeReclassification(query));
+    const requestedTokens = new Set(this.tokenizeReclassification(requestedPath.split('/').slice(1).join(' ')));
+    const scored = candidates
+      .map((candidate) => ({
+        candidate,
+        score: this.scoreMoveCandidate(candidate, queryTokens, requestedTokens)
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    if (scored.length === 0) {
+      return null;
+    }
+
+    if (scored.length > 1 && scored[0].score === scored[1].score) {
+      const options = scored
+        .slice(0, 3)
+        .map((item) => `${item.candidate.name} (${item.candidate.path})`)
+        .join(', ');
+      throw new Error(`Multiple entries match reclassification request: ${options}`);
+    }
+
+    return scored[0].candidate.path;
+  }
+
+  private extractReclassificationQuery(message: string): string | null {
+    const quotedMatch = message.match(/["“]([^"”]+)["”]/);
+    if (quotedMatch?.[1]?.trim()) {
+      return quotedMatch[1].trim();
+    }
+
+    const makeMatch = message.match(
+      /make\s+(?:the\s+)?(.+?)\s+(?:an?\s+)?(?:admin(?:\s+task)?|project|idea|person|inbox)/i
+    );
+    if (makeMatch?.[1]) {
+      return makeMatch[1].trim();
+    }
+
+    const moveMatch = message.match(
+      /move\s+(.+?)\s+to\s+(?:an?\s+)?(?:admin(?:\s+task)?|project|idea|person|inbox)/i
+    );
+    if (moveMatch?.[1]) {
+      return moveMatch[1].trim();
+    }
+
+    const reclassifyMatch = message.match(/(?:reclassify|change|convert)\s+(.+?)\s+(?:to|as)\s+/i);
+    if (reclassifyMatch?.[1]) {
+      return reclassifyMatch[1].trim();
+    }
+
+    return null;
+  }
+
+  private tokenizeReclassification(text: string): string[] {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .split(/\s+/)
+      .filter((token) => token.length > 1);
+  }
+
+  private scoreMoveCandidate(
+    candidate: SearchHit,
+    queryTokens: Set<string>,
+    requestedTokens: Set<string>
+  ): number {
+    const nameTokens = this.tokenizeReclassification(candidate.name);
+    const pathTokens = this.tokenizeReclassification(candidate.path);
+    const overlapQuery = nameTokens.filter((token) => queryTokens.has(token)).length;
+    const overlapPath = pathTokens.filter((token) => requestedTokens.has(token)).length;
+    const exactNameBoost = queryTokens.size > 0 && queryTokens.size === overlapQuery ? 3 : 0;
+    return overlapQuery * 3 + overlapPath + exactNameBoost;
   }
 
   /**
@@ -855,26 +1060,50 @@ export class ToolExecutor {
     return { title, note };
   }
 
-  private getStatusUpdateWarning(
+  private applyStatusGuardrails(
     updates: Record<string, unknown>,
     context: ContextWindow | undefined,
     channel: Channel,
     intentAnalysis?: UpdateIntentAnalysis
-  ): string | null {
-    if (!('status' in updates)) return null;
-    if (channel !== 'chat') return null;
+  ): { updates: Record<string, unknown>; warning?: string } {
+    if (!('status' in updates)) return { updates };
+    if (channel !== 'chat') return { updates };
+
+    let guarded = { ...updates };
+    const currentStatus = typeof guarded.status === 'string' ? guarded.status : undefined;
+    const normalizedRequestedStatus = this.normalizeRequestedStatus(intentAnalysis?.requestedStatus);
+
     if (intentAnalysis) {
       if (intentAnalysis.statusChangeRequested) {
-        return null;
+        if (
+          currentStatus &&
+          normalizedRequestedStatus &&
+          currentStatus.toLowerCase() !== normalizedRequestedStatus
+        ) {
+          guarded = { ...guarded, status: normalizedRequestedStatus };
+          return {
+            updates: guarded,
+            warning: `Status update adjusted to "${normalizedRequestedStatus}" to match explicit user intent.`
+          };
+        }
+        return { updates: guarded };
       }
-      return 'Status update ignored because the user did not request a status change.';
+      const { status: _status, ...rest } = guarded;
+      return {
+        updates: rest,
+        warning: 'Status update ignored because the user did not request a status change.'
+      };
     }
     const lastUserMessage = context?.recentMessages
       ?.slice()
       .reverse()
       .find((msg) => msg.role === 'user');
     if (!lastUserMessage?.content) {
-      return 'Status update ignored because no user message context was available.';
+      const { status: _status, ...rest } = guarded;
+      return {
+        updates: rest,
+        warning: 'Status update ignored because no user message context was available.'
+      };
     }
     const text = lastUserMessage.content.toLowerCase();
     const statusKeywords = [
@@ -890,9 +1119,124 @@ export class ToolExecutor {
       'blocked'
     ];
     if (statusKeywords.some((keyword) => text.includes(keyword))) {
-      return null;
+      return { updates: guarded };
     }
-    return 'Status update ignored because the user did not request a status change.';
+    const { status: _status, ...rest } = guarded;
+    return {
+      updates: rest,
+      warning: 'Status update ignored because the user did not request a status change.'
+    };
+  }
+
+  private normalizeRequestedStatus(value: string | undefined): string | undefined {
+    if (!value) return undefined;
+    const normalized = value.trim().toLowerCase();
+    if (['pending', 'done', 'active', 'waiting', 'blocked', 'someday', 'needs_review'].includes(normalized)) {
+      return normalized;
+    }
+    if (['todo', 'to do', 'in progress', 'reopen', 're-open', 'open', 'reopened'].includes(normalized)) {
+      return 'pending';
+    }
+    return undefined;
+  }
+
+  private async tryReopenCompletedTaskFallback(
+    error: unknown,
+    originalPath: string,
+    updates: Record<string, unknown>,
+    bodyUpdate: BodyContentUpdate | undefined,
+    channel: Channel,
+    context: ContextWindow | undefined,
+    intentAnalysis: UpdateIntentAnalysis | undefined
+  ): Promise<{ updatedEntry: EntryWithPath; resolvedPath: string; warning: string } | null> {
+    if (channel !== 'chat') return null;
+    if (!(error instanceof Error) || !/not found/i.test(error.message)) return null;
+    if (!this.isReopenFallbackCandidate(updates, context, intentAnalysis)) return null;
+
+    const category = originalPath.split('/')[0] as Category;
+    if (category !== 'admin') return null;
+
+    const doneEntries = await this.entryService.list('admin', { status: 'done' });
+    if (doneEntries.length === 0) return null;
+
+    const lastUserMessage = context?.recentMessages
+      ?.slice()
+      .reverse()
+      .find((msg) => msg.role === 'user')?.content || '';
+    const messageSource = lastUserMessage || originalPath.split('/').slice(1).join(' ');
+    const messageTokens = new Set(this.tokenizeForMatch(messageSource));
+
+    const scored = doneEntries
+      .map((entry) => ({
+        entry,
+        score: this.scoreReopenCandidate(messageTokens, entry)
+      }))
+      .filter((candidate) => candidate.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    if (scored.length === 0) return null;
+    if (scored.length > 1 && scored[0].score === scored[1].score) {
+      const options = scored
+        .slice(0, 3)
+        .map((item) => `${item.entry.name} (${item.entry.path})`)
+        .join(', ');
+      throw new Error(`Multiple completed tasks match reopen request: ${options}`);
+    }
+
+    const winner = scored[0].entry;
+    const updatedEntry = await this.entryService.update(winner.path, updates, channel, bodyUpdate);
+    return {
+      updatedEntry,
+      resolvedPath: winner.path,
+      warning: `Requested path was not found. Updated matching completed task "${winner.name}" (${winner.path}).`
+    };
+  }
+
+  private isReopenFallbackCandidate(
+    updates: Record<string, unknown>,
+    context: ContextWindow | undefined,
+    intentAnalysis: UpdateIntentAnalysis | undefined
+  ): boolean {
+    const status = typeof updates.status === 'string' ? updates.status.toLowerCase() : '';
+    const candidateStatuses = new Set(['pending', 'active', 'waiting', 'blocked']);
+    const requested = this.normalizeRequestedStatus(intentAnalysis?.requestedStatus);
+    if (requested && candidateStatuses.has(requested)) {
+      return true;
+    }
+    if (candidateStatuses.has(status) && intentAnalysis?.statusChangeRequested === true) {
+      return true;
+    }
+
+    const lastUserMessage = context?.recentMessages
+      ?.slice()
+      .reverse()
+      .find((msg) => msg.role === 'user')?.content;
+    if (!lastUserMessage) return false;
+    const text = lastUserMessage.toLowerCase();
+    return (
+      text.includes('reopen') ||
+      text.includes('bring back') ||
+      text.includes('set back') ||
+      text.includes('mark back') ||
+      text.includes('undo') ||
+      /mark\s+.*(pending|todo|to do|in progress)/i.test(lastUserMessage)
+    );
+  }
+
+  private tokenizeForMatch(text: string): string[] {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .split(/\s+/)
+      .filter((token) => token.length > 1);
+  }
+
+  private scoreReopenCandidate(messageTokens: Set<string>, entry: EntrySummary): number {
+    const nameTokens = this.tokenizeForMatch(entry.name);
+    const pathTokens = this.tokenizeForMatch(entry.path);
+    const overlapName = nameTokens.filter((token) => messageTokens.has(token)).length;
+    const overlapPath = pathTokens.filter((token) => messageTokens.has(token)).length;
+    return overlapName * 3 + overlapPath;
   }
 
   private extractQuotedPhrase(text: string, regex: RegExp): string | undefined {

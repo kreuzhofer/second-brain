@@ -210,16 +210,17 @@ export class ChatService {
 
     let assistantMessageContent = response.choices[0]?.message?.content;
     const toolCalls = response.choices[0]?.message?.tool_calls;
+    const filteredToolCalls = this.filterToolCallsForIntent(message, toolCalls || []);
     const toolsUsed: string[] = [];
     let entryInfo: { path: string; category: Category; name: string; confidence: number } | undefined;
     const toolErrors: Array<{ name: string; error: string }> = [];
 
     // 8. Handle tool_calls response by executing tools via ToolExecutor
-    if (toolCalls && toolCalls.length > 0) {
+    if (filteredToolCalls.length > 0) {
       // Execute each tool call and collect results
       const toolResults: OpenAI.Chat.ChatCompletionToolMessageParam[] = [];
 
-      for (const toolCall of toolCalls) {
+      for (const toolCall of filteredToolCalls) {
         // Only handle function tool calls (not custom tool calls)
         if (toolCall.type !== 'function') {
           continue;
@@ -300,7 +301,7 @@ export class ChatService {
     }
 
     // 10. Handle conversational response (no tools) - content is already set
-    if ((!toolCalls || toolCalls.length === 0) && this.shouldAttemptReopenFallback(message, toolErrors)) {
+    if (filteredToolCalls.length === 0 && this.shouldAttemptReopenFallback(message, toolErrors)) {
       const fallbackMessage = await this.buildReopenFallbackMessage(message);
       if (fallbackMessage) {
         assistantMessageContent = fallbackMessage;
@@ -383,6 +384,38 @@ export class ChatService {
       return true;
     }
     return toolErrors.some((err) => /not found/i.test(err.error));
+  }
+
+  private filterToolCallsForIntent(
+    message: string,
+    toolCalls: OpenAI.Chat.ChatCompletionMessageToolCall[]
+  ): OpenAI.Chat.ChatCompletionMessageToolCall[] {
+    if (!toolCalls || toolCalls.length <= 1) {
+      return toolCalls;
+    }
+
+    const hasMove = toolCalls.some((call) => call.type === 'function' && call.function.name === 'move_entry');
+    const hasCapture = toolCalls.some((call) => call.type === 'function' && call.function.name === 'classify_and_capture');
+    if (!hasMove || !hasCapture) {
+      return toolCalls;
+    }
+
+    if (!this.isReclassificationIntent(message)) {
+      return toolCalls;
+    }
+
+    // For reclassification, prefer moving existing entries over capturing duplicates.
+    return toolCalls.filter((call) => call.type !== 'function' || call.function.name !== 'classify_and_capture');
+  }
+
+  private isReclassificationIntent(message: string): boolean {
+    const text = message.toLowerCase();
+    return (
+      /\bmake\b.+\b(admin(?: task)?|project|idea|person|inbox)\b/i.test(message) ||
+      /\bmove\b.+\bto\b.+\b(admin(?: task)?|project|idea|person|inbox)\b/i.test(message) ||
+      /\b(reclassify|re-classify|convert)\b/i.test(text) ||
+      /\bactually\b.+\b(should be|belongs in)\b/i.test(text)
+    );
   }
 
   private isReopenIntent(message: string): boolean {

@@ -66,6 +66,7 @@ describe('ToolExecutor', () => {
   let mockDuplicateService: jest.Mocked<DuplicateService>;
   let mockOfflineQueueService: jest.Mocked<OfflineQueueService>;
   let mockIntentAnalysisService: jest.Mocked<IntentAnalysisService>;
+  let mockToolGuardrailService: { validateToolCall: jest.Mock };
 
   beforeEach(() => {
     resetToolExecutor();
@@ -108,6 +109,10 @@ describe('ToolExecutor', () => {
     mockIntentAnalysisService = {
       analyzeUpdateIntent: jest.fn()
     } as unknown as jest.Mocked<IntentAnalysisService>;
+
+    mockToolGuardrailService = {
+      validateToolCall: jest.fn().mockResolvedValue({ allowed: true, confidence: 1 })
+    };
     
     toolExecutor = new ToolExecutor(
       mockToolRegistry,
@@ -120,7 +125,8 @@ describe('ToolExecutor', () => {
       mockDuplicateService,
       mockOfflineQueueService,
       undefined,
-      mockIntentAnalysisService
+      mockIntentAnalysisService,
+      mockToolGuardrailService as any
     );
   });
 
@@ -172,6 +178,116 @@ describe('ToolExecutor', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Invalid arguments');
+    });
+
+    it('should block mutating tool calls when guardrail rejects intent', async () => {
+      mockToolGuardrailService.validateToolCall.mockResolvedValueOnce({
+        allowed: false,
+        reason: 'Status change not requested by the user',
+        confidence: 0.96
+      });
+
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: { path: 'admin/pay-editor', updates: { status: 'done' } }
+      };
+
+      const context = {
+        systemPrompt: 'Test system prompt',
+        indexContent: '# Index\n\nTest index content',
+        summaries: [],
+        recentMessages: [
+          {
+            id: 'msg-guardrail-block',
+            conversationId: 'conv-1',
+            role: 'user' as const,
+            content: 'Update the title to "Pay Chris, my editor for his video edits".',
+            createdAt: new Date()
+          }
+        ]
+      };
+
+      const result = await toolExecutor.execute(toolCall, { channel: 'chat', context });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Tool call blocked by guardrail');
+      expect(result.error).toContain('Status change not requested');
+      expect(mockEntryService.update).not.toHaveBeenCalled();
+      expect(mockToolGuardrailService.validateToolCall).toHaveBeenCalledWith({
+        toolName: 'update_entry',
+        args: { path: 'admin/pay-editor', updates: { status: 'done' } },
+        userMessage: 'Update the title to "Pay Chris, my editor for his video edits".'
+      });
+    });
+
+    it('should skip guardrail for read-only tools', async () => {
+      const mockEntries: EntrySummary[] = [
+        {
+          id: 'entry-project-a',
+          path: 'projects/project-a',
+          name: 'Project A',
+          category: 'projects',
+          updated_at: '2024-01-01T12:00:00Z',
+          status: 'active'
+        }
+      ];
+      mockEntryService.list.mockResolvedValue(mockEntries);
+
+      const toolCall: ToolCall = {
+        name: 'list_entries',
+        arguments: {}
+      };
+
+      const context = {
+        systemPrompt: 'Test system prompt',
+        indexContent: '# Index\n\nTest index content',
+        summaries: [],
+        recentMessages: [
+          {
+            id: 'msg-guardrail-skip',
+            conversationId: 'conv-1',
+            role: 'user' as const,
+            content: 'Show my entries.',
+            createdAt: new Date()
+          }
+        ]
+      };
+
+      const result = await toolExecutor.execute(toolCall, { channel: 'chat', context });
+
+      expect(result.success).toBe(true);
+      expect(mockToolGuardrailService.validateToolCall).not.toHaveBeenCalled();
+    });
+
+    it('should fail closed when guardrail check errors for mutating tools', async () => {
+      mockToolGuardrailService.validateToolCall.mockRejectedValueOnce(new Error('guardrail timeout'));
+
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: { path: 'admin/pay-editor', updates: { status: 'pending' } }
+      };
+
+      const context = {
+        systemPrompt: 'Test system prompt',
+        indexContent: '# Index\n\nTest index content',
+        summaries: [],
+        recentMessages: [
+          {
+            id: 'msg-guardrail-fail-closed',
+            conversationId: 'conv-1',
+            role: 'user' as const,
+            content: 'Set this task back to pending.',
+            createdAt: new Date()
+          }
+        ]
+      };
+
+      const result = await toolExecutor.execute(toolCall, { channel: 'chat', context });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Tool guardrail check failed');
+      expect(result.error).toContain('guardrail timeout');
+      expect(mockEntryService.update).not.toHaveBeenCalled();
     });
 
     it('should dispatch to classify_and_capture handler with high confidence', async () => {
@@ -1391,6 +1507,225 @@ Reply with thoughts or adjustments.`;
   });
 
   describe('update_entry handler', () => {
+    it('should reopen a completed task fallback when requested path is missing', async () => {
+      const reopenedEntry: EntryWithPath = {
+        path: 'admin/finish-q4-2025-tax-report',
+        category: 'admin',
+        entry: {
+          id: 'done-entry-id',
+          name: 'Finish Q4 2025 Tax Report',
+          tags: [],
+          created_at: '2024-01-01T12:00:00Z',
+          updated_at: '2024-01-02T12:00:00Z',
+          source_channel: 'chat',
+          confidence: 0.9,
+          status: 'pending'
+        },
+        content: ''
+      };
+      mockEntryService.update
+        .mockRejectedValueOnce(new Error('Entry not found: admin/finish-q4-2025-tax-report'))
+        .mockResolvedValueOnce(reopenedEntry);
+      mockEntryService.list.mockResolvedValue([
+        {
+          id: 'done-summary-id',
+          path: 'admin/finish-q4-2025-tax-report',
+          name: 'Finish Q4 2025 Tax Report',
+          category: 'admin',
+          updated_at: '2024-01-03T12:00:00Z',
+          status: 'done'
+        }
+      ] as EntrySummary[]);
+
+      const mockIntentService = {
+        analyzeUpdateIntent: jest.fn().mockResolvedValue({
+          relatedPeople: [],
+          statusChangeRequested: true,
+          requestedStatus: 'pending',
+          confidence: 0.95
+        })
+      } as any;
+
+      toolExecutor = new ToolExecutor(
+        mockToolRegistry,
+        mockEntryService,
+        mockClassificationAgent,
+        mockDigestService,
+        mockSearchService,
+        mockIndexService,
+        mockActionExtractionService,
+        mockDuplicateService,
+        mockOfflineQueueService,
+        undefined,
+        mockIntentService
+      );
+
+      const context = {
+        systemPrompt: 'Test system prompt',
+        indexContent: '# Index\n\nTest index content',
+        summaries: [],
+        recentMessages: [
+          {
+            id: 'msg-reopen-fallback',
+            conversationId: 'conv-1',
+            role: 'user' as const,
+            content: 'Please reopen Finish Q4 2025 Tax Report and set it back to pending.',
+            createdAt: new Date()
+          }
+        ]
+      };
+
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: { path: 'admin/finish-q4-2025-tax-report', updates: { status: 'pending' } }
+      };
+
+      const result = await toolExecutor.execute(toolCall, { channel: 'chat', context });
+
+      expect(result.success).toBe(true);
+      const updateResult = result.data as UpdateEntryResult;
+      expect(updateResult.path).toBe('admin/finish-q4-2025-tax-report');
+      expect(updateResult.warnings?.some((warning) => warning.includes('completed task'))).toBe(true);
+      expect(mockEntryService.list).toHaveBeenCalledWith('admin', { status: 'done' });
+      expect(mockEntryService.update).toHaveBeenNthCalledWith(
+        1,
+        'admin/finish-q4-2025-tax-report',
+        { status: 'pending' },
+        'chat',
+        undefined
+      );
+      expect(mockEntryService.update).toHaveBeenNthCalledWith(
+        2,
+        'admin/finish-q4-2025-tax-report',
+        { status: 'pending' },
+        'chat',
+        undefined
+      );
+    });
+
+    it('should fail with disambiguation error when reopen fallback matches multiple completed tasks', async () => {
+      mockEntryService.update.mockRejectedValue(new Error('Entry not found: admin/finish-q4-2025-tax-report'));
+      mockEntryService.list.mockResolvedValue([
+        {
+          id: 'done-summary-id-1',
+          path: 'admin/finish-q4-2025-tax-report',
+          name: 'Finish Q4 2025 Tax Report',
+          category: 'admin',
+          updated_at: '2024-01-03T12:00:00Z',
+          status: 'done'
+        },
+        {
+          id: 'done-summary-id-2',
+          path: 'admin/finish-q4-2025-tax-review',
+          name: 'Finish Q4 2025 Tax Review',
+          category: 'admin',
+          updated_at: '2024-01-04T12:00:00Z',
+          status: 'done'
+        }
+      ] as EntrySummary[]);
+
+      const context = {
+        systemPrompt: 'Test system prompt',
+        indexContent: '# Index\n\nTest index content',
+        summaries: [],
+        recentMessages: [
+          {
+            id: 'msg-reopen-ambiguous',
+            conversationId: 'conv-1',
+            role: 'user' as const,
+            content: 'Reopen the Q4 tax task.',
+            createdAt: new Date()
+          }
+        ]
+      };
+
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: { path: 'admin/finish-q4-2025-tax-report', updates: { status: 'pending' } }
+      };
+
+      const result = await toolExecutor.execute(toolCall, { channel: 'chat', context });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Multiple completed tasks match');
+      expect(mockEntryService.list).toHaveBeenCalledWith('admin', { status: 'done' });
+      expect(mockEntryService.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('should align status update with explicit user intent when tool args disagree', async () => {
+      const mockUpdatedEntry: EntryWithPath = {
+        path: 'admin/pay-the-editor',
+        category: 'admin',
+        entry: {
+          id: 'test-id-status-align',
+          name: 'Pay the editor',
+          tags: [],
+          created_at: '2024-01-01T12:00:00Z',
+          updated_at: '2024-01-02T12:00:00Z',
+          source_channel: 'chat',
+          confidence: 0.9,
+          status: 'pending'
+        },
+        content: ''
+      };
+      mockEntryService.update.mockResolvedValue(mockUpdatedEntry);
+
+      const mockIntentService = {
+        analyzeUpdateIntent: jest.fn().mockResolvedValue({
+          relatedPeople: [],
+          statusChangeRequested: true,
+          requestedStatus: 'pending',
+          confidence: 0.93
+        })
+      } as any;
+
+      toolExecutor = new ToolExecutor(
+        mockToolRegistry,
+        mockEntryService,
+        mockClassificationAgent,
+        mockDigestService,
+        mockSearchService,
+        mockIndexService,
+        mockActionExtractionService,
+        mockDuplicateService,
+        mockOfflineQueueService,
+        undefined,
+        mockIntentService
+      );
+
+      const context = {
+        systemPrompt: 'Test system prompt',
+        indexContent: '# Index\n\nTest index content',
+        summaries: [],
+        recentMessages: [
+          {
+            id: 'msg-status-align',
+            conversationId: 'conv-1',
+            role: 'user' as const,
+            content: 'Set this task back to pending.',
+            createdAt: new Date()
+          }
+        ]
+      };
+
+      const toolCall: ToolCall = {
+        name: 'update_entry',
+        arguments: { path: 'admin/pay-the-editor', updates: { status: 'done' } }
+      };
+
+      const result = await toolExecutor.execute(toolCall, { channel: 'chat', context });
+
+      expect(result.success).toBe(true);
+      const updateResult = result.data as UpdateEntryResult;
+      expect(updateResult.warnings?.some((warning) => warning.toLowerCase().includes('status'))).toBe(true);
+      expect(mockEntryService.update).toHaveBeenCalledWith(
+        'admin/pay-the-editor',
+        { status: 'pending' },
+        'chat',
+        undefined
+      );
+    });
+
     it('should return path and updated fields on success', async () => {
       const mockUpdatedEntry: EntryWithPath = {
         path: 'projects/test-project',
