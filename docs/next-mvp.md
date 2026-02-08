@@ -62,7 +62,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Notes Editing (Entry Modal): Completed
 - People Linking (Admin Tasks): Improved (verb + name filters, reduced false positives)
 - Link Paths (no `.md`): Completed
-- Conversational disambiguation UX + execution memory: In Progress
+- Conversational disambiguation UX + execution memory: Completed (phase 1)
 
 ## Notes
 - Prioritize backend-first slices where possible.
@@ -145,3 +145,4 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - 2026-02-07: Added persistent real API harness under `testing/real-api/` with core and extended scenarios to verify behavior against live models outside mocked tests.
 - 2026-02-07: Verification: backend test suite passing (`73/73` suites, `873` tests). Core real-API mutation scenario stable; extended ambiguity-heavy scenario remains model-sensitive and is tracked for next iteration.
 - 2026-02-08: Started conversational disambiguation + execution memory implementation in `ChatService`: multi-turn pending capture confirmation, deterministic reopen confirmation handling, and numbered reopen option execution from follow-up replies.
+- 2026-02-08: Verification complete for phase 1: targeted integration tests for chat follow-up memory pass and full backend suite passes (`73/73` suites, `876` tests).
