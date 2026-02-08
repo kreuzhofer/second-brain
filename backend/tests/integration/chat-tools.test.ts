@@ -513,6 +513,351 @@ describe('Chat Tools Integration', () => {
       expect(second.entry).toBeUndefined();
     });
 
+    it('should keep pending capture intent across an extra turn before confirmation', async () => {
+      const firstTurnAssistant =
+        'It sounds like a task. Would you like me to capture that as a task for you?';
+      const secondTurnAssistant = 'I can save it as a task, project, or idea.';
+      const expectedPath = 'admin/retail-demo-one-pagers';
+      const expectedName = 'Draft retail demo one-pagers';
+
+      const mockOpenAI = {
+        chat: {
+          completions: {
+            create: jest
+              .fn()
+              .mockResolvedValueOnce({
+                choices: [{
+                  message: {
+                    role: 'assistant',
+                    content: firstTurnAssistant,
+                    tool_calls: undefined
+                  },
+                  finish_reason: 'stop'
+                }]
+              })
+              .mockResolvedValueOnce({
+                choices: [{
+                  message: {
+                    role: 'assistant',
+                    content: secondTurnAssistant,
+                    tool_calls: undefined
+                  },
+                  finish_reason: 'stop'
+                }]
+              })
+          }
+        }
+      } as unknown as OpenAI;
+
+      const mockToolExecutor = {
+        execute: jest.fn().mockResolvedValue({
+          success: true,
+          data: {
+            path: expectedPath,
+            category: 'admin',
+            name: expectedName,
+            confidence: 0.91,
+            clarificationNeeded: false
+          } satisfies CaptureResult
+        })
+      } as unknown as ToolExecutor;
+
+      const contextAssembler = {
+        assemble: jest.fn().mockImplementation(async (conversationId: string) => ({
+          systemPrompt: 'Test system prompt',
+          indexContent: '# Index\n\nTest index content',
+          summaries: [],
+          recentMessages: await conversationService.getMessages(conversationId)
+        }))
+      } as unknown as ContextAssembler;
+
+      const chatService = new ChatService(
+        conversationService,
+        contextAssembler,
+        createMockClassificationAgent() as any,
+        createMockSummarizationService(),
+        createMockEntryService() as any,
+        getToolRegistry(),
+        mockToolExecutor,
+        mockOpenAI
+      );
+
+      const first = await chatService.processMessageWithTools(
+        null,
+        'I need to start drafting the first version of the retail demo one pagers by Sunday evening'
+      );
+      const second = await chatService.processMessageWithTools(
+        first.conversationId,
+        'What category would that be?'
+      );
+      const third = await chatService.processMessageWithTools(
+        second.conversationId,
+        'Yes as an admin task'
+      );
+
+      expect(mockOpenAI.chat.completions.create).toHaveBeenCalledTimes(2);
+      expect(mockToolExecutor.execute).toHaveBeenCalledTimes(1);
+      expect(mockToolExecutor.execute).toHaveBeenCalledWith(
+        {
+          name: 'classify_and_capture',
+          arguments: expect.objectContaining({
+            text: 'I need to start drafting the first version of the retail demo one pagers by Sunday evening',
+            hints: expect.stringContaining('admin')
+          })
+        },
+        expect.objectContaining({
+          channel: 'chat'
+        })
+      );
+      expect(third.entry?.path).toBe(expectedPath);
+      expect(third.message.content).toContain(expectedName);
+    });
+
+    it('should execute reopen on follow-up confirmation after fallback prompt', async () => {
+      const updateResult = {
+        path: 'admin/finish-q4-2025-tax-report',
+        category: 'admin' as const,
+        name: 'Finish Q4 2025 Tax Report',
+        updated_fields: ['status'],
+        confidence: 0.95,
+        verification: {
+          checked: ['status'],
+          mismatches: []
+        },
+        receipt: {
+          tool: 'update_entry' as const,
+          target: { path: 'admin/finish-q4-2025-tax-report' },
+          requested: { updates: { status: 'pending' } },
+          applied: { updates: { status: 'pending' } },
+          verification: { checked: ['status'], mismatches: [] },
+          at: new Date().toISOString()
+        }
+      };
+
+      const mockOpenAI = {
+        chat: {
+          completions: {
+            create: jest
+              .fn()
+              .mockResolvedValueOnce({
+                choices: [{
+                  message: {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [{
+                      id: 'call_update_error_123',
+                      type: 'function',
+                      function: {
+                        name: 'update_entry',
+                        arguments: JSON.stringify({
+                          path: 'admin/finish-q4-2025-tax-report',
+                          updates: { status: 'pending' }
+                        })
+                      }
+                    }]
+                  },
+                  finish_reason: 'tool_calls'
+                }]
+              })
+          }
+        }
+      } as unknown as OpenAI;
+
+      const mockToolExecutor = {
+        execute: jest
+          .fn()
+          .mockResolvedValueOnce({
+            success: false,
+            error: 'Entry not found: admin/finish-q4-2025-tax-report'
+          })
+          .mockResolvedValueOnce({
+            success: true,
+            data: updateResult
+          })
+      } as unknown as ToolExecutor;
+
+      const mockEntryService = createMockEntryService() as any;
+      mockEntryService.list.mockResolvedValue([
+        {
+          id: 'done-1',
+          path: 'admin/finish-q4-2025-tax-report',
+          name: 'Finish Q4 2025 Tax Report',
+          category: 'admin',
+          updated_at: new Date().toISOString(),
+          status: 'done'
+        }
+      ]);
+
+      const chatService = new ChatService(
+        conversationService,
+        {
+          assemble: jest.fn().mockImplementation(async (conversationId: string) => ({
+            systemPrompt: 'Test system prompt',
+            indexContent: '# Index\n\nTest index content',
+            summaries: [],
+            recentMessages: await conversationService.getMessages(conversationId)
+          }))
+        } as unknown as ContextAssembler,
+        createMockClassificationAgent() as any,
+        createMockSummarizationService(),
+        mockEntryService,
+        getToolRegistry(),
+        mockToolExecutor,
+        mockOpenAI
+      );
+
+      const first = await chatService.processMessageWithTools(
+        null,
+        'Please bring back the task Finish Q4 2025 Tax Report'
+      );
+      const second = await chatService.processMessageWithTools(
+        first.conversationId,
+        'Yes'
+      );
+
+      expect(mockToolExecutor.execute).toHaveBeenCalledTimes(2);
+      expect(mockToolExecutor.execute).toHaveBeenLastCalledWith(
+        {
+          name: 'update_entry',
+          arguments: {
+            path: 'admin/finish-q4-2025-tax-report',
+            updates: { status: 'pending' }
+          }
+        },
+        expect.objectContaining({
+          channel: 'chat'
+        })
+      );
+      expect(second.message.content).toContain('back to pending');
+      expect(second.entry?.path).toBe('admin/finish-q4-2025-tax-report');
+    });
+
+    it('should execute reopen when user selects numbered fallback option', async () => {
+      const updateResult = {
+        path: 'admin/finish-q4-2025-tax-review',
+        category: 'admin' as const,
+        name: 'Finish Q4 2025 Tax Review',
+        updated_fields: ['status'],
+        confidence: 0.95,
+        verification: {
+          checked: ['status'],
+          mismatches: []
+        },
+        receipt: {
+          tool: 'update_entry' as const,
+          target: { path: 'admin/finish-q4-2025-tax-review' },
+          requested: { updates: { status: 'pending' } },
+          applied: { updates: { status: 'pending' } },
+          verification: { checked: ['status'], mismatches: [] },
+          at: new Date().toISOString()
+        }
+      };
+
+      const mockOpenAI = {
+        chat: {
+          completions: {
+            create: jest
+              .fn()
+              .mockResolvedValueOnce({
+                choices: [{
+                  message: {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [{
+                      id: 'call_update_error_999',
+                      type: 'function',
+                      function: {
+                        name: 'update_entry',
+                        arguments: JSON.stringify({
+                          path: 'admin/finish-q4-2025-tax-report',
+                          updates: { status: 'pending' }
+                        })
+                      }
+                    }]
+                  },
+                  finish_reason: 'tool_calls'
+                }]
+              })
+          }
+        }
+      } as unknown as OpenAI;
+
+      const mockToolExecutor = {
+        execute: jest
+          .fn()
+          .mockResolvedValueOnce({
+            success: false,
+            error: 'Entry not found: admin/finish-q4-2025-tax-report'
+          })
+          .mockResolvedValueOnce({
+            success: true,
+            data: updateResult
+          })
+      } as unknown as ToolExecutor;
+
+      const mockEntryService = createMockEntryService() as any;
+      mockEntryService.list.mockResolvedValue([
+        {
+          id: 'done-1',
+          path: 'admin/finish-q4-2025-tax-report',
+          name: 'Finish Q4 2025 Tax Report',
+          category: 'admin',
+          updated_at: new Date().toISOString(),
+          status: 'done'
+        },
+        {
+          id: 'done-2',
+          path: 'admin/finish-q4-2025-tax-review',
+          name: 'Finish Q4 2025 Tax Review',
+          category: 'admin',
+          updated_at: new Date().toISOString(),
+          status: 'done'
+        }
+      ]);
+
+      const chatService = new ChatService(
+        conversationService,
+        {
+          assemble: jest.fn().mockImplementation(async (conversationId: string) => ({
+            systemPrompt: 'Test system prompt',
+            indexContent: '# Index\n\nTest index content',
+            summaries: [],
+            recentMessages: await conversationService.getMessages(conversationId)
+          }))
+        } as unknown as ContextAssembler,
+        createMockClassificationAgent() as any,
+        createMockSummarizationService(),
+        mockEntryService,
+        getToolRegistry(),
+        mockToolExecutor,
+        mockOpenAI
+      );
+
+      const first = await chatService.processMessageWithTools(
+        null,
+        'Bring back finish q4 tax'
+      );
+      const second = await chatService.processMessageWithTools(
+        first.conversationId,
+        '2'
+      );
+
+      expect(first.message.content).toContain('multiple completed tasks');
+      expect(second.entry?.path).toBe('admin/finish-q4-2025-tax-review');
+      expect(mockToolExecutor.execute).toHaveBeenLastCalledWith(
+        {
+          name: 'update_entry',
+          arguments: {
+            path: 'admin/finish-q4-2025-tax-review',
+            updates: { status: 'pending' }
+          }
+        },
+        expect.objectContaining({
+          channel: 'chat'
+        })
+      );
+    });
+
     it('should attach generic yes-no quick replies for non-capture assistant confirmations', async () => {
       const assistantPrompt = 'Would you like me to help you phrase that better?';
       const mockOpenAI = {

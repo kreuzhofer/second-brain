@@ -185,14 +185,14 @@ export class ChatService {
     // 3. Assemble context using existing ContextAssembler
     const context = await this.contextAssembler.assemble(conversation.id);
 
-    const confirmationCaptureResponse = await this.tryHandleCaptureConfirmationFollowUp(
+    const pendingFollowUpResponse = await this.tryHandlePendingFollowUp(
       conversation.id,
       message,
       channel,
       context
     );
-    if (confirmationCaptureResponse) {
-      return confirmationCaptureResponse;
+    if (pendingFollowUpResponse) {
+      return pendingFollowUpResponse;
     }
 
     // 4. Build system prompt with tool schemas
@@ -504,12 +504,32 @@ export class ChatService {
     return message.startsWith('I found a completed task') || message.startsWith('I found multiple completed tasks');
   }
 
-  private async tryHandleCaptureConfirmationFollowUp(
+  private async tryHandlePendingFollowUp(
     conversationId: string,
     message: string,
     channel: Channel,
     context: ContextWindow
   ): Promise<ChatResponse | null> {
+    const reopenSelectionResponse = await this.tryHandleReopenSelectionFollowUp(
+      conversationId,
+      message,
+      channel,
+      context
+    );
+    if (reopenSelectionResponse) {
+      return reopenSelectionResponse;
+    }
+
+    const reopenConfirmResponse = await this.tryHandleReopenConfirmationFollowUp(
+      conversationId,
+      message,
+      channel,
+      context
+    );
+    if (reopenConfirmResponse) {
+      return reopenConfirmResponse;
+    }
+
     const sourceMessage = this.extractPendingCaptureSource(context.recentMessages);
     if (!sourceMessage) {
       return null;
@@ -591,25 +611,274 @@ export class ChatService {
     } as ChatResponse;
   }
 
+  private async tryHandleReopenConfirmationFollowUp(
+    conversationId: string,
+    message: string,
+    channel: Channel,
+    context: ContextWindow
+  ): Promise<ChatResponse | null> {
+    const lastPrompt = this.findLatestAssistantPrompt(
+      context.recentMessages,
+      (content) => content.startsWith('I found a completed task that looks like a match:')
+    );
+    if (!lastPrompt) {
+      return null;
+    }
+
+    if (this.isCaptureDecline(message)) {
+      return this.buildSimpleAssistantResponse(
+        conversationId,
+        "Okay, I won't reopen it."
+      );
+    }
+
+    if (!this.isCaptureConfirmation(message)) {
+      return null;
+    }
+
+    const pathMatch = lastPrompt.content.match(/\(([^()\s]+\/[^()\s]+)\)/);
+    const path = pathMatch?.[1];
+    if (!path) {
+      return this.buildSimpleAssistantResponse(
+        conversationId,
+        "I couldn't parse which task to reopen. Please tell me the task name."
+      );
+    }
+
+    const result = await this.toolExecutor.execute(
+      {
+        name: 'update_entry',
+        arguments: {
+          path,
+          updates: { status: 'pending' }
+        }
+      },
+      { channel, context }
+    );
+
+    if (!result.success || !result.data) {
+      const errorText = result.error || 'Unknown error';
+      return this.buildSimpleAssistantResponse(
+        conversationId,
+        `I couldn't reopen that task: ${errorText}`
+      );
+    }
+
+    const data = result.data as {
+      path?: string;
+      category?: Category;
+      name?: string;
+      confidence?: number;
+    };
+    const entryPath = data.path || path;
+    const entryName = data.name || this.extractNameFromReopenPrompt(lastPrompt.content) || entryPath;
+    const responseText = `Done. I set "${entryName}" back to pending. You can find it at ${entryPath}.`;
+
+    const assistantMessage = await this.conversationService.addMessage(
+      conversationId,
+      'assistant',
+      responseText,
+      entryPath,
+      typeof data.confidence === 'number' ? data.confidence : undefined
+    );
+    await this.summarizationService.checkAndSummarize(conversationId);
+
+    return {
+      conversationId,
+      message: {
+        id: assistantMessage.id,
+        role: 'assistant',
+        content: responseText,
+        filedEntryPath: entryPath,
+        filedConfidence: typeof data.confidence === 'number' ? data.confidence : undefined,
+        createdAt: assistantMessage.createdAt
+      },
+      entry: {
+        path: entryPath,
+        category: (data.category || 'admin') as Category,
+        name: entryName,
+        confidence: typeof data.confidence === 'number' ? data.confidence : 1
+      },
+      clarificationNeeded: false,
+      toolsUsed: ['update_entry']
+    } as ChatResponse;
+  }
+
+  private async tryHandleReopenSelectionFollowUp(
+    conversationId: string,
+    message: string,
+    channel: Channel,
+    context: ContextWindow
+  ): Promise<ChatResponse | null> {
+    const lastPrompt = this.findLatestAssistantPrompt(
+      context.recentMessages,
+      (content) => content.startsWith('I found multiple completed tasks that could match.')
+    );
+    if (!lastPrompt) {
+      return null;
+    }
+
+    if (this.isCaptureDecline(message)) {
+      return this.buildSimpleAssistantResponse(
+        conversationId,
+        "Okay, I won't reopen anything."
+      );
+    }
+
+    const options = this.parseNumberedReopenOptions(lastPrompt.content);
+    if (options.length === 0) {
+      return null;
+    }
+
+    const selectedPath = this.resolveReopenSelectionPath(message, options);
+    if (!selectedPath) {
+      if (this.isCaptureConfirmation(message)) {
+        const prompt = 'Please choose one option by number.';
+        const assistantMessage = await this.conversationService.addMessage(
+          conversationId,
+          'assistant',
+          prompt
+        );
+        await this.summarizationService.checkAndSummarize(conversationId);
+        return {
+          conversationId,
+          message: {
+            id: assistantMessage.id,
+            role: 'assistant',
+            content: prompt,
+            quickReplies: options.slice(0, 3).map((option, index) => ({
+              id: `select_${index + 1}`,
+              label: `Use #${index + 1}`,
+              message: `${index + 1}`
+            })),
+            createdAt: assistantMessage.createdAt
+          },
+          clarificationNeeded: true
+        } as ChatResponse;
+      }
+      return null;
+    }
+
+    const result = await this.toolExecutor.execute(
+      {
+        name: 'update_entry',
+        arguments: {
+          path: selectedPath,
+          updates: { status: 'pending' }
+        }
+      },
+      { channel, context }
+    );
+
+    if (!result.success || !result.data) {
+      const errorText = result.error || 'Unknown error';
+      return this.buildSimpleAssistantResponse(
+        conversationId,
+        `I couldn't reopen that task: ${errorText}`
+      );
+    }
+
+    const data = result.data as {
+      path?: string;
+      category?: Category;
+      name?: string;
+      confidence?: number;
+    };
+    const entryPath = data.path || selectedPath;
+    const entryName = data.name || options.find((o) => o.path === selectedPath)?.name || entryPath;
+    const responseText = `Done. I set "${entryName}" back to pending. You can find it at ${entryPath}.`;
+
+    const assistantMessage = await this.conversationService.addMessage(
+      conversationId,
+      'assistant',
+      responseText,
+      entryPath,
+      typeof data.confidence === 'number' ? data.confidence : undefined
+    );
+    await this.summarizationService.checkAndSummarize(conversationId);
+
+    return {
+      conversationId,
+      message: {
+        id: assistantMessage.id,
+        role: 'assistant',
+        content: responseText,
+        filedEntryPath: entryPath,
+        filedConfidence: typeof data.confidence === 'number' ? data.confidence : undefined,
+        createdAt: assistantMessage.createdAt
+      },
+      entry: {
+        path: entryPath,
+        category: (data.category || 'admin') as Category,
+        name: entryName,
+        confidence: typeof data.confidence === 'number' ? data.confidence : 1
+      },
+      clarificationNeeded: false,
+      toolsUsed: ['update_entry']
+    } as ChatResponse;
+  }
+
+  private async buildSimpleAssistantResponse(
+    conversationId: string,
+    content: string
+  ): Promise<ChatResponse> {
+    const assistantMessage = await this.conversationService.addMessage(
+      conversationId,
+      'assistant',
+      content
+    );
+    await this.summarizationService.checkAndSummarize(conversationId);
+    return {
+      conversationId,
+      message: {
+        id: assistantMessage.id,
+        role: 'assistant',
+        content,
+        createdAt: assistantMessage.createdAt
+      },
+      clarificationNeeded: false
+    } as ChatResponse;
+  }
+
+  private findLatestAssistantPrompt(
+    recentMessages: Message[],
+    predicate: (content: string) => boolean
+  ): Message | null {
+    if (!recentMessages || recentMessages.length < 2) {
+      return null;
+    }
+    const maxLookback = 12;
+    const start = Math.max(0, recentMessages.length - 1 - maxLookback);
+    for (let i = recentMessages.length - 2; i >= start; i -= 1) {
+      const msg = recentMessages[i];
+      if (msg.role === 'assistant' && predicate(msg.content)) {
+        return msg;
+      }
+    }
+    return null;
+  }
+
   private extractPendingCaptureSource(recentMessages: Message[]): string | null {
     if (!recentMessages || recentMessages.length < 3) {
       return null;
     }
 
-    const lastIndex = recentMessages.length - 1;
-    const lastMessage = recentMessages[lastIndex];
-    const previousAssistant = recentMessages[lastIndex - 1];
-    const previousUser = recentMessages[lastIndex - 2];
-
-    if (!lastMessage || lastMessage.role !== 'user') return null;
-    if (!previousAssistant || previousAssistant.role !== 'assistant') return null;
-    if (!previousUser || previousUser.role !== 'user') return null;
-
-    if (!this.isCapturePrompt(previousAssistant.content)) {
-      return null;
+    const maxLookback = 14;
+    const end = recentMessages.length - 1;
+    const start = Math.max(1, end - maxLookback);
+    for (let i = end - 1; i >= start; i -= 1) {
+      const candidate = recentMessages[i];
+      if (!candidate || candidate.role !== 'assistant' || !this.isCapturePrompt(candidate.content)) {
+        continue;
+      }
+      for (let j = i - 1; j >= 0; j -= 1) {
+        const prev = recentMessages[j];
+        if (prev.role === 'user' && prev.content.trim().length > 0) {
+          return prev.content;
+        }
+      }
     }
-
-    return previousUser.content.trim().length > 0 ? previousUser.content : null;
+    return null;
   }
 
   private isCapturePrompt(content: string): boolean {
@@ -701,6 +970,53 @@ export class ChatService {
         label: `Use #${num}`,
         message: num
       }));
+  }
+
+  private extractNameFromReopenPrompt(content: string): string | null {
+    const match = content.match(/match:\s*"(.+?)"/i);
+    return match?.[1] || null;
+  }
+
+  private parseNumberedReopenOptions(content: string): Array<{ index: number; name: string; path: string }> {
+    const lines = content.split('\n');
+    const options: Array<{ index: number; name: string; path: string }> = [];
+    for (const line of lines) {
+      const match = line.match(/^\s*(\d+)\.\s+(.+?)\s+\(([^()\s]+\/[^()\s]+)\)\s*$/);
+      if (!match) {
+        continue;
+      }
+      options.push({
+        index: Number(match[1]),
+        name: match[2].trim(),
+        path: match[3].trim()
+      });
+    }
+    return options;
+  }
+
+  private resolveReopenSelectionPath(
+    message: string,
+    options: Array<{ index: number; name: string; path: string }>
+  ): string | null {
+    const numberMatch = message.match(/(?:^|\D)(\d+)(?:\D|$)/);
+    if (numberMatch) {
+      const idx = Number(numberMatch[1]);
+      const selected = options.find((option) => option.index === idx);
+      if (selected) {
+        return selected.path;
+      }
+    }
+
+    const lower = message.toLowerCase();
+    const byPath = options.find((option) => lower.includes(option.path.toLowerCase()));
+    if (byPath) {
+      return byPath.path;
+    }
+    const byName = options.find((option) => lower.includes(option.name.toLowerCase()));
+    if (byName) {
+      return byName.path;
+    }
+    return null;
   }
 
   /**

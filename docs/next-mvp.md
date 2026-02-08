@@ -1,6 +1,6 @@
-# Next MVP Plan
+# Unified Roadmap and Progress
 
-This document tracks the next MVP scope and progress.
+This is the canonical roadmap document for current MVP progress and next-level feature planning.
 
 ## Goals (High Impact, Low Risk)
 - Semantic + keyword hybrid search with highlights and ranking.
@@ -55,13 +55,14 @@ This document tracks the next MVP scope and progress.
 - Adaptive Digests: Completed
 - Daily Momentum Tip: Completed
 - Offline Queue: Completed
-- Intent Reliability MVP: In Progress
+- Intent Reliability MVP: Completed (phase 2 hardening)
 - Intent Guardrails (status alignment + unauthorized status blocking): Completed
 - Reopen Fallback in `update_entry` (done-task recovery + disambiguation): Completed
 - Tool-Call Guardrail Audit (cheap model, pre-execution for mutating chat tools): Completed
 - Notes Editing (Entry Modal): Completed
 - People Linking (Admin Tasks): Improved (verb + name filters, reduced false positives)
 - Link Paths (no `.md`): Completed
+- Conversational disambiguation UX + execution memory: In Progress
 
 ## Notes
 - Prioritize backend-first slices where possible.
@@ -70,6 +71,59 @@ This document tracks the next MVP scope and progress.
 - Deep Focus: Adjusted timer-start music playback and notification permission request on start.
 - Auth: JWT + password login/registration with default user via env.
 - Storage: Fully DB-backed entries with revisions + embeddings (no filesystem memory store).
+
+## Next-Level Backlog (Unified)
+
+### Priority Next
+- Conversational disambiguation UX + execution memory (next): keep pending intent across turns, show quick-reply chips for confirmations, and reduce "please confirm again" loops for multi-turn mutations.
+- Entity Graph + Backlinks phase 2: stronger entity extraction on updates and better auto-link consistency for people/projects created during edits.
+- Full mobile UI optimization phase 2: reduce remaining whitespace, improve segmented rails, and finish touch-first affordances.
+
+### Intelligence and Linking
+- Entity graph across people/projects/ideas with auto-links and backlink views. (In progress: lightweight graph API + modal graph view + cross-category people/project linking)
+- Duplicate detection with merge flows and conflict resolution.
+- Semantic + keyword hybrid search with highlights and ranking.
+- Action extraction that turns vague notes into concrete next actions.
+- Relationship insights (e.g., people touched by a project, recurring themes).
+- LLM intent precision layer (cheap model) to interpret updates (title vs notes vs status), resolve ambiguity, and prevent accidental status changes.
+- LLM entity extraction for updates and notes (people/projects/ideas mentions beyond regex verbs).
+- LLM reopen resolver to match "bring back" requests to completed tasks with ranked candidates + disambiguation.
+- LLM date normalization for natural language due dates (fallback to deterministic parsing).
+- LLM hint extraction for chat/email (category hints, related entities, thread linking).
+- Tool-call audit/guardrail step (cheap model) to validate tool args against user intent before execution.
+- Multi-turn intent memory for chat mutations (carry pending operation + candidate target + requested field changes across follow-ups).
+- Quick-reply confirmation chips for disambiguation prompts (e.g., `Save as admin task`, `Update title only`, `Update notes only`, `Cancel`).
+
+### Capture and Interfaces
+- Inbox triage UI for batch reclassify/merge/resolve.
+- Full mobile UI optimization for the current feature set (responsive layout, touch-first navigation).
+- Voice capture (Whisper) with background sync.
+- Mobile PWA with offline-first capture queue.
+- Browser extension for one-click capture with URL metadata.
+- Keyboard shortcuts and quick capture tray.
+
+### Proactive and Scheduling
+- Calendar integration (pre-meeting context surfacing).
+- Smart nudges based on deadlines, inactivity, and priority decay.
+- Adaptive digests (user preferences, length caps, focus areas).
+- Stale-project lifecycle with archive/hibernate automation.
+
+### Calendar MVP (Next-Level)
+- Plan-my-week assistant (build a schedule from tasks, priorities, and focus goals).
+- Calendar publish: generate a subscription link (ICS/WebCal) for planned tasks.
+- Calendar write-back: ingest updates from Outlook/ICS to reschedule tasks.
+- Focus blocks: create protected calendar blocks and sync back to Second Brain.
+
+### Reliability and Data Management
+- Offline queue when LLM is unavailable with replay and dedupe.
+- Full audit UI with diffs and rollback in the app.
+- Backup/export workflows (zip + optional cloud sync).
+- Multi-profile or multi-user support (future).
+
+### Developer and Ops
+- Webhooks for downstream automations.
+- Plug-in system for custom capture sources.
+- Structured analytics dashboard for usage metrics.
 
 ## Progress Log
 - 2026-02-05: DB-backed entries and pgvector embeddings in place; tests updated for EntrySummary ids and normalized content; all backend tests passing.
@@ -87,3 +141,7 @@ This document tracks the next MVP scope and progress.
 - 2026-02-06: Verification: full backend test suite passed (`73/73` suites, `859` tests).
 - 2026-02-06: Entity Graph + Backlinks MVP (phase 1): added `/api/entries/:path/graph`, graph retrieval in `EntryLinkService`, and a new graph section in entry modal (center + connected nodes + edge counts).
 - 2026-02-06: Expanded auto-linking during capture/update beyond admin-only flows: project/person/idea updates can now create people links from LLM intent extraction and link referenced projects via `related_projects`.
+- 2026-02-07: Reliability hardening for mutating chat tools completed: pre-mutation source resolution (`update/move/delete`), richer recent-message context for resolution, post-mutation verification gates, and mutation receipts for observability.
+- 2026-02-07: Added persistent real API harness under `testing/real-api/` with core and extended scenarios to verify behavior against live models outside mocked tests.
+- 2026-02-07: Verification: backend test suite passing (`73/73` suites, `873` tests). Core real-API mutation scenario stable; extended ambiguity-heavy scenario remains model-sensitive and is tracked for next iteration.
+- 2026-02-08: Started conversational disambiguation + execution memory implementation in `ChatService`: multi-turn pending capture confirmation, deterministic reopen confirmation handling, and numbered reopen option execution from follow-up replies.
