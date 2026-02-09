@@ -60,6 +60,7 @@ enum Operation {
 
 enum EntryLinkType {
   mention
+  relationship
 }
 
 model User {

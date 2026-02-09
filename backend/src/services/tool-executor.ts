@@ -89,6 +89,8 @@ export interface CaptureResult {
   name: string;
   confidence: number;
   clarificationNeeded: boolean;
+  captureKind?: 'standard' | 'people_relationship';
+  relatedPeople?: string[];
   queued?: boolean;
   queueId?: string;
   message?: string;
@@ -434,6 +436,29 @@ export class ToolExecutor {
   ): Promise<ToolResult> {
     const text = args.text as string;
     const hints = args.hints as string | undefined;
+
+    const relationshipIntent = this.detectPeopleRelationshipIntent(text);
+    if (relationshipIntent && this.entryLinkService) {
+      const primaryEntry = await this.entryLinkService.capturePeopleRelationship(
+        relationshipIntent.people,
+        relationshipIntent.kind,
+        text,
+        channel
+      );
+      const captureResult: CaptureResult = {
+        path: primaryEntry.path,
+        category: primaryEntry.category,
+        name: (primaryEntry.entry as { name?: string }).name || relationshipIntent.people[0],
+        confidence: 0.95,
+        clarificationNeeded: false,
+        captureKind: 'people_relationship',
+        relatedPeople: relationshipIntent.people
+      };
+      return {
+        success: true,
+        data: captureResult
+      };
+    }
 
     // 1. Build context for classification
     // Prefer full conversation context when provided (chat/email),
@@ -1719,6 +1744,57 @@ export class ToolExecutor {
     }
 
     return results;
+  }
+
+  private detectPeopleRelationshipIntent(
+    text: string
+  ): { people: [string, string]; kind: 'relationship' } | null {
+    const compact = text.trim().replace(/\s+/g, ' ');
+    if (!compact) return null;
+
+    const patterns: RegExp[] = [
+      /^([a-z][a-z'’-]{1,39})\s+and\s+([a-z][a-z'’-]{1,39})\s+(?:have|are in)\s+(?:a\s+)?relationship\b/i,
+      /^([a-z][a-z'’-]{1,39})\s+is\s+(?:in\s+)?(?:a\s+)?relationship\s+with\s+([a-z][a-z'’-]{1,39})\b/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = compact.match(pattern);
+      if (!match?.[1] || !match?.[2]) continue;
+      const first = this.normalizeRelationshipName(match[1]);
+      const second = this.normalizeRelationshipName(match[2]);
+      if (!first || !second) continue;
+      if (first.toLowerCase() === second.toLowerCase()) continue;
+      return { people: [first, second], kind: 'relationship' };
+    }
+
+    return null;
+  }
+
+  private normalizeRelationshipName(raw: string): string | null {
+    const cleaned = raw.replace(/^[^a-zA-Z]+|[^a-zA-Z'’-]+$/g, '');
+    if (!cleaned) return null;
+    const stopwords = new Set([
+      'the',
+      'a',
+      'an',
+      'this',
+      'that',
+      'someone',
+      'somebody',
+      'person',
+      'people'
+    ]);
+    if (stopwords.has(cleaned.toLowerCase())) {
+      return null;
+    }
+
+    return cleaned
+      .split(/([-'’])/)
+      .map((part) => {
+        if (part === '-' || part === "'" || part === '’') return part;
+        return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+      })
+      .join('');
   }
 
   private extractPersonNamesFromTitle(text: string): string[] {

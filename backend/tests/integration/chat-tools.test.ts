@@ -234,6 +234,71 @@ describe('Chat Tools Integration', () => {
       expect(assistantMessage?.filedEntryPath).toBe(expectedPath);
       expect(assistantMessage?.filedConfidence).toBe(expectedConfidence);
     });
+
+    it('should use deterministic relationship capture response and skip second LLM response', async () => {
+      const toolCallId = 'call_relationship_capture';
+      const mockOpenAI = {
+        chat: {
+          completions: {
+            create: jest.fn().mockResolvedValue({
+              choices: [{
+                message: {
+                  role: 'assistant',
+                  content: null,
+                  tool_calls: [{
+                    id: toolCallId,
+                    type: 'function',
+                    function: {
+                      name: 'classify_and_capture',
+                      arguments: JSON.stringify({ text: 'Chris and Amie have a relationship' })
+                    }
+                  }]
+                },
+                finish_reason: 'tool_calls'
+              }]
+            })
+          }
+        }
+      } as unknown as OpenAI;
+
+      const mockToolExecutor = {
+        execute: jest.fn().mockResolvedValue({
+          success: true,
+          data: {
+            path: 'people/chris',
+            category: 'people',
+            name: 'Chris',
+            confidence: 0.95,
+            clarificationNeeded: false,
+            captureKind: 'people_relationship',
+            relatedPeople: ['Chris', 'Amie']
+          } as CaptureResult
+        })
+      } as unknown as ToolExecutor;
+
+      const chatService = new ChatService(
+        conversationService,
+        createMockContextAssembler(),
+        createMockClassificationAgent() as any,
+        createMockSummarizationService(),
+        createMockEntryService() as any,
+        getToolRegistry(),
+        mockToolExecutor,
+        mockOpenAI
+      );
+
+      const response = await chatService.processMessageWithTools(
+        null,
+        'Chris and Amie have a relationship'
+      );
+
+      expect(mockOpenAI.chat.completions.create).toHaveBeenCalledTimes(1);
+      expect(response.message.content).toContain('Chris and Amie');
+      expect(response.message.content.toLowerCase()).toContain('linked');
+      expect(response.message.content.toLowerCase()).not.toContain('add amie');
+      expect(response.entry?.path).toBe('people/chris');
+      expect(response.toolsUsed).toContain('classify_and_capture');
+    });
   });
 
   // ============================================

@@ -104,12 +104,12 @@ export interface EntryLinksResponse {
 export interface EntryGraphEdge {
   source: string;
   target: string;
-  type: 'mention';
+  type: 'mention' | 'relationship';
 }
 
 export interface EntryGraphConnection {
   direction: 'incoming' | 'outgoing';
-  via: 'mention';
+  via: 'mention' | 'relationship';
   reason: string;
   source: EntryLinkSummary;
   target: EntryLinkSummary;

@@ -225,6 +225,7 @@ export class ChatService {
     const filteredToolCalls = this.filterToolCallsForIntent(message, toolCalls || []);
     const toolsUsed: string[] = [];
     let entryInfo: { path: string; category: Category; name: string; confidence: number } | undefined;
+    let captureResponseOverride: string | undefined;
     const toolErrors: Array<{ name: string; error: string }> = [];
 
     // 8. Handle tool_calls response by executing tools via ToolExecutor
@@ -278,6 +279,9 @@ export class ChatService {
               confidence: captureResult.confidence
             };
           }
+          if (captureResult.captureKind === 'people_relationship' && captureResult.relatedPeople?.length) {
+            captureResponseOverride = this.buildRelationshipCaptureResponse(captureResult.relatedPeople);
+          }
         }
 
         toolResults.push({
@@ -297,6 +301,9 @@ export class ChatService {
 
       // 9. Send tool results back to OpenAI for final response
       if (!assistantMessageContent || !this.isReopenFallbackMessage(assistantMessageContent)) {
+        if (captureResponseOverride) {
+          assistantMessageContent = captureResponseOverride;
+        } else {
         const messagesWithToolResults: OpenAI.Chat.ChatCompletionMessageParam[] = [
           ...messages,
           response.choices[0].message,
@@ -309,6 +316,7 @@ export class ChatService {
         });
 
         assistantMessageContent = finalResponse.choices[0]?.message?.content || '';
+        }
       }
     }
 
@@ -930,6 +938,17 @@ export class ChatService {
       typeLabel = 'inbox item';
     }
     return `Done. I captured "${result.name}" as a ${typeLabel}. You can find it at ${result.path}.`;
+  }
+
+  private buildRelationshipCaptureResponse(people: string[]): string {
+    const unique = Array.from(new Set(people.map((name) => name.trim()).filter((name) => name.length > 0)));
+    if (unique.length < 2) {
+      return `Done. I captured the relationship details and linked the relevant people entries.`;
+    }
+    const text = unique.length === 2
+      ? `${unique[0]} and ${unique[1]}`
+      : `${unique.slice(0, -1).join(', ')}, and ${unique[unique.length - 1]}`;
+    return `Done. I captured that ${text} have a relationship, created or reused both people entries, and linked them in the graph.`;
   }
 
   private buildQuickReplies(content: string): QuickReplyOption[] | undefined {

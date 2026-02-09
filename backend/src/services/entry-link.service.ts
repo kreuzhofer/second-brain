@@ -92,6 +92,8 @@ interface ProjectLinkOptions {
   createMissing?: boolean;
 }
 
+type RelationshipKind = 'relationship';
+
 function uniqueNormalized(values: string[]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -255,6 +257,96 @@ export class EntryLinkService {
     });
   }
 
+  async capturePeopleRelationship(
+    peopleNames: string[],
+    relation: RelationshipKind,
+    sourceText: string,
+    channel: Channel = 'api'
+  ): Promise<EntryWithPath> {
+    const userId = requireUserId();
+    const uniqueNames = uniqueNormalized(
+      normalizePeopleNames(peopleNames)
+        .map((name) => sanitizePersonCandidate(name))
+        .filter((name): name is string => Boolean(name))
+    );
+    if (uniqueNames.length < 2) {
+      throw new Error('At least two valid people names are required to capture a relationship.');
+    }
+
+    const personEntries: EntryWithPath[] = [];
+    for (const name of uniqueNames) {
+      const slug = generateSlug(name);
+      const existing = await this.prisma.entry.findUnique({
+        where: {
+          userId_category_slug: {
+            userId,
+            category: 'people',
+            slug
+          }
+        }
+      });
+      if (existing) {
+        personEntries.push(await this.entryService.read(buildEntryPath('people', slug)));
+        continue;
+      }
+
+      const created = await this.entryService.create(
+        'people',
+        {
+          name,
+          context: sourceText.trim(),
+          follow_ups: [],
+          related_projects: [],
+          source_channel: channel,
+          confidence: 0.95
+        },
+        channel
+      );
+      personEntries.push(created);
+    }
+
+    if (personEntries.length < 2) {
+      throw new Error('Failed to resolve people entries for relationship capture.');
+    }
+
+    const relationshipLinkRows: Array<{
+      userId: string;
+      sourceEntryId: string;
+      targetEntryId: string;
+      type: RelationshipKind;
+    }> = [];
+
+    for (let i = 0; i < personEntries.length; i += 1) {
+      const sourceEntryId = (personEntries[i].entry as { id?: string }).id;
+      if (!sourceEntryId) continue;
+      for (let j = i + 1; j < personEntries.length; j += 1) {
+        const targetEntryId = (personEntries[j].entry as { id?: string }).id;
+        if (!targetEntryId) continue;
+        relationshipLinkRows.push({
+          userId,
+          sourceEntryId,
+          targetEntryId,
+          type: relation
+        });
+        relationshipLinkRows.push({
+          userId,
+          sourceEntryId: targetEntryId,
+          targetEntryId: sourceEntryId,
+          type: relation
+        });
+      }
+    }
+
+    if (relationshipLinkRows.length > 0) {
+      await this.prisma.entryLink.createMany({
+        data: relationshipLinkRows,
+        skipDuplicates: true
+      });
+    }
+
+    return personEntries[0];
+  }
+
   async linkProjectsForEntry(
     entry: EntryWithPath,
     projectNamesOrSlugs: string[],
@@ -390,12 +482,12 @@ export class EntryLinkService {
       edges.push({
         source: center.path,
         target: target.path,
-        type: 'mention'
+        type: link.type
       });
       connections.push({
         direction: 'outgoing',
-        via: 'mention',
-        reason: 'mentioned by this entry',
+        via: link.type,
+        reason: link.type === 'relationship' ? 'relationship to this entry' : 'mentioned by this entry',
         source: center,
         target,
         createdAt: link.createdAt.toISOString()
@@ -408,12 +500,12 @@ export class EntryLinkService {
       edges.push({
         source: source.path,
         target: center.path,
-        type: 'mention'
+        type: link.type
       });
       connections.push({
         direction: 'incoming',
-        via: 'mention',
-        reason: 'mentions this entry',
+        via: link.type,
+        reason: link.type === 'relationship' ? 'relationship to this entry' : 'mentions this entry',
         source,
         target: center,
         createdAt: link.createdAt.toISOString()

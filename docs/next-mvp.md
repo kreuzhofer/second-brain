@@ -149,3 +149,5 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - 2026-02-08: Verification complete for phase 1: targeted integration tests for chat follow-up memory pass and full backend suite passes (`73/73` suites, `876` tests).
 - 2026-02-09: Entity Graph + Backlinks phase 2 backend slice completed: stronger update-time people/project inference, sanitization against false-positive person phrases, project write-through linking with `createMissing`, and graph connection metadata in API types.
 - 2026-02-09: Verification: full workspace test run passing (`frontend 3/3`, `backend 73/73`, `881` backend tests).
+- 2026-02-09: Added relationship capture for people statements (e.g. `Chris and Amie have a relationship`): creates/reuses separate person entries and writes typed `relationship` links instead of creating synthetic combined-person entries.
+- 2026-02-09: Added `relationship` to graph edge/connection types and updated graph rendering payloads to preserve link type semantics.

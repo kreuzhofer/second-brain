@@ -432,6 +432,69 @@ describe('ToolExecutor', () => {
       );
     });
 
+    it('should capture person relationships without creating a synthetic combined person entry', async () => {
+      const relationshipCaptureEntry: EntryWithPath = {
+        path: 'people/chris',
+        category: 'people',
+        entry: {
+          id: 'person-chris-id',
+          name: 'Chris',
+          tags: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          source_channel: 'chat',
+          confidence: 0.95,
+          context: 'Chris and Amie have a relationship.',
+          follow_ups: [],
+          related_projects: [],
+          last_touched: new Date().toISOString()
+        },
+        content: ''
+      };
+
+      const mockEntryLinkService = {
+        capturePeopleRelationship: jest.fn().mockResolvedValue(relationshipCaptureEntry)
+      } as any;
+
+      toolExecutor = new ToolExecutor(
+        mockToolRegistry,
+        mockEntryService,
+        mockClassificationAgent,
+        mockDigestService,
+        mockSearchService,
+        mockIndexService,
+        mockActionExtractionService,
+        mockDuplicateService,
+        mockOfflineQueueService,
+        mockEntryLinkService
+      );
+
+      const toolCall: ToolCall = {
+        name: 'classify_and_capture',
+        arguments: { text: 'Chris and Amie have a relationship' }
+      };
+
+      const result = await toolExecutor.execute(toolCall, { channel: 'chat' });
+
+      expect(result.success).toBe(true);
+      expect(mockEntryLinkService.capturePeopleRelationship).toHaveBeenCalledWith(
+        ['Chris', 'Amie'],
+        'relationship',
+        'Chris and Amie have a relationship',
+        'chat'
+      );
+      expect(mockClassificationAgent.classify).not.toHaveBeenCalled();
+      expect(mockEntryService.create).not.toHaveBeenCalled();
+
+      const captureResult = result.data as CaptureResult;
+      expect(captureResult.path).toBe('people/chris');
+      expect(captureResult.category).toBe('people');
+      expect(captureResult.name).toBe('Chris');
+      expect(captureResult.clarificationNeeded).toBe(false);
+      expect(captureResult.captureKind).toBe('people_relationship');
+      expect(captureResult.relatedPeople).toEqual(['Chris', 'Amie']);
+    });
+
     it('should normalize relative due dates when capturing tasks', async () => {
       jest.useFakeTimers().setSystemTime(new Date('2026-02-05T12:00:00Z'));
 

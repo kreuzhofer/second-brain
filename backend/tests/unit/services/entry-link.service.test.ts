@@ -189,4 +189,53 @@ describe('EntryLinkService', () => {
       }
     }
   });
+
+  it('captures a people relationship as two person entries with typed relationship links', async () => {
+    let chrisPath = '';
+    let amiePath = '';
+
+    try {
+      const primary = await linkService.capturePeopleRelationship(
+        ['Chris', 'Amie'],
+        'relationship',
+        'Chris and Amie have a relationship',
+        'chat'
+      );
+
+      chrisPath = primary.path;
+      const chris = await entryService.read('people/chris');
+      const amie = await entryService.read('people/amie');
+      chrisPath = chris.path;
+      amiePath = amie.path;
+
+      const chrisGraph = await linkService.getGraphForPath(chris.path);
+      const amieGraph = await linkService.getGraphForPath(amie.path);
+
+      expect(chrisGraph.edges).toEqual(
+        expect.arrayContaining([
+          {
+            source: stripMd(chris.path),
+            target: stripMd(amie.path),
+            type: 'relationship'
+          }
+        ])
+      );
+      expect(amieGraph.edges).toEqual(
+        expect.arrayContaining([
+          {
+            source: stripMd(amie.path),
+            target: stripMd(chris.path),
+            type: 'relationship'
+          }
+        ])
+      );
+    } finally {
+      if (amiePath) {
+        await entryService.delete(amiePath, 'chat');
+      }
+      if (chrisPath) {
+        await entryService.delete(chrisPath, 'chat');
+      }
+    }
+  });
 });
