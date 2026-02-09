@@ -1,9 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { api, Category, EntrySummary, RelationshipInsight } from '@/services/api';
+import {
+  api,
+  Category,
+  EntrySummary,
+  RelationshipInsight,
+  WeekPlanResponse,
+  CalendarPublishResponse
+} from '@/services/api';
 import { useEntries } from '@/state/entries';
 import { getFocusRailButtonClass } from '@/components/layout-shell-helpers';
+import {
+  formatBlockTime,
+  formatExpiresAt,
+  formatMinutes,
+  formatPlanRange
+} from '@/components/calendar-panel-helpers';
 import {
   RefreshCw,
   Circle,
@@ -13,7 +26,8 @@ import {
   Inbox,
   FileText,
   Briefcase,
-  ClipboardList
+  ClipboardList,
+  Target
 } from 'lucide-react';
 
 interface FocusPanelProps {
@@ -33,7 +47,7 @@ interface FocusItem {
 export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const { entries, isLoading, error: loadError, refresh } = useEntries();
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'focus' | 'ideas' | 'people' | 'inbox' | 'recent'>('focus');
+  const [activeTab, setActiveTab] = useState<'focus' | 'ideas' | 'people' | 'inbox' | 'recent' | 'calendar'>('focus');
   const [focusSort, setFocusSort] = useState<'overdue' | 'newest'>('overdue');
   const [inboxSelected, setInboxSelected] = useState<Set<string>>(new Set());
   const [targetCategory, setTargetCategory] = useState<Category>('projects');
@@ -44,6 +58,12 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const [peopleInsights, setPeopleInsights] = useState<RelationshipInsight[]>([]);
   const [peopleInsightsLoading, setPeopleInsightsLoading] = useState(false);
   const [peopleInsightsError, setPeopleInsightsError] = useState<string | null>(null);
+  const [calendarPlan, setCalendarPlan] = useState<WeekPlanResponse | null>(null);
+  const [calendarPlanDays, setCalendarPlanDays] = useState(7);
+  const [calendarPublish, setCalendarPublish] = useState<CalendarPublishResponse | null>(null);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [calendarBlocksExpanded, setCalendarBlocksExpanded] = useState(false);
 
   const handleRefresh = async () => {
     await refresh();
@@ -59,6 +79,52 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       } finally {
         setPeopleInsightsLoading(false);
       }
+    }
+    if (activeTab === 'calendar') {
+      await loadCalendarPlan();
+    }
+  };
+
+  const loadCalendarPlan = async () => {
+    setCalendarLoading(true);
+    setCalendarError(null);
+    try {
+      const plan = await api.calendar.planWeek(undefined, calendarPlanDays);
+      setCalendarPlan(plan);
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to load week plan');
+    } finally {
+      setCalendarLoading(false);
+    }
+  };
+
+  const handlePublishLinks = async () => {
+    setCalendarError(null);
+    try {
+      const published = await api.calendar.publish();
+      setCalendarPublish(published);
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to generate calendar links');
+    }
+  };
+
+  const copyText = async (value: string) => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(value);
+        return;
+      }
+      const element = document.createElement('textarea');
+      element.value = value;
+      element.setAttribute('readonly', 'true');
+      element.style.position = 'absolute';
+      element.style.left = '-9999px';
+      document.body.appendChild(element);
+      element.select();
+      document.execCommand('copy');
+      document.body.removeChild(element);
+    } catch {
+      setCalendarError('Unable to copy link. Please copy manually.');
     }
   };
 
@@ -91,6 +157,11 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       cancelled = true;
     };
   }, [activeTab, entries.length]);
+
+  useEffect(() => {
+    if (activeTab !== 'calendar') return;
+    loadCalendarPlan();
+  }, [activeTab, calendarPlanDays, entries.length]);
 
   const focusItems = useMemo<FocusItem[]>(() => {
     const items = entries
@@ -188,6 +259,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       ? 'No ideas yet. Capture a spark and come back later.'
       : activeTab === 'people'
         ? 'No people captured yet. Add someone you want to keep in mind.'
+        : activeTab === 'calendar'
+          ? 'No planned blocks yet.'
         : activeTab === 'recent'
           ? 'No recent activity yet.'
         : 'Inbox is clear.';
@@ -199,6 +272,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       ? 'Ideas'
       : activeTab === 'people'
         ? 'People'
+        : activeTab === 'calendar'
+          ? 'Calendar'
         : activeTab === 'recent'
           ? 'Recent Entries'
           : 'Inbox';
@@ -292,6 +367,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
           <div className="flex items-center gap-2">
             {activeTab === 'ideas' && <Lightbulb className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'people' && <User className="h-4 w-4 text-muted-foreground" />}
+            {activeTab === 'calendar' && <Target className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'inbox' && <Inbox className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'recent' && <FileText className="h-4 w-4 text-muted-foreground" />}
             <CardTitle className="text-base sm:text-lg font-medium">{title}</CardTitle>
@@ -317,6 +393,22 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 >
                   Newest
                 </button>
+              </div>
+            )}
+            {activeTab === 'calendar' && (
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">Days</label>
+                <select
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  value={calendarPlanDays}
+                  onChange={(event) => setCalendarPlanDays(Number(event.target.value))}
+                >
+                  {[5, 7, 10, 14].map((dayCount) => (
+                    <option key={dayCount} value={dayCount}>
+                      {dayCount}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
             <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isLoading}>
@@ -385,15 +477,130 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
           </div>
         )}
 
+        {activeTab === 'calendar' && (
+          <div className="space-y-3">
+            {calendarError && <p className="text-sm text-destructive">{calendarError}</p>}
+            {calendarPlan && (
+              <div className="rounded-md border border-border p-2.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Plan window</div>
+                    <div className="text-sm font-medium">{formatPlanRange(calendarPlan.startDate, calendarPlan.endDate)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Total focus</div>
+                    <div className="text-sm font-medium">{formatMinutes(calendarPlan.totalMinutes)}</div>
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {calendarPlan.items.length} scheduled block(s)
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-md border border-border p-2.5 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Calendar sharing</div>
+                <Button size="sm" variant="outline" onClick={handlePublishLinks}>
+                  Generate links
+                </Button>
+              </div>
+              {!calendarPublish && (
+                <p className="text-xs text-muted-foreground">
+                  Generate a read-only ICS/WebCal subscription link for your current week plan.
+                </p>
+              )}
+              {calendarPublish && (
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">HTTPS (ICS)</div>
+                    <input
+                      className="h-11 rounded-md border border-input bg-background px-2 text-xs w-full"
+                      readOnly
+                      value={calendarPublish.httpsUrl}
+                    />
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => copyText(calendarPublish.httpsUrl)}>
+                        Copy HTTPS
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">WebCal</div>
+                    <input
+                      className="h-11 rounded-md border border-input bg-background px-2 text-xs w-full"
+                      readOnly
+                      value={calendarPublish.webcalUrl}
+                    />
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => copyText(calendarPublish.webcalUrl)}>
+                        Copy WebCal
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          window.location.href = calendarPublish.webcalUrl;
+                        }}
+                      >
+                        Open WebCal
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Token expires {formatExpiresAt(calendarPublish.expiresAt)}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {calendarLoading && (
+              <p className="text-sm text-muted-foreground">Loading calendar blocks...</p>
+            )}
+            {!calendarLoading && calendarPlan && calendarPlan.items.length > 0 && (
+              <div className="space-y-2">
+                {(calendarBlocksExpanded ? calendarPlan.items : calendarPlan.items.slice(0, Math.max(maxItems, 6))).map((item) => (
+                  <button
+                    key={`${item.entryPath}-${item.start}`}
+                    type="button"
+                    onClick={() => onEntryClick(item.entryPath)}
+                    className="w-full min-h-[44px] rounded-md border border-border p-2 sm:p-2.5 text-left hover:bg-accent transition-colors"
+                  >
+                    <div className="text-sm font-medium">{item.title}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{formatBlockTime(item.start, item.end)}</div>
+                    <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                      <span className="truncate">{item.entryPath}</span>
+                      <span className="shrink-0">{formatMinutes(item.durationMinutes)}</span>
+                    </div>
+                  </button>
+                ))}
+                {calendarPlan.items.length > Math.max(maxItems, 6) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setCalendarBlocksExpanded((prev) => !prev)}
+                  >
+                    {calendarBlocksExpanded ? 'Show less' : `Show all (${calendarPlan.items.length})`}
+                  </Button>
+                )}
+              </div>
+            )}
+            {!calendarLoading && calendarPlan && calendarPlan.items.length === 0 && (
+              <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+            )}
+          </div>
+        )}
+
         {combinedError && <p className="text-sm text-destructive">{combinedError}</p>}
 
-        {activeTab !== 'inbox' && activeTab !== 'recent' && currentItems.length === 0 && !isLoading && (
+        {activeTab !== 'inbox' && activeTab !== 'recent' && activeTab !== 'calendar' && currentItems.length === 0 && !isLoading && (
           <p className="text-sm text-muted-foreground">
             {emptyMessage}
           </p>
         )}
 
-        {activeTab !== 'inbox' && activeTab !== 'recent' && currentItems.length > 0 && (
+        {activeTab !== 'inbox' && activeTab !== 'recent' && activeTab !== 'calendar' && currentItems.length > 0 && (
           <div className="space-y-2">
             {currentItems.map((item) => (
               <button
@@ -572,6 +779,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
         <div className="rounded-md border border-border overflow-hidden max-h-[calc(100dvh-120px)] overflow-y-auto bg-background">
           {([
             { key: 'focus', label: 'Focus' },
+            { key: 'calendar', label: 'Calendar' },
             { key: 'ideas', label: 'Ideas' },
             { key: 'people', label: 'People' },
             { key: 'inbox', label: 'Inbox' },

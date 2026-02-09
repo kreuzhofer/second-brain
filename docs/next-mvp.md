@@ -164,3 +164,4 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - 2026-02-09: Completed Entity Graph + Backlinks phase 2 by adding manual link management APIs (`POST/DELETE /api/entries/:path/links`) and entry-modal UI workflows to add links and unlink outgoing/incoming backlinks with live graph refresh.
 - 2026-02-09: Completed Calendar MVP phase 1 by adding week planning (`GET /api/calendar/plan-week`), publish links (`GET /api/calendar/publish`), and tokenized read-only ICS feed (`GET /api/calendar/feed.ics?token=...`) with integration tests.
 - 2026-02-09: Completed Relationship Insights phase 1 with `GET /api/insights/relationships` and People-panel summaries (score, relationship/project/mention counts, top related people/projects).
+- 2026-02-09: Added Calendar sharing UI in Focus panel: plan window summary, scheduled blocks list, and publish/copy/open controls for HTTPS ICS and WebCal links.
