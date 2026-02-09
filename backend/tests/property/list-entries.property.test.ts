@@ -28,18 +28,18 @@ import { Category } from '../../src/types/entry.types';
 /**
  * Generate a valid category (including inbox)
  */
-const categoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'admin', 'inbox');
+const categoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'task', 'inbox');
 
 /**
  * Generate a valid non-inbox category (for creating entries with names)
  */
-const nonInboxCategoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'admin');
+const nonInboxCategoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'task');
 
 /**
  * Generate a valid status for projects/admin entries
  */
 const projectStatusArbitrary = fc.constantFrom('active', 'waiting', 'blocked', 'someday');
-const adminStatusArbitrary = fc.constantFrom('pending', 'done');
+const taskStatusArbitrary = fc.constantFrom('pending', 'done');
 
 /**
  * Generate a valid limit value
@@ -120,7 +120,7 @@ describe('ToolExecutor - List Entries Filtering Properties', () => {
         source_channel: 'api',
         confidence: 0.9
       });
-      await entryService.create('admin', {
+      await entryService.create('task', {
         name: 'Test Admin Task',
         status: 'pending',
         source_channel: 'api',
@@ -251,27 +251,27 @@ describe('ToolExecutor - List Entries Filtering Properties', () => {
      * **Validates: Requirements 3.2**
      */
     it('should apply both category and status filters together', async () => {
-      // Create admin entries with different statuses
-      await entryService.create('admin', {
+      // Create task entries with different statuses
+      await entryService.create('task', {
         name: 'Pending Admin Task 1',
         status: 'pending',
         source_channel: 'api',
         confidence: 0.9
       });
-      await entryService.create('admin', {
+      await entryService.create('task', {
         name: 'Pending Admin Task 2',
         status: 'pending',
         source_channel: 'api',
         confidence: 0.9
       });
-      await entryService.create('admin', {
+      await entryService.create('task', {
         name: 'Done Admin Task',
         status: 'done',
         source_channel: 'api',
         confidence: 0.9
       });
       
-      // Create project entries (should not appear when filtering admin)
+      // Create project entries (should not appear when filtering tasks)
       await entryService.create('projects', {
         name: 'Some Project',
         status: 'active',
@@ -282,19 +282,19 @@ describe('ToolExecutor - List Entries Filtering Properties', () => {
 
       await fc.assert(
         fc.asyncProperty(
-          adminStatusArbitrary,
+          taskStatusArbitrary,
           async (status) => {
             const result = await toolExecutor.execute({
               name: 'list_entries',
-              arguments: { category: 'admin', status }
+              arguments: { category: 'task', status }
             });
             
             expect(result.success).toBe(true);
             const data = result.data as ListEntriesResult;
             
-            // All results must be in admin category with matching status
+            // All results must be in task category with matching status
             for (const entry of data.entries) {
-              expect(entry.category).toBe('admin');
+              expect(entry.category).toBe('task');
               expect(entry.status).toBe(status);
             }
             

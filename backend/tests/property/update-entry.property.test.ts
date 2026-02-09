@@ -32,7 +32,7 @@ import { Category, EntryWithPath } from '../../src/types/entry.types';
 /**
  * Generate a valid non-inbox category (for creating entries with names)
  */
-const nonInboxCategoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'admin');
+const nonInboxCategoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'task');
 
 /**
  * Generate a valid entry name (alphanumeric with spaces, reasonable length)
@@ -60,11 +60,6 @@ const projectStatusArbitrary = fc.constantFrom<'active' | 'waiting' | 'blocked' 
 );
 
 /**
- * Generate a valid status for admin entries
- */
-const adminStatusArbitrary = fc.constantFrom<'pending' | 'done'>('pending', 'done');
-
-/**
  * Generate updates for people entries
  */
 const peopleUpdatesArbitrary = fc.record({
@@ -84,13 +79,6 @@ const projectUpdatesArbitrary = fc.record({
  */
 const ideaUpdatesArbitrary = fc.record({
   one_liner: contextArbitrary
-}, { requiredKeys: [] }).filter(obj => Object.keys(obj).length > 0);
-
-/**
- * Generate updates for admin entries
- */
-const adminUpdatesArbitrary = fc.record({
-  status: adminStatusArbitrary
 }, { requiredKeys: [] }).filter(obj => Object.keys(obj).length > 0);
 
 // ============================================
@@ -151,6 +139,7 @@ describe('ToolExecutor - Update Entry Application Properties', () => {
           nonInboxCategoryArbitrary,
           entryNameArbitrary,
           async (category, name) => {
+            await resetDatabase();
             // Create an entry with initial data
             const entryData = createEntryDataForCategory(category, name);
             const createdEntry = await entryService.create(category, entryData);
@@ -199,6 +188,7 @@ describe('ToolExecutor - Update Entry Application Properties', () => {
           nonInboxCategoryArbitrary,
           entryNameArbitrary,
           async (category, name) => {
+            await resetDatabase();
             // Create an entry with initial data
             const entryData = createEntryDataForCategory(category, name);
             const createdEntry = await entryService.create(category, entryData);
@@ -257,6 +247,7 @@ describe('ToolExecutor - Update Entry Application Properties', () => {
           nonInboxCategoryArbitrary,
           entryNameArbitrary,
           async (category, name) => {
+            await resetDatabase();
             // Create an entry with initial data
             const entryData = createEntryDataForCategory(category, name);
             const createdEntry = await entryService.create(category, entryData);
@@ -297,6 +288,7 @@ describe('ToolExecutor - Update Entry Application Properties', () => {
             .map(s => s.replace(/[^a-z0-9]/g, '-').toLowerCase())
             .filter(s => s.length >= 3),
           async (category, slug) => {
+            await resetDatabase();
             const nonExistentPath = `${category}/${slug}-nonexistent`;
             
             // Call update_entry with non-existent path
@@ -399,7 +391,7 @@ function createEntryDataForCategory(category: Category, name: string): any {
         one_liner: 'Initial one liner',
         related_projects: []
       };
-    case 'admin':
+    case 'task':
       return {
         ...baseData,
         status: 'pending' as const
@@ -420,7 +412,7 @@ function generateUpdatesForCategory(category: Category): Record<string, unknown>
       return { status: 'blocked', next_action: 'Updated next action' };
     case 'ideas':
       return { one_liner: 'Updated one liner' };
-    case 'admin':
+    case 'task':
       return { status: 'done' };
     default:
       return {};

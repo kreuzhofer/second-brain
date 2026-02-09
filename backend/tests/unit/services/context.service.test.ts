@@ -87,7 +87,7 @@ describe('ContextAssembler', () => {
       expect(context.systemPrompt).toContain('people');
       expect(context.systemPrompt).toContain('projects');
       expect(context.systemPrompt).toContain('ideas');
-      expect(context.systemPrompt).toContain('admin');
+      expect(context.systemPrompt).toContain('task');
     });
 
     it('should include index.md content (Requirement 8.1)', async () => {

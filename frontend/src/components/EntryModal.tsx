@@ -197,6 +197,8 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
 
   if (!entryPath) return null;
 
+  const isTaskCategory = (category: string): boolean => category === 'task' || category === 'admin';
+
   const getCategoryIcon = (category: string) => {
     switch (category) {
       case 'people':
@@ -205,6 +207,7 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
         return <Briefcase className="h-5 w-5" />;
       case 'ideas':
         return <Lightbulb className="h-5 w-5" />;
+      case 'task':
       case 'admin':
         return <ClipboardList className="h-5 w-5" />;
       default:
@@ -297,7 +300,7 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
               {/* Category badge */}
               <div className="flex items-center gap-2">
                 <span className="px-2 py-1 bg-muted rounded text-sm font-medium capitalize">
-                  {entry.category}
+                  {isTaskCategory(entry.category) ? 'task' : entry.category}
                 </span>
                 <span className="text-sm text-muted-foreground">{entry.path}</span>
               </div>
@@ -567,7 +570,7 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 flex-shrink-0">
           <div className="flex justify-end gap-2">
-            {entry?.category === 'admin' && (entry.entry as any)?.status !== 'done' && onStartFocus && (
+            {entry && isTaskCategory(entry.category) && (entry.entry as any)?.status !== 'done' && onStartFocus && (
               <Button
                 onClick={() => {
                   onStartFocus(entry);

@@ -11,7 +11,7 @@ import { getConfig } from '../config/env';
 
 export const digestRouter = Router();
 
-const VALID_CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'admin', 'inbox'];
+const VALID_CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'task', 'admin', 'inbox'];
 
 function parseBool(value: unknown, defaultValue?: boolean): boolean | undefined {
   if (value === undefined) return defaultValue;

@@ -25,7 +25,7 @@ function parseCategory(value?: string): Category | undefined {
   if (normalized === 'people') return 'people';
   if (normalized === 'projects') return 'projects';
   if (normalized === 'ideas') return 'ideas';
-  if (normalized === 'admin') return 'admin';
+  if (normalized === 'task' || normalized === 'admin') return 'task';
   if (normalized === 'inbox') return 'inbox';
   return undefined;
 }

@@ -5,7 +5,7 @@ import {
 } from '../types/entry.types';
 import { requireUserId } from '../context/user-context';
 
-type Category = 'people' | 'projects' | 'ideas' | 'admin' | 'inbox';
+type Category = 'people' | 'projects' | 'ideas' | 'task' | 'admin' | 'inbox';
 
 interface PersonStats {
   person: EntryLinkSummary;

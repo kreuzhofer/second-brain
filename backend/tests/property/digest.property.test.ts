@@ -23,7 +23,7 @@ import {
 const topItemArbitrary = fc.record({
   name: fc.string({ minLength: 1, maxLength: 50 }),
   nextAction: fc.string({ minLength: 1, maxLength: 100 }),
-  source: fc.constantFrom('project', 'admin') as fc.Arbitrary<'project' | 'admin'>,
+  source: fc.constantFrom('project', 'task') as fc.Arbitrary<'project' | 'task'>,
   dueDate: fc.option(
     fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31') })
       .map(d => d.toISOString().split('T')[0]),
@@ -43,7 +43,7 @@ const activityStatsArbitrary = fc.record({
     people: fc.integer({ min: 0, max: 100 }),
     projects: fc.integer({ min: 0, max: 100 }),
     ideas: fc.integer({ min: 0, max: 100 }),
-    admin: fc.integer({ min: 0, max: 100 }),
+     task: fc.integer({ min: 0, max: 100 }),
     total: fc.integer({ min: 0, max: 400 })
   }),
   tasksCompleted: fc.integer({ min: 0, max: 100 })
@@ -219,7 +219,7 @@ describe('DigestService - Daily Digest Properties', () => {
             
             // Should contain Small Win section
             expect(digest).toContain('**Small Win:**');
-            expect(digest).toContain(`${completedCount} admin task`);
+            expect(digest).toContain(`${completedCount} task`);
             
             return true;
           }

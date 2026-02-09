@@ -77,7 +77,7 @@ describe('EntryService', () => {
       expect(result.category).toBe('ideas');
     });
 
-    it('should create an admin entry', async () => {
+    it('should create a task entry from legacy admin category input', async () => {
       const result = await entryService.create('admin', {
         name: 'Important Task',
         due_date: '2026-02-01',
@@ -85,7 +85,8 @@ describe('EntryService', () => {
         confidence: 0.99
       });
 
-      expect(result.path).toBe('admin/important-task');
+      expect(result.path).toBe('task/important-task');
+      expect(result.category).toBe('task');
       expect((result.entry as any).status).toBe('pending');
     });
 
@@ -152,6 +153,34 @@ describe('EntryService', () => {
       await expect(
         entryService.read('people/non-existent')
       ).rejects.toThrow(EntryNotFoundError);
+    });
+
+    it('should resolve legacy admin path and return canonical task path/category', async () => {
+      await entryService.create('admin', {
+        name: 'Legacy Task',
+        source_channel: 'api',
+        confidence: 0.91
+      });
+
+      const result = await entryService.read('admin/legacy-task');
+
+      expect(result.path).toBe('task/legacy-task');
+      expect(result.category).toBe('task');
+      expect((result.entry as any).name).toBe('Legacy Task');
+    });
+  });
+
+  describe('list', () => {
+    it('should list task entries when querying canonical task category', async () => {
+      await entryService.create('admin', {
+        name: 'Canonical List Task',
+        source_channel: 'api',
+        confidence: 0.88
+      });
+
+      const entries = await entryService.list('task');
+      expect(entries.some((entry) => entry.path === 'task/canonical-list-task')).toBe(true);
+      expect(entries.some((entry) => entry.category === 'task')).toBe(true);
     });
   });
 

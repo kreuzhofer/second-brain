@@ -80,9 +80,28 @@ This is the canonical roadmap document for current MVP progress and next-level f
 ## Next-Level Backlog (Unified)
 
 ### Priority Next
+- Calendar blocker ingest phase 1: subscribe to external ICS/WebCal calendars (e.g., Outlook) and avoid busy blocks in autoscheduling.
+- Task model rework phase 1: add task duration, optional fixed appointment time, and deadline-aware autoscheduling.
 - Entity graph analytics phase 3: graph-level filters and richer link inspection views in modal/panel surfaces.
-- Calendar write-back phase 2: ingest updates from subscribed calendars and reflect delays/reschedules back to entries.
 - Relationship insights phase 2: add project-centric insights, trend windows, and actionable follow-up suggestions.
+
+### Admin -> Task Migration Plan (Phases 1-3)
+1. Phase 1 (DB migration, additive + backfill):
+- Add `task` to `EntryCategory` enum (keep `admin` temporarily for compatibility).
+- Backfill existing entries from `admin` to `task`.
+- Backfill `DigestPreference.focusCategories[]` values from `admin` to `task`.
+- Keep `AdminTaskDetails` table unchanged in this phase (no table rename yet).
+2. Phase 2 (compatibility layer):
+- Accept both `task` and `admin` in API/tool inputs.
+- Canonicalize to `task` in outputs and newly generated paths.
+- Keep legacy path compatibility by resolving `admin/<slug>` requests to `task/<slug>`.
+3. Phase 3 (terminology switch):
+- Replace user-facing wording from "admin task" to "task" in UI and prompts.
+- Keep "admin task" as an input alias for chat/tool calls to avoid user disruption.
+4. Safety constraints:
+- Non-breaking rollout only (no destructive enum removal in this phase).
+- Explicit migration naming and non-interactive execution.
+- Compatibility tests must pass for both legacy and canonical task inputs.
 
 ### Intelligence and Linking
 - Entity graph across people/projects/ideas with auto-links and backlink views. (In progress: lightweight graph API + modal graph view + cross-category people/project linking)
@@ -116,7 +135,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 ### Calendar MVP (Next-Level)
 - Plan-my-week assistant (build a schedule from tasks, priorities, and focus goals).
 - Calendar publish: generate a subscription link (ICS/WebCal) for planned tasks.
-- Calendar write-back: ingest updates from Outlook/ICS to reschedule tasks.
+- Calendar blocker ingest: import busy blocks from external ICS/WebCal calendars and route tasks around conflicts.
 - Focus blocks: create protected calendar blocks and sync back to Second Brain.
 
 ### Reliability and Data Management
@@ -131,6 +150,11 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Structured analytics dashboard for usage metrics.
 
 ## Progress Log
+- 2026-02-09: Completed Admin -> Task migration phases 1-3 in one pass.
+- 2026-02-09: Phase 1 shipped: added `task` enum category and backfilled `Entry.category`, `DigestPreference.focusCategories[]`, and `InboxDetails.suggestedCategory` from `admin` to `task` via Prisma migrations.
+- 2026-02-09: Phase 2 shipped: API/tool compatibility now accepts both `admin` and `task` inputs while canonicalizing storage/output/path behavior to `task`, including legacy `admin/<slug>` read/update/delete fallback resolution.
+- 2026-02-09: Phase 3 shipped: user-facing terminology updated to `task` across prompts, hints, index output, and UI panel/category labels while keeping admin alias support for backward compatibility.
+- 2026-02-09: Verification complete: backend test suite passes (`75/75` suites, `895` tests), workspace build passes, and Docker stack rebuilt/redeployed with `docker compose up -d --build`.
 - 2026-02-05: DB-backed entries and pgvector embeddings in place; tests updated for EntrySummary ids and normalized content; all backend tests passing.
 - 2026-02-05: Added embedding backfill script (`npm run backfill:embeddings`) to populate missing vectors post-migration.
 - 2026-02-05: Added auto embedding backfill on app startup (no CLI required in prod).

@@ -47,7 +47,7 @@ describe('EntryLinkService', () => {
 
       expect(linksToPerson.incoming).toContainEqual({
         path: stripMd(adminEntry.path),
-        category: 'admin',
+        category: 'task',
         name: (adminEntry.entry as any).name
       });
     } finally {
@@ -85,14 +85,14 @@ describe('EntryLinkService', () => {
 
       expect(graph.center).toEqual({
         path: stripMd(adminEntry.path),
-        category: 'admin',
+        category: 'task',
         name: 'Call Lina Haidu'
       });
       expect(graph.nodes).toEqual(
         expect.arrayContaining([
           {
             path: stripMd(adminEntry.path),
-            category: 'admin',
+            category: 'task',
             name: 'Call Lina Haidu'
           },
           {
@@ -333,7 +333,7 @@ describe('EntryLinkService', () => {
       let linksToPerson = await linkService.getLinksForPath(personEntry.path);
       expect(linksToPerson.incoming).toContainEqual({
         path: stripMd(adminEntry.path),
-        category: 'admin',
+        category: 'task',
         name: (adminEntry.entry as any).name
       });
 

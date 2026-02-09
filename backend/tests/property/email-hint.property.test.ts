@@ -18,7 +18,7 @@ const HINT_TO_CATEGORY: Record<string, CategoryHint['category']> = {
   person: 'people',
   project: 'projects',
   idea: 'ideas',
-  task: 'admin',
+  task: 'task',
 };
 
 // Arbitrary for generating valid hint types
@@ -156,7 +156,7 @@ describe('EmailParser - Subject Hint Extraction Property Tests', () => {
         ['person', 'people'],
         ['project', 'projects'],
         ['idea', 'ideas'],
-        ['task', 'admin'],
+        ['task', 'task'],
       ];
 
       for (const [hint, expectedCategory] of mappings) {

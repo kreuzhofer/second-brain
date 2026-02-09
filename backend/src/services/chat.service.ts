@@ -28,6 +28,7 @@ import { ToolExecutor, getToolExecutor, CaptureResult } from './tool-executor';
 import { buildSystemPrompt } from './system-prompt';
 import { generateSlug } from '../utils/slug';
 import { normalizeDueDate } from '../utils/date';
+import { isTaskCategory, toCanonicalCategory } from '../utils/category';
 
 // ============================================
 // Constants
@@ -57,8 +58,8 @@ const CATEGORY_ALIASES: Record<string, Category> = {
   'projects': 'projects',
   'idea': 'ideas',
   'ideas': 'ideas',
-  'task': 'admin',
-  'admin': 'admin',
+  'task': 'task',
+  'admin': 'task',
   'inbox': 'inbox',
 };
 
@@ -482,7 +483,7 @@ export class ChatService {
   }
 
   private async buildReopenFallbackMessage(message: string): Promise<string | null> {
-    const doneTasks = await this.entryService.list('admin', { status: 'done' });
+    const doneTasks = await this.entryService.list('task', { status: 'done' });
     if (doneTasks.length === 0) {
       return null;
     }
@@ -709,7 +710,7 @@ export class ChatService {
       },
       entry: {
         path: entryPath,
-        category: (data.category || 'admin') as Category,
+        category: toCanonicalCategory((data.category || 'task') as string),
         name: entryName,
         confidence: typeof data.confidence === 'number' ? data.confidence : 1
       },
@@ -823,7 +824,7 @@ export class ChatService {
       },
       entry: {
         path: entryPath,
-        category: (data.category || 'admin') as Category,
+        category: toCanonicalCategory((data.category || 'task') as string),
         name: entryName,
         confidence: typeof data.confidence === 'number' ? data.confidence : 1
       },
@@ -927,7 +928,7 @@ export class ChatService {
 
   private extractCategoryHintFromConfirmation(message: string): string | undefined {
     const text = message.toLowerCase();
-    if (/\b(admin(?:\s+task)?|task)\b/.test(text)) return '[admin]';
+    if (/\b(admin(?:\s+task)?|task)\b/.test(text)) return '[task]';
     if (/\bproject\b/.test(text)) return '[project]';
     if (/\bidea\b/.test(text)) return '[idea]';
     if (/\b(person|people)\b/.test(text)) return '[person]';
@@ -939,7 +940,7 @@ export class ChatService {
     if (result.queued) {
       return result.message || 'I queued that capture and will process it when the model is available.';
     }
-    let typeLabel = result.category === 'admin' ? 'task' : result.category.slice(0, -1);
+    let typeLabel = isTaskCategory(result.category) ? 'task' : result.category.slice(0, -1);
     if (result.category === 'inbox') {
       typeLabel = 'inbox item';
     }
@@ -981,7 +982,7 @@ export class ChatService {
     const lower = content.toLowerCase();
     if (this.isCapturePrompt(content)) {
       return [
-        { id: 'capture_admin', label: 'Yes, task', message: 'Yes as an admin task' },
+        { id: 'capture_task', label: 'Yes, task', message: 'Yes as a task' },
         { id: 'capture_project', label: 'Yes, project', message: 'Yes as a project' },
         { id: 'capture_idea', label: 'Yes, idea', message: 'Yes as an idea' },
         { id: 'capture_no', label: 'No', message: 'No, do not save that' }
@@ -1298,6 +1299,7 @@ export class ChatService {
           one_liner: fields.oneLiner || '',
           related_projects: fields.relatedProjects || [],
         };
+      case 'task':
       case 'admin':
         return {
           ...baseData,
@@ -1393,6 +1395,7 @@ export class ChatService {
           one_liner: existingEntry.one_liner || existingEntry.original_text || '',
           related_projects: existingEntry.related_projects || [],
         };
+      case 'task':
       case 'admin':
         return {
           ...baseData,

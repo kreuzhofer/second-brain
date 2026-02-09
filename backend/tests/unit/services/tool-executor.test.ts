@@ -2024,7 +2024,7 @@ Reply with thoughts or adjustments.`;
       const updateResult = result.data as UpdateEntryResult;
       expect(updateResult.path).toBe('admin/finish-q4-2025-tax-report');
       expect(updateResult.warnings?.some((warning) => warning.includes('completed task'))).toBe(true);
-      expect(mockEntryService.list).toHaveBeenCalledWith('admin', { status: 'done' });
+      expect(mockEntryService.list).toHaveBeenCalledWith('task', { status: 'done' });
       expect(mockEntryService.update).toHaveBeenNthCalledWith(
         1,
         'admin/finish-q4-2025-tax-report',
@@ -2086,7 +2086,7 @@ Reply with thoughts or adjustments.`;
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Multiple completed tasks match');
-      expect(mockEntryService.list).toHaveBeenCalledWith('admin', { status: 'done' });
+      expect(mockEntryService.list).toHaveBeenCalledWith('task', { status: 'done' });
       expect(mockEntryService.update).toHaveBeenCalledTimes(1);
     });
 

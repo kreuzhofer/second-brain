@@ -22,7 +22,7 @@ export interface ClassificationInput {
  * Result returned by the Classification Agent
  */
 export interface ClassificationResult {
-  category: 'people' | 'projects' | 'ideas' | 'admin';
+  category: 'people' | 'projects' | 'ideas' | 'task' | 'admin';
   confidence: number;
   name: string;
   slug: string;

@@ -34,7 +34,7 @@ const DEFAULT_TIMEOUT_MS = 30000;
  * Used to instruct the LLM on the expected output format
  */
 const CLASSIFICATION_SCHEMA = `{
-  "category": "people" | "projects" | "ideas" | "admin",
+  "category": "people" | "projects" | "ideas" | "task",
   "confidence": 0.0-1.0,
   "name": "Short descriptive title",
   "slug": "url-safe-lowercase-slug",
@@ -42,7 +42,7 @@ const CLASSIFICATION_SCHEMA = `{
     // For people: { "context": string, "followUps": string[], "relatedProjects": string[] }
     // For projects: { "status": "active"|"waiting"|"blocked"|"someday", "nextAction": string, "relatedPeople": string[], "dueDate"?: string }
     // For ideas: { "oneLiner": string, "relatedProjects": string[] }
-    // For admin: { "status": "pending", "dueDate"?: string, "relatedPeople": string[] }
+    // For task: { "status": "pending", "dueDate"?: string, "relatedPeople": string[] }
   },
   "related_entries": ["slug1", "slug2"],
   "reasoning": "Brief explanation of classification decision",
@@ -60,7 +60,7 @@ Generate appropriate markdown body content based on the category. Extract and or
 - people: Generate a "## Notes" section with observations about the person, their preferences, communication style, or any relevant context from the input.
 - projects: Generate a "## Notes" section for project context and background. Optionally include a "## Log" section for timeline entries if the input mentions specific events or milestones.
 - ideas: Generate a "## Elaboration" section that expands on the concept, explores implications, or adds structure to the idea.
-- admin: Generate a "## Notes" section ONLY if the input contains additional context beyond the task itself. If the input is just a simple task with no extra context, return an empty string for body_content.
+- task: Generate a "## Notes" section ONLY if the input contains additional context beyond the task itself. If the input is just a simple task with no extra context, return an empty string for body_content.
 
 If the input text contains no additional context worth capturing in the body, return an empty string for body_content.
 `;
@@ -130,7 +130,7 @@ export class ClassificationAgent {
    * 
    * Requirements 3.1: Analyze the text and return a classification result
    * Requirements 3.2: Return JSON object with category, name, slug, fields, confidence, reasoning
-   * Requirements 3.3: Classify into exactly one of: people, projects, ideas, or admin
+   * Requirements 3.3: Classify into exactly one of: people, projects, ideas, or task
    * Requirements 3.4: Use current index.md content as context for classification decisions
    * 
    * @param input - The classification input containing text, hints, and context
@@ -189,11 +189,11 @@ Given a raw thought, classify it into one of these categories:
 - people: Information about a specific person (contact, relationship, follow-ups)
 - projects: Something with multiple steps, a goal, and a timeline
 - ideas: A concept, insight, or potential future thing (no active commitment yet)
-- admin: A single task/errand with a due date
+- task: A single task/errand with an optional due date
 
 Extract structured fields based on the category. Return JSON only.
 Today's date is ${today}. Convert relative dates (e.g. today, tomorrow, next week) to YYYY-MM-DD.
-For admin tasks, extract relatedPeople as an array of full names mentioned (empty array if none).
+For tasks, extract relatedPeople as an array of full names mentioned (empty array if none).
 
 Schema:
 ${CLASSIFICATION_SCHEMA}
@@ -319,12 +319,13 @@ ${context.indexContent || '(No existing entries)'}
     }
 
     // Normalize the response to our interface
+    const category = parsed.category === 'admin' ? 'task' : parsed.category;
     const result: ClassificationResult = {
-      category: parsed.category,
+      category,
       confidence: this.normalizeConfidence(parsed.confidence),
       name: String(parsed.name),
       slug: this.normalizeSlug(parsed.slug),
-      fields: this.normalizeFields(parsed.category, parsed.fields),
+      fields: this.normalizeFields(category, parsed.fields),
       relatedEntries: this.normalizeRelatedEntries(parsed.related_entries),
       reasoning: String(parsed.reasoning || ''),
       bodyContent: this.normalizeBodyContent(parsed.body_content),
@@ -339,7 +340,7 @@ ${context.indexContent || '(No existing entries)'}
   private isValidClassificationResponse(
     response: unknown
   ): response is {
-    category: 'people' | 'projects' | 'ideas' | 'admin';
+    category: 'people' | 'projects' | 'ideas' | 'task' | 'admin';
     confidence: number;
     name: string;
     slug: string;
@@ -355,7 +356,7 @@ ${context.indexContent || '(No existing entries)'}
     const obj = response as Record<string, unknown>;
 
     // Check required fields
-    if (!['people', 'projects', 'ideas', 'admin'].includes(obj.category as string)) {
+    if (!['people', 'projects', 'ideas', 'task', 'admin'].includes(obj.category as string)) {
       return false;
     }
 
@@ -401,7 +402,7 @@ ${context.indexContent || '(No existing entries)'}
    * Normalize and validate category-specific fields.
    */
   private normalizeFields(
-    category: 'people' | 'projects' | 'ideas' | 'admin',
+    category: 'people' | 'projects' | 'ideas' | 'task' | 'admin',
     fields: Record<string, unknown>
   ): CategoryFields {
     switch (category) {
@@ -411,6 +412,7 @@ ${context.indexContent || '(No existing entries)'}
         return this.normalizeProjectsFields(fields);
       case 'ideas':
         return this.normalizeIdeasFields(fields);
+      case 'task':
       case 'admin':
         return this.normalizeAdminFields(fields);
     }

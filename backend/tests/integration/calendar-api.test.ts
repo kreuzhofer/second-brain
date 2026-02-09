@@ -51,7 +51,7 @@ describe('Calendar API Integration Tests', () => {
       .post('/api/entries')
       .set('Authorization', `Bearer ${authToken}`)
       .send({
-        category: 'admin',
+        category: 'task',
         name: 'Draft retail demo one pager',
         status: 'pending',
         due_date: '2026-02-12',
@@ -70,7 +70,7 @@ describe('Calendar API Integration Tests', () => {
     expect(response.body.items.length).toBeGreaterThan(0);
     expect(response.body.items[0]).toEqual(
       expect.objectContaining({
-        entryPath: 'admin/draft-retail-demo-one-pager',
+        entryPath: 'task/draft-retail-demo-one-pager',
         title: expect.any(String),
         start: expect.any(String),
         end: expect.any(String)
@@ -83,7 +83,7 @@ describe('Calendar API Integration Tests', () => {
       .post('/api/entries')
       .set('Authorization', `Bearer ${authToken}`)
       .send({
-        category: 'admin',
+        category: 'task',
         name: 'Finalize partner update',
         status: 'pending',
         due_date: '2026-02-13',

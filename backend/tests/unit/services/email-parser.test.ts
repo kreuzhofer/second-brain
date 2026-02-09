@@ -53,11 +53,11 @@ describe('EmailParser', () => {
       expect(result?.originalText).toBe('[idea] ');
     });
 
-    it('should extract [task] hint and map to admin category', () => {
+    it('should extract [task] hint and map to task category', () => {
       const result = parser.extractHint('[task] Pay bills');
       
       expect(result).not.toBeNull();
-      expect(result?.category).toBe('admin');
+      expect(result?.category).toBe('task');
       expect(result?.originalText).toBe('[task] ');
     });
 
@@ -66,7 +66,7 @@ describe('EmailParser', () => {
       expect(parser.extractHint('[Person] Test')?.category).toBe('people');
       expect(parser.extractHint('[PROJECT] Test')?.category).toBe('projects');
       expect(parser.extractHint('[IDEA] Test')?.category).toBe('ideas');
-      expect(parser.extractHint('[TASK] Test')?.category).toBe('admin');
+      expect(parser.extractHint('[TASK] Test')?.category).toBe('task');
     });
 
     it('should return null for subjects without hints', () => {

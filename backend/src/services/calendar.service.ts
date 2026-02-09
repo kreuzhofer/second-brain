@@ -2,6 +2,7 @@ import jwt, { Secret, SignOptions, JwtPayload } from 'jsonwebtoken';
 import { getPrismaClient } from '../lib/prisma';
 import { getConfig } from '../config/env';
 import { Category } from '../types/entry.types';
+import { isTaskCategory } from '../utils/category';
 
 export interface WeekPlanOptions {
   startDate?: string;
@@ -123,7 +124,7 @@ export class CalendarService {
         userId,
         OR: [
           {
-            category: 'admin',
+            category: { in: ['task', 'admin'] as any },
             adminDetails: { is: { status: 'pending' } }
           },
           {
@@ -139,18 +140,18 @@ export class CalendarService {
     });
 
     const candidates: Candidate[] = entries.map((entry) => {
-      if (entry.category === 'admin' && entry.adminDetails) {
+      if (isTaskCategory(entry.category) && entry.adminDetails) {
         const dueDate = entry.adminDetails.dueDate ? toYmd(entry.adminDetails.dueDate) : undefined;
-        const priority = this.computePriority(dueDate, startYmd, endYmd, 'admin');
+        const priority = this.computePriority(dueDate, startYmd, endYmd, 'task');
         return {
-          entryPath: `admin/${entry.slug}`,
-          category: 'admin',
+          entryPath: `task/${entry.slug}`,
+          category: 'task',
           sourceName: entry.title,
           title: entry.title,
           dueDate,
           durationMinutes: 45,
           priority,
-          reason: dueDate ? `Due on ${dueDate}` : 'Pending admin task'
+          reason: dueDate ? `Due on ${dueDate}` : 'Pending task'
         };
       }
 
@@ -278,7 +279,7 @@ export class CalendarService {
     endYmd: string,
     category: Category
   ): number {
-    let score = category === 'admin' ? 120 : 90;
+    let score = isTaskCategory(category) ? 120 : 90;
     if (!dueDate) return score;
 
     if (dueDate < startYmd) return score + 80;

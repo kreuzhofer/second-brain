@@ -247,12 +247,12 @@ describe('API Integration Tests', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
-      expect(graphResponse.body.center.path).toBe('admin/call-lina-haidu');
+      expect(graphResponse.body.center.path).toBe('task/call-lina-haidu');
       expect(graphResponse.body.nodes.length).toBeGreaterThanOrEqual(2);
       expect(
         graphResponse.body.edges.some(
           (edge: any) =>
-            edge.source === 'admin/call-lina-haidu' &&
+            edge.source === 'task/call-lina-haidu' &&
             edge.target === 'people/lina-haidu' &&
             edge.type === 'mention'
         )
@@ -370,7 +370,7 @@ describe('API Integration Tests', () => {
       const removeIncoming = await request(app)
         .delete('/api/entries/people/tom-hardy/links')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ targetPath: 'admin/book-review-session', direction: 'incoming' })
+        .send({ targetPath: 'task/book-review-session', direction: 'incoming' })
         .expect(200);
 
       expect(removeIncoming.body.removed).toBe(1);

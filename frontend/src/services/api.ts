@@ -2,7 +2,7 @@
  * API Client for Second Brain backend
  */
 
-export type Category = 'people' | 'projects' | 'ideas' | 'admin' | 'inbox';
+export type Category = 'people' | 'projects' | 'ideas' | 'task' | 'admin' | 'inbox';
 export type Channel = 'chat' | 'email' | 'api';
 
 export interface Entry {

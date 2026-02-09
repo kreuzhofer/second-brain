@@ -24,12 +24,12 @@ import { Category } from '../../src/types/entry.types';
 /**
  * Generate a valid category
  */
-const categoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'admin', 'inbox');
+const categoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'task', 'inbox');
 
 /**
  * Generate a valid non-inbox category (for creating entries with names)
  */
-const nonInboxCategoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'admin');
+const nonInboxCategoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'task');
 
 /**
  * Generate a simple search term (alphanumeric, lowercase)
@@ -144,7 +144,7 @@ describe('SearchService - Search Filtering and Relevance Properties', () => {
         source_channel: 'api',
         confidence: 0.9
       });
-      await entryService.create('admin', {
+      await entryService.create('task', {
         name: 'Test Admin Task',
         status: 'pending',
         source_channel: 'api',

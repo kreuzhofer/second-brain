@@ -10,7 +10,7 @@ interface InboxTriagePanelProps {
   limit?: number;
 }
 
-const CATEGORY_OPTIONS: Category[] = ['people', 'projects', 'ideas', 'admin'];
+const CATEGORY_OPTIONS: Category[] = ['people', 'projects', 'ideas', 'task'];
 
 export function InboxTriagePanel({ onEntryClick, limit = 6 }: InboxTriagePanelProps) {
   const { entries, isLoading, error: loadError, refresh } = useEntries();

@@ -32,6 +32,7 @@ export function RecentEntries({ onEntryClick, limit = 6 }: RecentEntriesProps) {
         return <Briefcase className="h-4 w-4" />;
       case 'ideas':
         return <Lightbulb className="h-4 w-4" />;
+      case 'task':
       case 'admin':
         return <ClipboardList className="h-4 w-4" />;
       case 'inbox':
@@ -107,7 +108,7 @@ export function RecentEntries({ onEntryClick, limit = 6 }: RecentEntriesProps) {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{entry.name}</p>
                     <p className="text-xs text-muted-foreground capitalize">
-                      {entry.category}
+                      {entry.category === 'admin' ? 'task' : entry.category}
                     </p>
                   </div>
                   <div className="flex-shrink-0 text-xs text-muted-foreground">

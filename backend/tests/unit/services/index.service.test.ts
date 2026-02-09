@@ -78,8 +78,8 @@ describe('IndexService', () => {
       expect(content).toContain('## Ideas');
     });
 
-    it('should include Admin section', async () => {
-      await entryService.create('admin', {
+    it('should include Tasks section', async () => {
+      await entryService.create('task', {
         name: 'Sample Admin',
         status: 'pending',
         source_channel: 'api',
@@ -87,7 +87,7 @@ describe('IndexService', () => {
       });
       await indexService.regenerate();
       const content = await indexService.getIndexContent();
-      expect(content).toContain('## Admin – Pending');
+      expect(content).toContain('## Tasks – Pending');
     });
 
     it('should include Inbox section', async () => {
@@ -157,8 +157,8 @@ describe('IndexService', () => {
       expect(indexContent).toContain('This is a great idea');
     });
 
-    it('should list pending admin tasks with correct columns', async () => {
-      await entryService.create('admin', {
+    it('should list pending tasks with correct columns', async () => {
+      await entryService.create('task', {
         name: 'Important Task',
         due_date: '2026-02-01',
         source_channel: 'api',
@@ -168,14 +168,14 @@ describe('IndexService', () => {
       await indexService.regenerate();
       const indexContent = await indexService.getIndexContent();
 
-      expect(indexContent).toContain('## Admin – Pending (1)');
+      expect(indexContent).toContain('## Tasks – Pending (1)');
       expect(indexContent).toContain('| Task | Due |');
       expect(indexContent).toContain('[Important Task]');
       expect(indexContent).toContain('2026-02-01');
     });
 
-    it('should include recently done admin tasks', async () => {
-      await entryService.create('admin', {
+    it('should include recently done tasks', async () => {
+      await entryService.create('task', {
         name: 'Finished Task',
         status: 'done',
         source_channel: 'api',
@@ -185,7 +185,7 @@ describe('IndexService', () => {
       await indexService.regenerate();
       const indexContent = await indexService.getIndexContent();
 
-      expect(indexContent).toContain('## Admin – Done');
+      expect(indexContent).toContain('## Tasks – Done');
       expect(indexContent).toContain('[Finished Task]');
     });
 
@@ -231,7 +231,7 @@ describe('IndexService', () => {
       await indexService.regenerate();
       const indexContent = await indexService.getIndexContent();
 
-      expect(indexContent).toContain('> Total entries: 3 (1 people, 1 projects, 1 ideas, 0 admin)');
+      expect(indexContent).toContain('> Total entries: 3 (1 people, 1 projects, 1 ideas, 0 tasks)');
     });
   });
 });

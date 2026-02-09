@@ -78,7 +78,7 @@ export class ToolRegistry {
       type: 'function',
       function: {
         name: 'classify_and_capture',
-        description: 'Classify a thought and create an entry in the knowledge base. Use when the user shares new information, facts, ideas, or tasks to remember. This tool analyzes the content and automatically determines the best category (people, projects, ideas, or admin).',
+        description: 'Classify a thought and create an entry in the knowledge base. Use when the user shares new information, facts, ideas, or tasks to remember. This tool analyzes the content and automatically determines the best category (people, projects, ideas, or task).',
         parameters: {
           type: 'object',
           properties: {
@@ -107,7 +107,7 @@ export class ToolRegistry {
           properties: {
             category: {
               type: 'string',
-              enum: ['people', 'projects', 'ideas', 'admin', 'inbox'],
+              enum: ['people', 'projects', 'ideas', 'task', 'admin', 'inbox'],
               description: 'Filter by category'
             },
             status: {
@@ -179,7 +179,7 @@ export class ToolRegistry {
             },
             updates: {
               type: 'object',
-              description: 'Metadata fields to update. For admin/projects: status ("pending", "done", "active", "waiting", "blocked"). Also: next_action, due_date, context, tags. For admin updates mentioning people, include related_people: string[].',
+              description: 'Metadata fields to update. For task/projects: status ("pending", "done", "active", "waiting", "blocked"). Also: next_action, due_date, context, tags. For task updates mentioning people, include related_people: string[].',
               additionalProperties: true
             },
             body_content: {
@@ -223,7 +223,7 @@ export class ToolRegistry {
             },
             targetCategory: {
               type: 'string',
-              enum: ['people', 'projects', 'ideas', 'admin'],
+              enum: ['people', 'projects', 'ideas', 'task', 'admin'],
               description: 'The category to move the entry to'
             }
           },
@@ -247,7 +247,7 @@ export class ToolRegistry {
             },
             category: {
               type: 'string',
-              enum: ['people', 'projects', 'ideas', 'admin', 'inbox'],
+              enum: ['people', 'projects', 'ideas', 'task', 'admin', 'inbox'],
               description: 'Optional category to limit search'
             },
             limit: {
@@ -272,7 +272,7 @@ export class ToolRegistry {
           properties: {
             path: {
               type: 'string',
-              description: 'The entry path to delete (e.g., admin/grocery-shopping)'
+              description: 'The entry path to delete (e.g., task/grocery-shopping)'
             }
           },
           required: ['path']
@@ -299,7 +299,7 @@ export class ToolRegistry {
             },
             category: {
               type: 'string',
-              enum: ['people', 'projects', 'ideas', 'admin', 'inbox'],
+              enum: ['people', 'projects', 'ideas', 'task', 'admin', 'inbox'],
               description: 'Optional category to limit search'
             },
             limit: {

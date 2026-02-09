@@ -12,7 +12,7 @@ import type { BodyContentUpdate } from '../types/entry.types';
 
 export const entriesRouter = Router();
 
-const VALID_CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'admin', 'inbox'];
+const VALID_CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'task', 'admin', 'inbox'];
 
 /**
  * GET /api/entries

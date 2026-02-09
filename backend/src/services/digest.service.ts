@@ -14,6 +14,7 @@ import { getPrismaClient } from '../lib/prisma';
 import { EntrySummary, Category } from '../types/entry.types';
 import { DigestPreferences, DigestPreferencesService, getDigestPreferencesService } from './digest-preferences.service';
 import { requireUserId } from '../context/user-context';
+import { isTaskCategory } from '../utils/category';
 
 // ============================================
 // Types
@@ -25,7 +26,7 @@ export interface ActivityStats {
     people: number;
     projects: number;
     ideas: number;
-    admin: number;
+    task: number;
     total: number;
   };
   tasksCompleted: number;
@@ -34,7 +35,7 @@ export interface ActivityStats {
 export interface TopItem {
   name: string;
   nextAction: string;
-  source: 'project' | 'admin';
+  source: 'project' | 'task';
   dueDate?: string;
 }
 
@@ -93,7 +94,7 @@ export class DigestService {
     const config = getConfig();
     const prefs = await this.preferencesService.getMergedPreferences(preferences);
     
-    // Get top 3 items (active projects + pending admin tasks)
+    // Get top 3 items (active projects + pending tasks)
     const topItems = await this.getTopItems(prefs);
     
     // Get stale inbox items
@@ -101,8 +102,8 @@ export class DigestService {
       ? await this.getStaleInboxItems(config.STALE_INBOX_DAYS)
       : [];
     
-    // Get small wins (completed admin tasks in last 7 days)
-    const smallWins = prefs.includeSmallWins && this.isCategoryFocused(prefs, 'admin')
+    // Get small wins (completed tasks in last 7 days)
+    const smallWins = prefs.includeSmallWins && this.isCategoryFocused(prefs, 'task')
       ? await this.getSmallWins()
       : { completedCount: 0 };
     
@@ -200,7 +201,7 @@ export class DigestService {
       const inRange = createdAt >= startDate && createdAt < endDate;
       if (!inRange) return false;
       if (preferences?.focusCategories && preferences.focusCategories.length > 0) {
-        return preferences.focusCategories.includes(e.category);
+        return this.isCategoryFocused(preferences, e.category as Category);
       }
       return true;
     });
@@ -209,13 +210,13 @@ export class DigestService {
       people: entriesInRange.filter(e => e.category === 'people').length,
       projects: entriesInRange.filter(e => e.category === 'projects').length,
       ideas: entriesInRange.filter(e => e.category === 'ideas').length,
-      admin: entriesInRange.filter(e => e.category === 'admin').length,
+      task: entriesInRange.filter(e => isTaskCategory(e.category)).length,
       total: entriesInRange.length
     };
 
-    // Count completed admin tasks
-    const adminEntries = await this.entryService.list('admin');
-    const tasksCompleted = adminEntries.filter(e => {
+    // Count completed tasks
+    const taskEntries = await this.entryService.list('task');
+    const tasksCompleted = taskEntries.filter(e => {
       const updatedAt = new Date(e.updated_at);
       return e.status === 'done' && updatedAt >= startDate && updatedAt < endDate;
     }).length;
@@ -228,7 +229,7 @@ export class DigestService {
   }
 
   /**
-   * Get top 3 priority items (active projects and pending admin tasks)
+   * Get top 3 priority items (active projects and pending tasks)
    */
   async getTopItems(preferences?: DigestPreferences): Promise<TopItem[]> {
     if (!this.entryService) {
@@ -252,14 +253,14 @@ export class DigestService {
       }
     }
 
-    // Get pending admin tasks
-    if (this.isCategoryFocused(preferences, 'admin')) {
-      const adminTasks = await this.entryService.list('admin', { status: 'pending' });
-      for (const task of adminTasks) {
+    // Get pending tasks
+    if (this.isCategoryFocused(preferences, 'task')) {
+      const tasks = await this.entryService.list('task', { status: 'pending' });
+      for (const task of tasks) {
         items.push({
           name: task.name,
-          nextAction: task.name, // Admin tasks use name as the action
-          source: 'admin',
+          nextAction: task.name,
+          source: 'task',
           dueDate: task.due_date
         });
       }
@@ -307,7 +308,7 @@ export class DigestService {
   }
 
   /**
-   * Get small wins (completed admin tasks in last 7 days)
+   * Get small wins (completed tasks in last 7 days)
    */
   async getSmallWins(): Promise<{ completedCount: number; nextTask?: string }> {
     if (!this.entryService) {
@@ -317,7 +318,7 @@ export class DigestService {
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    const adminTasks = await this.entryService.list('admin');
+    const adminTasks = await this.entryService.list('task');
     
     // Count completed tasks in last 7 days
     const completedCount = adminTasks.filter(task => {
@@ -469,7 +470,7 @@ export class DigestService {
       const inRange = createdAt >= startDate && createdAt < endDate;
       if (!inRange) return false;
       if (preferences?.focusCategories && preferences.focusCategories.length > 0) {
-        return preferences.focusCategories.includes(e.category);
+        return this.isCategoryFocused(preferences, e.category as Category);
       }
       return true;
     });
@@ -495,7 +496,7 @@ export class DigestService {
       people: 'relationship-focused',
       projects: 'project-focused',
       ideas: 'creative and exploratory',
-      admin: 'task-oriented',
+      task: 'task-oriented',
       inbox: 'capturing lots of raw thoughts'
     };
 
@@ -543,7 +544,7 @@ export class DigestService {
       lines.push('');
       lines.push('**Small Win:**');
       const nextPart = smallWins.nextTask ? ` ${smallWins.nextTask} is next.` : '';
-      lines.push(`- You completed ${smallWins.completedCount} admin task${smallWins.completedCount > 1 ? 's' : ''} this week.${nextPart}`);
+      lines.push(`- You completed ${smallWins.completedCount} task${smallWins.completedCount > 1 ? 's' : ''} this week.${nextPart}`);
     }
 
     if (dailyTip) {
@@ -585,7 +586,7 @@ export class DigestService {
     if (stats.entriesCreated.projects > 0) breakdown.push(`${stats.entriesCreated.projects} projects`);
     if (stats.entriesCreated.people > 0) breakdown.push(`${stats.entriesCreated.people} people`);
     if (stats.entriesCreated.ideas > 0) breakdown.push(`${stats.entriesCreated.ideas} ideas`);
-    if (stats.entriesCreated.admin > 0) breakdown.push(`${stats.entriesCreated.admin} admin`);
+    if (stats.entriesCreated.task > 0) breakdown.push(`${stats.entriesCreated.task} tasks`);
     
     const breakdownStr = breakdown.length > 0 ? ` (${breakdown.join(', ')})` : '';
     lines.push(`- ${stats.entriesCreated.total} entries created${breakdownStr}`);
@@ -723,6 +724,9 @@ export class DigestService {
   private isCategoryFocused(preferences: DigestPreferences | undefined, category: Category): boolean {
     if (!preferences?.focusCategories || preferences.focusCategories.length === 0) {
       return true;
+    }
+    if (isTaskCategory(category)) {
+      return preferences.focusCategories.includes('task') || preferences.focusCategories.includes('admin' as Category);
     }
     return preferences.focusCategories.includes(category);
   }

@@ -70,9 +70,12 @@ captureRouter.post('/', async (req: Request, res: Response) => {
     const entryService = getEntryService();
     const entry = await entryService.read(capture.path);
 
+    const categoryLabel = capture.category === 'task'
+      ? 'task'
+      : capture.category.slice(0, -1);
     const message = capture.category === 'inbox'
       ? `Captured to inbox (confidence ${Math.round(capture.confidence * 100)}%).`
-      : `Filed as ${capture.category.slice(0, -1)}: ${capture.name}.`;
+      : `Filed as ${categoryLabel}: ${capture.name}.`;
 
     res.status(201).json({
       entry,

@@ -23,7 +23,7 @@ const HINT_TO_CATEGORY: Record<string, string> = {
   'project': 'projects',
   'person': 'people',
   'idea': 'ideas',
-  'task': 'admin',
+  'task': 'task',
 };
 
 // Arbitrary for generating valid hint types

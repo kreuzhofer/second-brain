@@ -15,7 +15,7 @@ const CATEGORY_OPTIONS: Array<{ value: Category | 'all'; label: string }> = [
   { value: 'people', label: 'People' },
   { value: 'projects', label: 'Projects' },
   { value: 'ideas', label: 'Ideas' },
-  { value: 'admin', label: 'Admin' },
+  { value: 'task', label: 'Tasks' },
   { value: 'inbox', label: 'Inbox' }
 ];
 

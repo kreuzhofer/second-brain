@@ -39,7 +39,7 @@ import {
 /**
  * Generate a valid non-inbox category (for creating entries with names)
  */
-const nonInboxCategoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'admin');
+const nonInboxCategoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'task');
 
 /**
  * Generate a valid entry name (alphanumeric with spaces, reasonable length)
@@ -64,6 +64,7 @@ const CATEGORY_REQUIRED_FIELDS: Record<Category, string[]> = {
   people: ['name', 'context', 'follow_ups', 'related_projects', 'last_touched'],
   projects: ['name', 'status', 'next_action', 'related_people'],
   ideas: ['name', 'one_liner', 'related_projects'],
+  task: ['name', 'status'],
   admin: ['name', 'status'],
   inbox: ['original_text', 'suggested_category', 'suggested_name', 'status']
 };
@@ -73,6 +74,7 @@ const CATEGORY_REQUIRED_FIELDS: Record<Category, string[]> = {
  */
 const CATEGORY_STATUS_VALUES: Record<string, string[]> = {
   projects: ['active', 'waiting', 'blocked', 'someday', 'done'],
+  task: ['pending', 'done'],
   admin: ['pending', 'done']
 };
 

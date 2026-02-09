@@ -10,6 +10,11 @@ import {
 } from '../types/entry.types';
 import { EntryNotFoundError, EntryService, InvalidEntryDataError, generateSlug } from './entry.service';
 import { requireUserId } from '../context/user-context';
+import {
+  isValidCategory,
+  toCanonicalCategory,
+  toLegacyCompatibleCategories
+} from '../utils/category';
 
 export interface EntryLinksResponse {
   outgoing: EntryLinkSummary[];
@@ -17,13 +22,13 @@ export interface EntryLinksResponse {
 }
 
 function buildEntryPath(category: Category, slug: string): string {
-  return `${category}/${slug}`;
+  return `${toCanonicalCategory(category)}/${slug}`;
 }
 
 function toEntrySummary(category: string, slug: string, title: string): EntryLinkSummary {
   return {
     path: buildEntryPath(category as Category, slug),
-    category: category as Category,
+    category: toCanonicalCategory(category),
     name: title
   };
 }
@@ -33,10 +38,10 @@ function parseEntryPath(path: string): { category: Category; slug: string } {
   if (!rawCategory || !rawSlug) {
     throw new EntryNotFoundError(path);
   }
-  const category = rawCategory as Category;
-  if (!['people', 'projects', 'ideas', 'admin', 'inbox'].includes(category)) {
+  if (!isValidCategory(rawCategory)) {
     throw new EntryNotFoundError(path);
   }
+  const category = toCanonicalCategory(rawCategory);
   const slug = rawSlug.endsWith('.md') ? rawSlug.slice(0, -3) : rawSlug;
   return { category, slug };
 }
@@ -575,8 +580,12 @@ export class EntryLinkService {
     title: string;
   }> {
     const { category, slug } = parseEntryPath(path);
-    const entry = await this.prisma.entry.findUnique({
-      where: { userId_category_slug: { userId, category, slug } }
+    const entry = await this.prisma.entry.findFirst({
+      where: {
+        userId,
+        slug,
+        category: { in: toLegacyCompatibleCategories(category) as any[] }
+      }
     });
     if (!entry) {
       throw new EntryNotFoundError(path);

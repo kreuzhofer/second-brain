@@ -32,23 +32,24 @@ export class IndexService {
   private async generateIndexContent(): Promise<string> {
     const now = new Date().toISOString();
     const entries = await this.getAllEntries();
+    const taskEntries = [...entries.task, ...entries.admin];
 
     const counts = {
       people: entries.people.length,
       projects: entries.projects.length,
       ideas: entries.ideas.length,
-      admin: entries.admin.length,
+      task: taskEntries.length,
       inbox: entries.inbox.length
     };
 
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
 
-    let content = `# Second Brain Index\n\n> Last updated: ${now}\n> Total entries: ${total} (${counts.people} people, ${counts.projects} projects, ${counts.ideas} ideas, ${counts.admin} admin)\n\n`;
+    let content = `# Second Brain Index\n\n> Last updated: ${now}\n> Total entries: ${total} (${counts.people} people, ${counts.projects} projects, ${counts.ideas} ideas, ${counts.task} tasks)\n\n`;
 
     content += this.generatePeopleSection(entries.people);
     content += this.generateProjectsSection(entries.projects);
     content += this.generateIdeasSection(entries.ideas);
-    content += this.generateAdminSection(entries.admin);
+    content += this.generateAdminSection(taskEntries);
     content += this.generateInboxSection(entries.inbox);
 
     return content;
@@ -59,6 +60,7 @@ export class IndexService {
       people: [],
       projects: [],
       ideas: [],
+      task: [],
       admin: [],
       inbox: []
     };
@@ -158,7 +160,7 @@ export class IndexService {
     let section = '';
 
     if (pending.length > 0) {
-      section += `## Admin – Pending (${pending.length})\n\n| Task | Due |\n| --- | --- |\n`;
+      section += `## Tasks – Pending (${pending.length})\n\n| Task | Due |\n| --- | --- |\n`;
 
       for (const entry of pending) {
         const name = `[${entry.name}](${entry._path})`;
@@ -178,7 +180,7 @@ export class IndexService {
         ? `${recentDone.length} of ${done.length}`
         : `${recentDone.length}`;
 
-      section += `## Admin – Done (recent ${countLabel})\n\n| Task | Updated |\n| --- | --- |\n`;
+      section += `## Tasks – Done (recent ${countLabel})\n\n| Task | Updated |\n| --- | --- |\n`;
       for (const entry of recentDone) {
         const name = `[${entry.name}](${entry._path})`;
         const updated = entry.updated_at ? entry.updated_at.split('T')[0] : '';

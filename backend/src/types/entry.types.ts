@@ -2,7 +2,7 @@
  * Entry type definitions for the Second Brain application
  */
 
-export type Category = 'people' | 'projects' | 'ideas' | 'admin' | 'inbox';
+export type Category = 'people' | 'projects' | 'ideas' | 'task' | 'admin' | 'inbox';
 export type Channel = 'chat' | 'email' | 'api';
 export type ProjectStatus = 'active' | 'waiting' | 'blocked' | 'someday' | 'done';
 export type AdminStatus = 'pending' | 'done';

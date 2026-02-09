@@ -40,8 +40,8 @@ const HINT_TO_CATEGORY: Record<string, Category> = {
   'people': 'people',
   'idea': 'ideas',
   'ideas': 'ideas',
-  'task': 'admin',
-  'admin': 'admin',
+  'task': 'task',
+  'admin': 'task',
 };
 
 /**

@@ -44,6 +44,8 @@ interface FocusItem {
   updatedAt?: string;
 }
 
+const isTaskCategory = (category: string): boolean => category === 'task' || category === 'admin';
+
 export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const { entries, isLoading, error: loadError, refresh } = useEntries();
   const [error, setError] = useState<string | null>(null);
@@ -167,12 +169,12 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
     const items = entries
       .filter((entry) => (
         (entry.category === 'projects' && entry.status === 'active') ||
-        (entry.category === 'admin' && entry.status === 'pending')
+        (isTaskCategory(entry.category) && entry.status === 'pending')
       ))
       .map((entry) => ({
         path: entry.path,
         title: entry.category === 'projects' ? (entry.next_action || entry.name) : entry.name,
-        subtitle: entry.category === 'projects' && entry.next_action ? entry.name : entry.category === 'projects' ? 'Project' : 'Admin task',
+        subtitle: entry.category === 'projects' && entry.next_action ? entry.name : entry.category === 'projects' ? 'Project' : 'Task',
         dueDate: entry.due_date,
         category: entry.category,
         updatedAt: entry.updated_at
@@ -250,7 +252,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
 
   const inboxCount = entries.filter((entry) => entry.category === 'inbox').length;
   const activeProjects = entries.filter((entry) => entry.category === 'projects' && entry.status === 'active').length;
-  const pendingAdmin = entries.filter((entry) => entry.category === 'admin' && entry.status === 'pending').length;
+  const pendingAdmin = entries.filter((entry) => isTaskCategory(entry.category) && entry.status === 'pending').length;
 
   const currentItems = activeTab === 'ideas' ? ideaItems : activeTab === 'people' ? peopleItems : focusItems;
   const emptyMessage = activeTab === 'focus'
@@ -286,6 +288,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
         return <Briefcase className="h-4 w-4" />;
       case 'ideas':
         return <Lightbulb className="h-4 w-4" />;
+      case 'task':
       case 'admin':
         return <ClipboardList className="h-4 w-4" />;
       case 'inbox':
@@ -610,7 +613,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 className="w-full min-h-[44px] rounded-md border border-border p-2 sm:p-2.5 text-left hover:bg-accent transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  {item.category === 'admin' ? (
+                  {isTaskCategory(item.category) ? (
                     <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
                   ) : (
                     <Circle className="h-4 w-4 text-muted-foreground" />
@@ -697,7 +700,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                   value={targetCategory}
                   onChange={(event) => setTargetCategory(event.target.value as Category)}
                 >
-                  {(['people', 'projects', 'ideas', 'admin'] as Category[]).map((cat) => (
+                  {(['people', 'projects', 'ideas', 'task'] as Category[]).map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>

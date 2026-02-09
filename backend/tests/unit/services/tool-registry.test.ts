@@ -137,7 +137,7 @@ describe('ToolRegistry', () => {
       
       expect(tool?.function.parameters.properties.path).toBeDefined();
       expect(tool?.function.parameters.properties.targetCategory).toBeDefined();
-      expect(tool?.function.parameters.properties.targetCategory.enum).toEqual(['people', 'projects', 'ideas', 'admin']);
+      expect(tool?.function.parameters.properties.targetCategory.enum).toEqual(['people', 'projects', 'ideas', 'task', 'admin']);
       expect(tool?.function.parameters.required).toContain('path');
       expect(tool?.function.parameters.required).toContain('targetCategory');
     });

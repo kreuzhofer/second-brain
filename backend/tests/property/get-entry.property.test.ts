@@ -28,7 +28,7 @@ import { Category, EntryWithPath } from '../../src/types/entry.types';
 /**
  * Generate a valid non-inbox category (for creating entries with names)
  */
-const nonInboxCategoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'admin');
+const nonInboxCategoryArbitrary = fc.constantFrom<Category>('people', 'projects', 'ideas', 'task');
 
 /**
  * Generate a valid entry name (alphanumeric with spaces, reasonable length)
@@ -210,7 +210,7 @@ describe('ToolExecutor - Get Entry Round-Trip Properties', () => {
               case 'ideas':
                 expect((data.entry.entry as any).one_liner).toBeDefined();
                 break;
-              case 'admin':
+              case 'task':
                 expect((data.entry.entry as any).status).toBeDefined();
                 break;
             }
@@ -348,7 +348,7 @@ function createEntryDataForCategory(category: Category, name: string, contextOrO
         one_liner: contextOrOneLiner || 'Test one liner',
         related_projects: []
       };
-    case 'admin':
+    case 'task':
       return {
         ...baseData,
         status: 'pending' as const
@@ -375,7 +375,7 @@ function verifyEntryDataForCategory(category: Category, retrievedEntry: EntryWit
     case 'ideas':
       expect(entry.one_liner).toBe(originalData.one_liner);
       break;
-    case 'admin':
+    case 'task':
       expect(entry.status).toBe(originalData.status);
       break;
   }

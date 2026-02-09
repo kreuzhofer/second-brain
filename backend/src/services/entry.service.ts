@@ -25,6 +25,13 @@ import {
   parseContentForStorage,
   renderContent
 } from '../utils/entry-content';
+import {
+  isTaskCategory,
+  isValidCategory,
+  toCanonicalCategory,
+  toLegacyCompatibleCategories,
+  toStorageCategory
+} from '../utils/category';
 
 // ============================================
 // Custom Errors
@@ -79,16 +86,16 @@ function parseEntryPath(path: string): { category: Category; slug: string } {
   if (!rawCategory || !rawSlug) {
     throw new InvalidEntryDataError(`Invalid entry path: ${path}`);
   }
-  const category = rawCategory as Category;
-  if (!['people', 'projects', 'ideas', 'admin', 'inbox'].includes(category)) {
+  if (!isValidCategory(rawCategory)) {
     throw new InvalidEntryDataError(`Invalid category in path: ${path}`);
   }
+  const category = toCanonicalCategory(rawCategory);
   const slug = rawSlug.endsWith('.md') ? rawSlug.slice(0, -3) : rawSlug;
   return { category, slug };
 }
 
 function buildEntryPath(category: Category, slug: string): string {
-  return `${category}/${slug}`;
+  return `${toCanonicalCategory(category)}/${slug}`;
 }
 
 
@@ -122,11 +129,12 @@ export class EntryService {
     const userId = this.getUserId();
     const now = new Date();
     const sourceChannel = channel || (data as any).source_channel || 'api';
+    const storageCategory = toStorageCategory(category);
 
     let slug: string;
     let entryTitle: string;
 
-    if (category === 'inbox') {
+    if (storageCategory === 'inbox') {
       const inboxData = data as any;
       entryTitle = inboxData.suggested_name || 'Untitled';
       const baseSlug = generateSlug(entryTitle || 'untitled');
@@ -146,14 +154,14 @@ export class EntryService {
       where: {
         userId_category_slug: {
           userId,
-          category,
+          category: storageCategory,
           slug
         }
       }
     });
 
     if (existing) {
-      throw new EntryAlreadyExistsError(buildEntryPath(category, slug));
+      throw new EntryAlreadyExistsError(buildEntryPath(storageCategory, slug));
     }
 
     const { sections, logs } = parseContentForStorage(bodyContent || '');
@@ -162,7 +170,7 @@ export class EntryService {
       const entry = await tx.entry.create({
         data: {
           userId,
-          category,
+          category: storageCategory,
           slug,
           title: entryTitle,
           confidence: (data as any).confidence,
@@ -170,7 +178,7 @@ export class EntryService {
         }
       });
 
-      if (category === 'people') {
+      if (storageCategory === 'people') {
         const payload = data as any;
         await tx.personDetails.create({
           data: {
@@ -183,7 +191,7 @@ export class EntryService {
         });
       }
 
-      if (category === 'projects') {
+      if (storageCategory === 'projects') {
         const payload = data as any;
         await tx.projectDetails.create({
           data: {
@@ -196,7 +204,7 @@ export class EntryService {
         });
       }
 
-      if (category === 'ideas') {
+      if (storageCategory === 'ideas') {
         const payload = data as any;
         await tx.ideaDetails.create({
           data: {
@@ -207,7 +215,7 @@ export class EntryService {
         });
       }
 
-      if (category === 'admin') {
+      if (isTaskCategory(storageCategory)) {
         const payload = data as any;
         await tx.adminTaskDetails.create({
           data: {
@@ -218,7 +226,7 @@ export class EntryService {
         });
       }
 
-      if (category === 'inbox') {
+      if (storageCategory === 'inbox') {
         const payload = data as any;
         await tx.inboxDetails.create({
           data: {
@@ -264,12 +272,12 @@ export class EntryService {
       return entry;
     });
 
-    const entryWithPath = await this.read(buildEntryPath(category, slug));
+    const entryWithPath = await this.read(buildEntryPath(storageCategory, slug));
 
-    await this.logAudit(buildEntryPath(category, slug), created.id, 'create', sourceChannel);
+    await this.logAudit(buildEntryPath(storageCategory, slug), created.id, 'create', sourceChannel);
     await this.emitWebhook('entry.created', {
-      path: buildEntryPath(category, slug),
-      category,
+      path: buildEntryPath(storageCategory, slug),
+      category: toCanonicalCategory(storageCategory),
       entry: entryWithPath.entry,
       content: entryWithPath.content,
       channel: sourceChannel
@@ -281,13 +289,12 @@ export class EntryService {
   async read(path: string): Promise<EntryWithPath> {
     const { category, slug } = parseEntryPath(path);
     const userId = this.getUserId();
-    const entry = await this.prisma.entry.findUnique({
+    const lookupCategories = toLegacyCompatibleCategories(category);
+    const entry = await this.prisma.entry.findFirst({
       where: {
-        userId_category_slug: {
-          userId,
-          category,
-          slug
-        }
+        userId,
+        slug,
+        category: { in: lookupCategories as any[] }
       },
       include: {
         projectDetails: true,
@@ -316,8 +323,8 @@ export class EntryService {
     );
 
     return {
-      path: buildEntryPath(category, slug),
-      category,
+      path: buildEntryPath(entry.category as Category, slug),
+      category: toCanonicalCategory(entry.category),
       entry: entryPayload,
       content
     };
@@ -325,10 +332,13 @@ export class EntryService {
 
   async list(category?: Category, filters?: EntryFilters): Promise<EntrySummary[]> {
     const userId = this.getUserId();
+    const categoryFilter = category
+      ? { category: { in: toLegacyCompatibleCategories(category) as any[] } }
+      : {};
     const entries = await this.prisma.entry.findMany({
       where: {
         userId,
-        ...(category ? { category } : {})
+        ...categoryFilter
       },
       include: {
         projectDetails: true,
@@ -349,9 +359,9 @@ export class EntryService {
       .map((entry) => {
         const summary: EntrySummary = {
           id: entry.id,
-          path: buildEntryPath(entry.category as Category, entry.slug),
+          path: buildEntryPath(toCanonicalCategory(entry.category), entry.slug),
           name: entry.title,
-          category: entry.category as Category,
+          category: toCanonicalCategory(entry.category),
           updated_at: entry.updatedAt.toISOString()
         };
 
@@ -363,7 +373,7 @@ export class EntryService {
             : undefined;
         }
 
-        if (entry.category === 'admin' && entry.adminDetails) {
+        if (isTaskCategory(entry.category) && entry.adminDetails) {
           summary.status = entry.adminDetails.status;
           summary.due_date = entry.adminDetails.dueDate
             ? entry.adminDetails.dueDate.toISOString().split('T')[0]
@@ -383,7 +393,7 @@ export class EntryService {
 
         if (entry.category === 'inbox' && entry.inboxDetails) {
           summary.original_text = entry.inboxDetails.originalText;
-          summary.suggested_category = entry.inboxDetails.suggestedCategory as Category;
+          summary.suggested_category = toCanonicalCategory(entry.inboxDetails.suggestedCategory);
           summary.status = entry.inboxDetails.status;
         }
 
@@ -400,8 +410,12 @@ export class EntryService {
   ): Promise<EntryWithPath> {
     const userId = this.getUserId();
     const { category, slug } = parseEntryPath(path);
-    const existing = await this.prisma.entry.findUnique({
-      where: { userId_category_slug: { userId, category, slug } },
+    const existing = await this.prisma.entry.findFirst({
+      where: {
+        userId,
+        slug,
+        category: { in: toLegacyCompatibleCategories(category) as any[] }
+      },
       include: {
         projectDetails: true,
         adminDetails: true,
@@ -434,7 +448,7 @@ export class EntryService {
         updateData.focusLastSession = new Date((updates as any).focus_last_session);
       }
 
-      if (category === 'people') {
+      if (existing.category === 'people') {
         await tx.personDetails.update({
           where: { entryId: existing.id },
           data: {
@@ -446,7 +460,7 @@ export class EntryService {
         });
       }
 
-      if (category === 'projects') {
+      if (existing.category === 'projects') {
         await tx.projectDetails.update({
           where: { entryId: existing.id },
           data: {
@@ -464,7 +478,7 @@ export class EntryService {
         });
       }
 
-      if (category === 'ideas') {
+      if (existing.category === 'ideas') {
         await tx.ideaDetails.update({
           where: { entryId: existing.id },
           data: {
@@ -474,7 +488,7 @@ export class EntryService {
         });
       }
 
-      if (category === 'admin') {
+      if (isTaskCategory(existing.category)) {
         await tx.adminTaskDetails.update({
           where: { entryId: existing.id },
           data: {
@@ -486,7 +500,7 @@ export class EntryService {
         });
       }
 
-      if (category === 'inbox') {
+      if (existing.category === 'inbox') {
         await tx.inboxDetails.update({
           where: { entryId: existing.id },
           data: {
@@ -519,8 +533,8 @@ export class EntryService {
       return updated;
     });
 
-    const result = await this.read(buildEntryPath(category, slug));
-    await this.logAudit(buildEntryPath(category, slug), updatedEntry.id, 'update', channel);
+    const result = await this.read(buildEntryPath(existing.category as Category, slug));
+    await this.logAudit(buildEntryPath(existing.category as Category, slug), updatedEntry.id, 'update', channel);
     await this.emitWebhook('entry.updated', {
       path: result.path,
       category: result.category,
@@ -536,8 +550,12 @@ export class EntryService {
   async delete(path: string, channel: Channel = 'api'): Promise<void> {
     const userId = this.getUserId();
     const { category, slug } = parseEntryPath(path);
-    const existing = await this.prisma.entry.findUnique({
-      where: { userId_category_slug: { userId, category, slug } }
+    const existing = await this.prisma.entry.findFirst({
+      where: {
+        userId,
+        slug,
+        category: { in: toLegacyCompatibleCategories(category) as any[] }
+      }
     });
 
     if (!existing) {
@@ -549,10 +567,10 @@ export class EntryService {
       await tx.entry.delete({ where: { id: existing.id } });
     });
 
-    await this.logAudit(buildEntryPath(category, slug), undefined, 'delete', channel);
+    await this.logAudit(buildEntryPath(existing.category as Category, slug), undefined, 'delete', channel);
     await this.emitWebhook('entry.deleted', {
-      path: buildEntryPath(category, slug),
-      category,
+      path: buildEntryPath(existing.category as Category, slug),
+      category: toCanonicalCategory(existing.category),
       channel
     });
   }
@@ -561,33 +579,42 @@ export class EntryService {
     const { category: sourceCategory, slug } = parseEntryPath(path);
     const existing = await this.read(path);
     const userId = this.getUserId();
+    const storageTargetCategory = toStorageCategory(targetCategory);
 
-    if (sourceCategory === targetCategory) {
+    if (sourceCategory === storageTargetCategory) {
       return existing;
     }
 
-    const transformed = this.transformEntryForCategory(existing, targetCategory);
+    const transformed = this.transformEntryForCategory(existing, storageTargetCategory);
     const newSlug = generateSlug((transformed.entry as any).name || slug);
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const entryRecord = await tx.entry.findUnique({
-        where: { userId_category_slug: { userId, category: sourceCategory, slug } }
+      const entryRecord = await tx.entry.findFirst({
+        where: {
+          userId,
+          slug,
+          category: { in: toLegacyCompatibleCategories(sourceCategory) as any[] }
+        }
       });
       if (!entryRecord) {
         throw new EntryNotFoundError(path);
       }
 
-      const conflict = await tx.entry.findUnique({
-        where: { userId_category_slug: { userId, category: targetCategory, slug: newSlug } }
+      const conflict = await tx.entry.findFirst({
+        where: {
+          userId,
+          slug: newSlug,
+          category: { in: toLegacyCompatibleCategories(storageTargetCategory) as any[] }
+        }
       });
       if (conflict) {
-        throw new EntryAlreadyExistsError(buildEntryPath(targetCategory, newSlug));
+        throw new EntryAlreadyExistsError(buildEntryPath(storageTargetCategory, newSlug));
       }
 
       await tx.entry.update({
         where: { id: entryRecord.id },
         data: {
-          category: targetCategory as any,
+          category: storageTargetCategory as any,
           slug: newSlug,
           title: (transformed.entry as any).name || entryRecord.title
         }
@@ -599,7 +626,7 @@ export class EntryService {
       await tx.personDetails.deleteMany({ where: { entryId: entryRecord.id } });
       await tx.inboxDetails.deleteMany({ where: { entryId: entryRecord.id } });
 
-      if (targetCategory === 'people') {
+      if (storageTargetCategory === 'people') {
         const entry = transformed.entry as PeopleEntry;
         await tx.personDetails.create({
           data: {
@@ -612,7 +639,7 @@ export class EntryService {
         });
       }
 
-      if (targetCategory === 'projects') {
+      if (storageTargetCategory === 'projects') {
         const entry = transformed.entry as ProjectsEntry;
         await tx.projectDetails.create({
           data: {
@@ -625,7 +652,7 @@ export class EntryService {
         });
       }
 
-      if (targetCategory === 'ideas') {
+      if (storageTargetCategory === 'ideas') {
         const entry = transformed.entry as IdeasEntry;
         await tx.ideaDetails.create({
           data: {
@@ -636,7 +663,7 @@ export class EntryService {
         });
       }
 
-      if (targetCategory === 'admin') {
+      if (isTaskCategory(storageTargetCategory)) {
         const entry = transformed.entry as AdminEntry;
         await tx.adminTaskDetails.create({
           data: {
@@ -647,7 +674,7 @@ export class EntryService {
         });
       }
 
-      if (targetCategory === 'inbox') {
+      if (storageTargetCategory === 'inbox') {
         const entry = transformed.entry as InboxEntry;
         await tx.inboxDetails.create({
           data: {
@@ -665,11 +692,11 @@ export class EntryService {
       return entryRecord.id;
     });
 
-    const result = await this.read(buildEntryPath(targetCategory, newSlug));
+    const result = await this.read(buildEntryPath(storageTargetCategory, newSlug));
     await this.logAudit(result.path, updated, 'move', channel);
     await this.emitWebhook('entry.moved', {
       path: result.path,
-      category: targetCategory,
+      category: toCanonicalCategory(storageTargetCategory),
       entry: result.entry,
       content: result.content,
       channel
@@ -737,7 +764,7 @@ export class EntryService {
         }
       }
 
-      if (category === 'admin') {
+      if (isTaskCategory(category)) {
         if (!targetEntry.due_date && sourceEntry.due_date) {
           updates.due_date = sourceEntry.due_date;
         }
@@ -829,6 +856,7 @@ export class EntryService {
           one_liner: entry.ideaDetails?.oneLiner || '',
           related_projects: entry.ideaDetails?.relatedProjects || []
         } as IdeasEntry;
+      case 'task':
       case 'admin':
         return {
           ...base,
@@ -841,7 +869,7 @@ export class EntryService {
         return {
           id: entry.id,
           original_text: entry.inboxDetails?.originalText || '',
-          suggested_category: entry.inboxDetails?.suggestedCategory || 'inbox',
+          suggested_category: toCanonicalCategory(entry.inboxDetails?.suggestedCategory || 'inbox'),
           suggested_name: entry.inboxDetails?.suggestedName || entry.title,
           confidence: entry.confidence,
           status: entry.inboxDetails?.status || 'needs_review',
@@ -855,7 +883,7 @@ export class EntryService {
 
   private getEntryStatus(entry: any): string | undefined {
     if (entry.category === 'projects') return entry.projectDetails?.status;
-    if (entry.category === 'admin') return entry.adminDetails?.status;
+    if (isTaskCategory(entry.category)) return entry.adminDetails?.status;
     if (entry.category === 'inbox') return entry.inboxDetails?.status;
     return undefined;
   }
@@ -913,6 +941,7 @@ export class EntryService {
           related_projects: []
         } as IdeasEntry;
         break;
+      case 'task':
       case 'admin':
         transformed = {
           ...base,
@@ -923,7 +952,7 @@ export class EntryService {
         transformed = {
           id: entry.id,
           original_text: entry.original_text || existing.content,
-          suggested_category: sourceCategory,
+          suggested_category: toCanonicalCategory(sourceCategory),
           suggested_name: entry.name || entry.suggested_name || 'Inbox item',
           confidence: entry.confidence,
           status: 'needs_review',

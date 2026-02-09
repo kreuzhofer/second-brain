@@ -42,6 +42,7 @@ import {
 import { ContextWindow, ClassificationResult, AdminFields } from '../types/chat.types';
 import { getConfig } from '../config/env';
 import { normalizeDueDate } from '../utils/date';
+import { isTaskCategory, toCanonicalCategory } from '../utils/category';
 
 // ============================================
 // Tool Call Types
@@ -562,7 +563,7 @@ export class ToolExecutor {
     // 6. Return CaptureResult
     const captureResult: CaptureResult = {
       path: createdEntry.path,
-      category: targetCategory,
+      category: toCanonicalCategory(targetCategory),
       name: classificationResult.name,
       confidence: classificationResult.confidence,
       clarificationNeeded: useInbox
@@ -617,6 +618,7 @@ export class ToolExecutor {
           one_liner: (fields.oneLiner as string) || '',
           related_projects: (fields.relatedProjects as string[]) || []
         };
+      case 'task':
       case 'admin':
         return {
           ...baseData,
@@ -859,7 +861,7 @@ export class ToolExecutor {
     // 2. Link related people for admin tasks when provided in updates
     if (this.entryLinkService) {
       const relatedPeople = (updates as any).related_people ?? (updates as any).relatedPeople;
-      if (updatedEntry.category === 'admin' || updatedEntry.category === 'projects') {
+      if (isTaskCategory(updatedEntry.category) || updatedEntry.category === 'projects') {
         const inferred = this.inferRelatedPeopleFromUpdate(
           updatedEntry,
           relatedPeople,
@@ -873,7 +875,7 @@ export class ToolExecutor {
         }
       }
 
-      if (updatedEntry.category === 'admin') {
+      if (isTaskCategory(updatedEntry.category)) {
         const projectRefs = this.inferRelatedProjectsFromUpdate(updates, intentAnalysis);
         if (projectRefs.length > 0) {
           await this.entryLinkService.linkProjectsForEntry(
@@ -994,14 +996,14 @@ export class ToolExecutor {
     }
 
     const makeMatch = message.match(
-      /make\s+(?:the\s+)?(.+?)\s+(?:an?\s+)?(?:admin(?:\s+task)?|project|idea|person|inbox)/i
+      /make\s+(?:the\s+)?(.+?)\s+(?:an?\s+)?(?:admin(?:\s+task)?|task|project|idea|person|inbox)/i
     );
     if (makeMatch?.[1]) {
       return makeMatch[1].trim();
     }
 
     const moveMatch = message.match(
-      /move\s+(.+?)\s+to\s+(?:an?\s+)?(?:admin(?:\s+task)?|project|idea|person|inbox)/i
+      /move\s+(.+?)\s+to\s+(?:an?\s+)?(?:admin(?:\s+task)?|task|project|idea|person|inbox)/i
     );
     if (moveMatch?.[1]) {
       return moveMatch[1].trim();
@@ -1411,7 +1413,7 @@ export class ToolExecutor {
       return fromRelatedPeople;
     }
 
-    if (result.category === 'admin') {
+    if (isTaskCategory(result.category)) {
       const adminFields = result.fields as AdminFields;
       return this.normalizeStringArray((adminFields as any).relatedPeople);
     }
@@ -1592,9 +1594,9 @@ export class ToolExecutor {
     if (!this.isReopenFallbackCandidate(updates, context, intentAnalysis)) return null;
 
     const category = originalPath.split('/')[0] as Category;
-    if (category !== 'admin') return null;
+    if (!isTaskCategory(category)) return null;
 
-    const doneEntries = await this.entryService.list('admin', { status: 'done' });
+    const doneEntries = await this.entryService.list('task', { status: 'done' });
     if (doneEntries.length === 0) return null;
 
     const lastUserMessage = context?.recentMessages
@@ -1954,7 +1956,7 @@ export class ToolExecutor {
       }
     }
 
-    if (category === 'admin') {
+    if (isTaskCategory(category)) {
       const adminData = entryData as CreateAdminInput;
       if (!adminData.name && actionResult.primaryAction) {
         adminData.name = actionResult.primaryAction;

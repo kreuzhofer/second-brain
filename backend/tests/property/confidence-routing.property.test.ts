@@ -36,7 +36,7 @@ const CONFIDENCE_THRESHOLD = 0.6;
  * with the specified category and confidence
  */
 const createMockClassificationAgent = (
-  category: 'people' | 'projects' | 'ideas' | 'admin',
+  category: 'people' | 'projects' | 'ideas' | 'task',
   confidence: number,
   name: string = 'Test Entry'
 ) => {
@@ -57,7 +57,7 @@ const createMockClassificationAgent = (
 /**
  * Get default fields for a category
  */
-const getCategoryFields = (category: 'people' | 'projects' | 'ideas' | 'admin') => {
+const getCategoryFields = (category: 'people' | 'projects' | 'ideas' | 'task') => {
   switch (category) {
     case 'people':
       return { context: '', followUps: [], relatedProjects: [] };
@@ -65,7 +65,7 @@ const getCategoryFields = (category: 'people' | 'projects' | 'ideas' | 'admin') 
       return { status: 'active', nextAction: '', relatedPeople: [] };
     case 'ideas':
       return { oneLiner: '', relatedProjects: [] };
-    case 'admin':
+    case 'task':
       return { status: 'pending' };
   }
 };
@@ -136,7 +136,7 @@ const createMockSearchService = () => {
 // ============================================
 
 // Category arbitrary (excluding inbox - classification always returns one of these)
-const classifiedCategoryArbitrary = fc.constantFrom('people', 'projects', 'ideas', 'admin') as fc.Arbitrary<'people' | 'projects' | 'ideas' | 'admin'>;
+const classifiedCategoryArbitrary = fc.constantFrom( 'people', 'projects', 'ideas', 'task') as fc.Arbitrary<'people' | 'projects' | 'ideas' | 'task'>;
 
 // Entry name arbitrary
 const entryNameArbitrary = fc.string({ minLength: 3, maxLength: 30 })

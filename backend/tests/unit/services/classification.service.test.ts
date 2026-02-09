@@ -292,7 +292,7 @@ describe('ClassificationAgent', () => {
       });
     });
 
-    it('should classify as admin category', async () => {
+    it('should classify as task category', async () => {
       mockCreate.mockResolvedValue({
         choices: [
           {
@@ -315,7 +315,7 @@ describe('ClassificationAgent', () => {
       const input = createClassificationInput('Need to pay the electricity bill by Friday');
       const result = await classificationAgent.classify(input);
 
-      expect(result.category).toBe('admin');
+      expect(result.category).toBe('task');
       expect(result.fields).toMatchObject({
         status: 'pending',
         dueDate: '2024-02-15',
@@ -500,7 +500,7 @@ describe('ClassificationAgent', () => {
                   status: 'pending',
                 },
                 related_entries: [],
-                reasoning: 'A simple admin task',
+                reasoning: 'A simple task',
               }),
             },
           },

@@ -16,7 +16,7 @@ import {
 /**
  * Category type for classification
  */
-export type Category = 'people' | 'projects' | 'ideas' | 'admin';
+export type Category = 'people' | 'projects' | 'ideas' | 'task' | 'admin';
 
 /**
  * Default values for people category fields
@@ -76,6 +76,7 @@ export function extractCategoryFields(
       return extractProjectsFields(rawFields);
     case 'ideas':
       return extractIdeasFields(rawFields);
+    case 'task':
     case 'admin':
       return extractAdminFields(rawFields);
     default:
@@ -173,6 +174,7 @@ export function validateCategoryFields(
       return isProjectsFields(fields);
     case 'ideas':
       return isIdeasFields(fields);
+    case 'task':
     case 'admin':
       return isAdminFields(fields);
     default:
@@ -234,6 +236,7 @@ export function getRequiredFieldKeys(category: Category): string[] {
       return ['status', 'nextAction', 'relatedPeople'];
     case 'ideas':
       return ['oneLiner', 'relatedProjects'];
+    case 'task':
     case 'admin':
       return ['status', 'relatedPeople'];
     default:
@@ -252,6 +255,7 @@ export function getOptionalFieldKeys(category: Category): string[] {
       return ['dueDate'];
     case 'ideas':
       return [];
+    case 'task':
     case 'admin':
       return ['dueDate'];
     default:

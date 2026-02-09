@@ -44,7 +44,7 @@ export interface EmailAddress {
  * Category hint extracted from subject line
  */
 export interface CategoryHint {
-  category: 'people' | 'projects' | 'ideas' | 'admin';
+  category: 'people' | 'projects' | 'ideas' | 'task';
   originalText: string;
 }
 
@@ -66,13 +66,13 @@ const HINT_PATTERN = /^\[(person|project|idea|task)\]\s*/i;
  * - person -> people
  * - project -> projects
  * - idea -> ideas
- * - task -> admin
+ * - task -> task
  */
 const HINT_TO_CATEGORY: Record<string, CategoryHint['category']> = {
   person: 'people',
   project: 'projects',
   idea: 'ideas',
-  task: 'admin',
+  task: 'task',
 };
 
 /**
@@ -184,7 +184,7 @@ export class EmailParser {
    * - [person] -> people
    * - [project] -> projects
    * - [idea] -> ideas
-   * - [task] -> admin
+ * - [task] -> task
    * 
    * Requirement 2.2
    * 

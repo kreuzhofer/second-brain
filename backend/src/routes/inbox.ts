@@ -5,7 +5,7 @@ import { EntryNotFoundError, InvalidEntryDataError } from '../services/entry.ser
 
 export const inboxRouter = Router();
 
-const VALID_CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'admin'];
+const VALID_CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'task', 'admin'];
 
 /**
  * POST /api/inbox/triage

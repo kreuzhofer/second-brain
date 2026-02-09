@@ -329,7 +329,7 @@ describe('Chat Tools Integration', () => {
       const mockToolExecutor = {
         execute: jest.fn().mockResolvedValue({
           success: false,
-          error: 'Entry already exists: admin/finish-q4-tax-report'
+          error: 'Entry already exists: task/finish-q4-tax-report'
         })
       } as unknown as ToolExecutor;
 
@@ -351,7 +351,7 @@ describe('Chat Tools Integration', () => {
 
       expect(mockOpenAI.chat.completions.create).toHaveBeenCalledTimes(1);
       expect(response.toolsUsed).toContain('classify_and_capture');
-      expect(response.message.content).toContain('admin/finish-q4-tax-report');
+      expect(response.message.content).toContain('task/finish-q4-tax-report');
       expect(response.message.content.toLowerCase()).toContain('did not create a duplicate');
       expect(response.message.content.toLowerCase()).not.toContain("can't capture");
       expect(response.message.quickReplies).toEqual([
@@ -493,7 +493,7 @@ describe('Chat Tools Integration', () => {
     it('should capture the previous user intent when user confirms in a follow-up turn', async () => {
       const firstTurnAssistant =
         'It sounds like a task. Would you like me to capture that as a task for you?';
-      const expectedPath = 'admin/retail-demo-one-pagers';
+      const expectedPath = 'task/retail-demo-one-pagers';
       const expectedName = 'Draft retail demo one-pagers';
 
       const mockOpenAI = {
@@ -518,7 +518,7 @@ describe('Chat Tools Integration', () => {
           success: true,
           data: {
             path: expectedPath,
-            category: 'admin',
+            category: 'task',
             name: expectedName,
             confidence: 0.91,
             clarificationNeeded: false
@@ -551,14 +551,14 @@ describe('Chat Tools Integration', () => {
         'I need to start drafting the first version of the retail demo one pagers by Sunday evening'
       );
       expect(first.message.quickReplies).toEqual([
-        { id: 'capture_admin', label: 'Yes, task', message: 'Yes as an admin task' },
+        { id: 'capture_task', label: 'Yes, task', message: 'Yes as a task' },
         { id: 'capture_project', label: 'Yes, project', message: 'Yes as a project' },
         { id: 'capture_idea', label: 'Yes, idea', message: 'Yes as an idea' },
         { id: 'capture_no', label: 'No', message: 'No, do not save that' }
       ]);
       const second = await chatService.processMessageWithTools(
         first.conversationId,
-        'Yes as an admin task'
+        'Yes as a task'
       );
 
       expect(mockOpenAI.chat.completions.create).toHaveBeenCalledTimes(1);
@@ -568,7 +568,7 @@ describe('Chat Tools Integration', () => {
           name: 'classify_and_capture',
           arguments: expect.objectContaining({
             text: 'I need to start drafting the first version of the retail demo one pagers by Sunday evening',
-            hints: expect.stringContaining('admin')
+            hints: expect.stringContaining('task')
           })
         },
         expect.objectContaining({
@@ -643,7 +643,7 @@ describe('Chat Tools Integration', () => {
       const firstTurnAssistant =
         'It sounds like a task. Would you like me to capture that as a task for you?';
       const secondTurnAssistant = 'I can save it as a task, project, or idea.';
-      const expectedPath = 'admin/retail-demo-one-pagers';
+      const expectedPath = 'task/retail-demo-one-pagers';
       const expectedName = 'Draft retail demo one-pagers';
 
       const mockOpenAI = {
@@ -680,7 +680,7 @@ describe('Chat Tools Integration', () => {
           success: true,
           data: {
             path: expectedPath,
-            category: 'admin',
+            category: 'task',
             name: expectedName,
             confidence: 0.91,
             clarificationNeeded: false
@@ -718,7 +718,7 @@ describe('Chat Tools Integration', () => {
       );
       const third = await chatService.processMessageWithTools(
         second.conversationId,
-        'Yes as an admin task'
+        'Yes as a task'
       );
 
       expect(mockOpenAI.chat.completions.create).toHaveBeenCalledTimes(2);
@@ -728,7 +728,7 @@ describe('Chat Tools Integration', () => {
           name: 'classify_and_capture',
           arguments: expect.objectContaining({
             text: 'I need to start drafting the first version of the retail demo one pagers by Sunday evening',
-            hints: expect.stringContaining('admin')
+            hints: expect.stringContaining('task')
           })
         },
         expect.objectContaining({
@@ -741,8 +741,8 @@ describe('Chat Tools Integration', () => {
 
     it('should execute reopen on follow-up confirmation after fallback prompt', async () => {
       const updateResult = {
-        path: 'admin/finish-q4-2025-tax-report',
-        category: 'admin' as const,
+        path: 'task/finish-q4-2025-tax-report',
+        category: 'task' as const,
         name: 'Finish Q4 2025 Tax Report',
         updated_fields: ['status'],
         confidence: 0.95,
@@ -752,7 +752,7 @@ describe('Chat Tools Integration', () => {
         },
         receipt: {
           tool: 'update_entry' as const,
-          target: { path: 'admin/finish-q4-2025-tax-report' },
+          target: { path: 'task/finish-q4-2025-tax-report' },
           requested: { updates: { status: 'pending' } },
           applied: { updates: { status: 'pending' } },
           verification: { checked: ['status'], mismatches: [] },
@@ -776,7 +776,7 @@ describe('Chat Tools Integration', () => {
                       function: {
                         name: 'update_entry',
                         arguments: JSON.stringify({
-                          path: 'admin/finish-q4-2025-tax-report',
+                          path: 'task/finish-q4-2025-tax-report',
                           updates: { status: 'pending' }
                         })
                       }
@@ -794,7 +794,7 @@ describe('Chat Tools Integration', () => {
           .fn()
           .mockResolvedValueOnce({
             success: false,
-            error: 'Entry not found: admin/finish-q4-2025-tax-report'
+            error: 'Entry not found: task/finish-q4-2025-tax-report'
           })
           .mockResolvedValueOnce({
             success: true,
@@ -806,9 +806,9 @@ describe('Chat Tools Integration', () => {
       mockEntryService.list.mockResolvedValue([
         {
           id: 'done-1',
-          path: 'admin/finish-q4-2025-tax-report',
+          path: 'task/finish-q4-2025-tax-report',
           name: 'Finish Q4 2025 Tax Report',
-          category: 'admin',
+          category: 'task',
           updated_at: new Date().toISOString(),
           status: 'done'
         }
@@ -846,7 +846,7 @@ describe('Chat Tools Integration', () => {
         {
           name: 'update_entry',
           arguments: {
-            path: 'admin/finish-q4-2025-tax-report',
+            path: 'task/finish-q4-2025-tax-report',
             updates: { status: 'pending' }
           }
         },
@@ -855,13 +855,13 @@ describe('Chat Tools Integration', () => {
         })
       );
       expect(second.message.content).toContain('back to pending');
-      expect(second.entry?.path).toBe('admin/finish-q4-2025-tax-report');
+      expect(second.entry?.path).toBe('task/finish-q4-2025-tax-report');
     });
 
     it('should execute reopen when user selects numbered fallback option', async () => {
       const updateResult = {
-        path: 'admin/finish-q4-2025-tax-review',
-        category: 'admin' as const,
+        path: 'task/finish-q4-2025-tax-review',
+        category: 'task' as const,
         name: 'Finish Q4 2025 Tax Review',
         updated_fields: ['status'],
         confidence: 0.95,
@@ -871,7 +871,7 @@ describe('Chat Tools Integration', () => {
         },
         receipt: {
           tool: 'update_entry' as const,
-          target: { path: 'admin/finish-q4-2025-tax-review' },
+          target: { path: 'task/finish-q4-2025-tax-review' },
           requested: { updates: { status: 'pending' } },
           applied: { updates: { status: 'pending' } },
           verification: { checked: ['status'], mismatches: [] },
@@ -895,7 +895,7 @@ describe('Chat Tools Integration', () => {
                       function: {
                         name: 'update_entry',
                         arguments: JSON.stringify({
-                          path: 'admin/finish-q4-2025-tax-report',
+                          path: 'task/finish-q4-2025-tax-report',
                           updates: { status: 'pending' }
                         })
                       }
@@ -913,7 +913,7 @@ describe('Chat Tools Integration', () => {
           .fn()
           .mockResolvedValueOnce({
             success: false,
-            error: 'Entry not found: admin/finish-q4-2025-tax-report'
+            error: 'Entry not found: task/finish-q4-2025-tax-report'
           })
           .mockResolvedValueOnce({
             success: true,
@@ -925,17 +925,17 @@ describe('Chat Tools Integration', () => {
       mockEntryService.list.mockResolvedValue([
         {
           id: 'done-1',
-          path: 'admin/finish-q4-2025-tax-report',
+          path: 'task/finish-q4-2025-tax-report',
           name: 'Finish Q4 2025 Tax Report',
-          category: 'admin',
+          category: 'task',
           updated_at: new Date().toISOString(),
           status: 'done'
         },
         {
           id: 'done-2',
-          path: 'admin/finish-q4-2025-tax-review',
+          path: 'task/finish-q4-2025-tax-review',
           name: 'Finish Q4 2025 Tax Review',
-          category: 'admin',
+          category: 'task',
           updated_at: new Date().toISOString(),
           status: 'done'
         }
@@ -969,12 +969,12 @@ describe('Chat Tools Integration', () => {
       );
 
       expect(first.message.content).toContain('multiple completed tasks');
-      expect(second.entry?.path).toBe('admin/finish-q4-2025-tax-review');
+      expect(second.entry?.path).toBe('task/finish-q4-2025-tax-review');
       expect(mockToolExecutor.execute).toHaveBeenLastCalledWith(
         {
           name: 'update_entry',
           arguments: {
-            path: 'admin/finish-q4-2025-tax-review',
+            path: 'task/finish-q4-2025-tax-review',
             updates: { status: 'pending' }
           }
         },
@@ -1028,8 +1028,8 @@ describe('Chat Tools Integration', () => {
     it('should attach disambiguation quick replies for numbered options', async () => {
       const assistantPrompt = [
         'I found multiple entries that could match. Which one should I update?',
-        '1. Finish Q4 2025 Tax Report (admin/finish-q4-2025-tax-report)',
-        '2. Finish Q4 2025 Tax Review (admin/finish-q4-2025-tax-review)'
+        '1. Finish Q4 2025 Tax Report (task/finish-q4-2025-tax-report)',
+        '2. Finish Q4 2025 Tax Review (task/finish-q4-2025-tax-review)'
       ].join('\n');
 
       const mockOpenAI = {
@@ -1361,7 +1361,7 @@ describe('Chat Tools Integration', () => {
 
     it('should offer to reopen a completed admin task when update_entry fails', async () => {
       const toolCallId = 'call_update_error_123';
-      const errorMessage = 'Entry not found: admin/finish-q4-2025-tax-report';
+      const errorMessage = 'Entry not found: task/finish-q4-2025-tax-report';
 
       let openAICallCount = 0;
       const mockOpenAI = {
@@ -1382,7 +1382,7 @@ describe('Chat Tools Integration', () => {
                         function: {
                           name: 'update_entry',
                           arguments: JSON.stringify({
-                            path: 'admin/finish-q4-2025-tax-report',
+                            path: 'task/finish-q4-2025-tax-report',
                             updates: { status: 'pending' }
                           })
                         }
@@ -1418,9 +1418,9 @@ describe('Chat Tools Integration', () => {
       mockEntryService.list.mockResolvedValue([
         {
           id: 'done-1',
-          path: 'admin/finish-q4-2025-tax-report',
+          path: 'task/finish-q4-2025-tax-report',
           name: 'Finish Q4 2025 Tax Report',
-          category: 'admin',
+          category: 'task',
           updated_at: new Date().toISOString(),
           status: 'done'
         }
@@ -1443,7 +1443,7 @@ describe('Chat Tools Integration', () => {
       );
 
       expect(mockToolExecutor.execute).toHaveBeenCalledTimes(1);
-      expect(mockEntryService.list).toHaveBeenCalledWith('admin', { status: 'done' });
+      expect(mockEntryService.list).toHaveBeenCalledWith('task', { status: 'done' });
       expect(openAICallCount).toBe(1);
       expect(response.message.content).toContain('Finish Q4 2025 Tax Report');
       expect(response.message.content.toLowerCase()).toContain('set it back to pending');

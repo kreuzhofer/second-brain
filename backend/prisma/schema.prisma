@@ -19,6 +19,7 @@ enum EntryCategory {
   people
   projects
   ideas
+  task
   admin
   inbox
 }

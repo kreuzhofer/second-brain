@@ -23,7 +23,7 @@ Given a raw thought, classify it into one of these categories:
 - people: Information about a specific person (contact, relationship, follow-ups)
 - projects: Something with multiple steps, a goal, and a timeline
 - ideas: A concept, insight, or potential future thing (no active commitment yet)
-- admin: A single task/errand with a due date
+- task: A single task/errand with an optional due date
 
 Extract structured fields based on the category. Return JSON only.`;
 

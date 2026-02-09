@@ -4,7 +4,7 @@ import { Category } from '../types/entry.types';
 
 export const searchRouter = Router();
 
-const VALID_CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'admin', 'inbox'];
+const VALID_CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'task', 'admin', 'inbox'];
 
 /**
  * GET /api/search

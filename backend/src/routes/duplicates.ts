@@ -5,7 +5,7 @@ import { EntryNotFoundError } from '../services/entry.service';
 
 export const duplicatesRouter = Router();
 
-const VALID_CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'admin', 'inbox'];
+const VALID_CATEGORIES: Category[] = ['people', 'projects', 'ideas', 'task', 'admin', 'inbox'];
 
 /**
  * GET /api/duplicates?path=projects/foo
