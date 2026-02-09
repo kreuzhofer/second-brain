@@ -834,20 +834,30 @@ export class ToolExecutor {
     // 2. Link related people for admin tasks when provided in updates
     if (this.entryLinkService) {
       const relatedPeople = (updates as any).related_people ?? (updates as any).relatedPeople;
-      const inferred = this.inferRelatedPeopleFromUpdate(
-        updatedEntry,
-        relatedPeople,
-        bodyUpdate,
-        context,
-        intentAnalysis?.relatedPeople
-      );
-      if (inferred.length > 0) {
-        await this.entryLinkService.linkPeopleForEntry(updatedEntry, inferred, channel);
+      if (updatedEntry.category === 'admin' || updatedEntry.category === 'projects') {
+        const inferred = this.inferRelatedPeopleFromUpdate(
+          updatedEntry,
+          relatedPeople,
+          bodyUpdate,
+          context,
+          intentAnalysis?.relatedPeople,
+          intentAnalysis?.title
+        );
+        if (inferred.length > 0) {
+          await this.entryLinkService.linkPeopleForEntry(updatedEntry, inferred, channel);
+        }
       }
 
-      const projectRefs = this.inferRelatedProjectsFromUpdate(updates, intentAnalysis);
-      if (projectRefs.length > 0) {
-        await this.entryLinkService.linkProjectsForEntry(updatedEntry, projectRefs);
+      if (updatedEntry.category === 'admin') {
+        const projectRefs = this.inferRelatedProjectsFromUpdate(updates, intentAnalysis);
+        if (projectRefs.length > 0) {
+          await this.entryLinkService.linkProjectsForEntry(
+            updatedEntry,
+            projectRefs,
+            channel,
+            { createMissing: true }
+          );
+        }
       }
     }
 
@@ -1324,15 +1334,20 @@ export class ToolExecutor {
     relatedPeople: unknown,
     bodyUpdate: BodyContentUpdate | undefined,
     context?: ContextWindow,
-    intentPeople?: string[]
+    intentPeople?: string[],
+    intentTitle?: string
   ): string[] {
     if (Array.isArray(relatedPeople) && relatedPeople.length > 0) {
-      return relatedPeople;
+      return relatedPeople
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => this.sanitizePersonCandidate(value))
+        .filter((value): value is string => Boolean(value));
     }
 
     const textCandidates: string[] = [];
     const entryName = (updatedEntry.entry as { name?: string })?.name;
     if (entryName) textCandidates.push(entryName);
+    if (intentTitle) textCandidates.push(intentTitle);
     if (bodyUpdate?.content) textCandidates.push(bodyUpdate.content);
 
     const lastUserMessage = context?.recentMessages
@@ -1346,11 +1361,17 @@ export class ToolExecutor {
     const extracted = new Set<string>();
     for (const person of intentPeople || []) {
       if (typeof person === 'string' && person.trim()) {
-        extracted.add(person.trim());
+        const sanitized = this.sanitizePersonCandidate(person);
+        if (sanitized) {
+          extracted.add(sanitized);
+        }
       }
     }
     for (const text of textCandidates) {
       for (const name of this.extractPersonNames(text)) {
+        extracted.add(name);
+      }
+      for (const name of this.extractPersonNamesFromTitle(text)) {
         extracted.add(name);
       }
     }
@@ -1698,6 +1719,92 @@ export class ToolExecutor {
     }
 
     return results;
+  }
+
+  private extractPersonNamesFromTitle(text: string): string[] {
+    const results: string[] = [];
+    const matches = text.matchAll(
+      /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\s+(?:payment|task|todo|work|follow-up|followup|meeting|sync|review|draft|write|plan)\b/g
+    );
+    for (const match of matches) {
+      const candidate = match[1];
+      if (!candidate) continue;
+      const sanitized = this.sanitizePersonCandidate(candidate);
+      if (sanitized) {
+        results.push(sanitized);
+      }
+    }
+    return Array.from(new Set(results));
+  }
+
+  private sanitizePersonCandidate(value: string): string | null {
+    const words = value
+      .replace(/['"`.,:;!?()[\]{}]/g, ' ')
+      .split(/\s+/)
+      .map((word) => word.trim())
+      .filter(Boolean);
+
+    if (words.length === 0 || words.length > 3) {
+      return null;
+    }
+
+    const stopwords = new Set([
+      'the',
+      'a',
+      'an',
+      'about',
+      'regarding',
+      're',
+      'with',
+      'task',
+      'project',
+      'item',
+      'note',
+      'my',
+      'his',
+      'her',
+      'their',
+      'your',
+      'our',
+      'apology',
+      'apologies',
+      'sorry',
+      'delay',
+      'delays',
+      'for',
+      'call',
+      'email',
+      'text',
+      'ping',
+      'meet',
+      'meeting',
+      'talk',
+      'chat',
+      'follow',
+      'schedule',
+      'remind',
+      'pay'
+    ]);
+
+    if (words.some((word) => stopwords.has(word.toLowerCase()))) {
+      return null;
+    }
+
+    const hasCapitalized = words.some((word) => /^(?:[A-Z][a-z].*|[A-Z]{2,})$/.test(word));
+    if (!hasCapitalized) {
+      return null;
+    }
+
+    const normalized = words
+      .map((word) => {
+        if (word.length <= 3 && word.toUpperCase() === word) {
+          return word;
+        }
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      })
+      .join(' ');
+
+    return normalized.length > 1 ? normalized : null;
   }
 
   /**

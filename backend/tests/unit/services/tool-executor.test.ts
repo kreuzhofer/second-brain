@@ -1090,6 +1090,240 @@ describe('ToolExecutor', () => {
       );
     });
 
+    it('should ignore invalid intent people phrases and avoid false-positive person links', async () => {
+      const mockUpdatedEntry: EntryWithPath = {
+        path: 'admin/pay-the-editor',
+        category: 'admin',
+        entry: {
+          id: 'updated-id-invalid-people',
+          name: 'Pay the editor',
+          tags: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          source_channel: 'api',
+          confidence: 0.9,
+          status: 'pending'
+        },
+        content: ''
+      };
+      mockEntryService.update.mockResolvedValue(mockUpdatedEntry);
+
+      const mockEntryLinkService = {
+        linkPeopleForEntry: jest.fn().mockResolvedValue(undefined),
+        linkProjectsForEntry: jest.fn().mockResolvedValue(undefined)
+      } as any;
+      const mockIntentService = {
+        analyzeUpdateIntent: jest.fn().mockResolvedValue({
+          title: 'Pay the editor',
+          note: 'Write an email with apologies for delays.',
+          relatedPeople: ['Apologies for delays'],
+          relatedProjects: [],
+          statusChangeRequested: false,
+          confidence: 0.82
+        })
+      } as any;
+
+      toolExecutor = new ToolExecutor(
+        mockToolRegistry,
+        mockEntryService,
+        mockClassificationAgent,
+        mockDigestService,
+        mockSearchService,
+        mockIndexService,
+        mockActionExtractionService,
+        mockDuplicateService,
+        mockOfflineQueueService,
+        mockEntryLinkService,
+        mockIntentService
+      );
+
+      const result = await toolExecutor.execute(
+        {
+          name: 'update_entry',
+          arguments: { path: mockUpdatedEntry.path, updates: {} }
+        },
+        {
+          channel: 'chat',
+          context: {
+            systemPrompt: 'Test system prompt',
+            indexContent: '# Index\n\nTest index content',
+            summaries: [],
+            recentMessages: [
+              {
+                id: 'msg-invalid-people',
+                conversationId: 'conv-1',
+                role: 'user' as const,
+                content: 'Add a note that I should write an email with apologies for delays.',
+                createdAt: new Date()
+              }
+            ]
+          }
+        }
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockEntryLinkService.linkPeopleForEntry).not.toHaveBeenCalled();
+    });
+
+    it('should infer people from structured title edits even without verb patterns', async () => {
+      const mockUpdatedEntry: EntryWithPath = {
+        path: 'admin/video-edit-payment',
+        category: 'admin',
+        entry: {
+          id: 'updated-id-structured-title',
+          name: 'Chris Haidu payment',
+          tags: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          source_channel: 'api',
+          confidence: 0.9,
+          status: 'pending'
+        },
+        content: ''
+      };
+      mockEntryService.update.mockResolvedValue(mockUpdatedEntry);
+
+      const mockEntryLinkService = {
+        linkPeopleForEntry: jest.fn().mockResolvedValue(undefined),
+        linkProjectsForEntry: jest.fn().mockResolvedValue(undefined)
+      } as any;
+      const mockIntentService = {
+        analyzeUpdateIntent: jest.fn().mockResolvedValue({
+          title: 'Chris Haidu payment',
+          note: undefined,
+          relatedPeople: [],
+          relatedProjects: [],
+          statusChangeRequested: false,
+          confidence: 0.9
+        })
+      } as any;
+
+      toolExecutor = new ToolExecutor(
+        mockToolRegistry,
+        mockEntryService,
+        mockClassificationAgent,
+        mockDigestService,
+        mockSearchService,
+        mockIndexService,
+        mockActionExtractionService,
+        mockDuplicateService,
+        mockOfflineQueueService,
+        mockEntryLinkService,
+        mockIntentService
+      );
+
+      const result = await toolExecutor.execute(
+        {
+          name: 'update_entry',
+          arguments: { path: mockUpdatedEntry.path, updates: {} }
+        },
+        {
+          channel: 'chat',
+          context: {
+            systemPrompt: 'Test system prompt',
+            indexContent: '# Index\n\nTest index content',
+            summaries: [],
+            recentMessages: [
+              {
+                id: 'msg-structured-title',
+                conversationId: 'conv-1',
+                role: 'user' as const,
+                content: 'Rename this task to "Chris Haidu payment".',
+                createdAt: new Date()
+              }
+            ]
+          }
+        }
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockEntryLinkService.linkPeopleForEntry).toHaveBeenCalledWith(
+        mockUpdatedEntry,
+        ['Chris Haidu'],
+        'chat'
+      );
+    });
+
+    it('should write through project links from update intent with createMissing enabled', async () => {
+      const mockUpdatedEntry: EntryWithPath = {
+        path: 'admin/retail-demo-outline',
+        category: 'admin',
+        entry: {
+          id: 'updated-id-project-write-through',
+          name: 'Draft retail demo one pagers',
+          tags: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          source_channel: 'api',
+          confidence: 0.9,
+          status: 'pending'
+        },
+        content: ''
+      };
+      mockEntryService.update.mockResolvedValue(mockUpdatedEntry);
+
+      const mockEntryLinkService = {
+        linkPeopleForEntry: jest.fn().mockResolvedValue(undefined),
+        linkProjectsForEntry: jest.fn().mockResolvedValue(undefined)
+      } as any;
+      const mockIntentService = {
+        analyzeUpdateIntent: jest.fn().mockResolvedValue({
+          title: undefined,
+          note: 'This belongs to Retail Demo One Pagers.',
+          relatedPeople: [],
+          relatedProjects: ['Retail Demo One Pagers'],
+          statusChangeRequested: false,
+          confidence: 0.88
+        })
+      } as any;
+
+      toolExecutor = new ToolExecutor(
+        mockToolRegistry,
+        mockEntryService,
+        mockClassificationAgent,
+        mockDigestService,
+        mockSearchService,
+        mockIndexService,
+        mockActionExtractionService,
+        mockDuplicateService,
+        mockOfflineQueueService,
+        mockEntryLinkService,
+        mockIntentService
+      );
+
+      const result = await toolExecutor.execute(
+        {
+          name: 'update_entry',
+          arguments: { path: mockUpdatedEntry.path, updates: {} }
+        },
+        {
+          channel: 'chat',
+          context: {
+            systemPrompt: 'Test system prompt',
+            indexContent: '# Index\n\nTest index content',
+            summaries: [],
+            recentMessages: [
+              {
+                id: 'msg-project-write-through',
+                conversationId: 'conv-1',
+                role: 'user' as const,
+                content: 'Add a note that this task belongs to Retail Demo One Pagers project.',
+                createdAt: new Date()
+              }
+            ]
+          }
+        }
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockEntryLinkService.linkProjectsForEntry).toHaveBeenCalledWith(
+        mockUpdatedEntry,
+        ['Retail Demo One Pagers'],
+        'chat',
+        { createMissing: true }
+      );
+    });
+
     it('should route to inbox when confidence is low', async () => {
       // Mock classification result with low confidence (< 0.6)
       const mockClassificationResult: ClassificationResult = {

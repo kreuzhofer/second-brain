@@ -116,4 +116,77 @@ describe('EntryLinkService', () => {
       }
     }
   });
+
+  it('creates missing project entries when write-through is enabled and links them', async () => {
+    let adminEntryPath = '';
+    let projectEntryPath = '';
+
+    try {
+      const adminEntry = await entryService.create(
+        'admin',
+        {
+          name: 'Draft retail demo one pagers',
+          status: 'pending',
+          source_channel: 'chat',
+          confidence: 0.8
+        },
+        'chat'
+      );
+      adminEntryPath = adminEntry.path;
+
+      await linkService.linkProjectsForEntry(
+        adminEntry,
+        ['Retail Demo One Pagers'],
+        'chat',
+        { createMissing: true }
+      );
+
+      const projectEntry = await entryService.read('projects/retail-demo-one-pagers');
+      projectEntryPath = projectEntry.path;
+      const linksFromAdmin = await linkService.getLinksForPath(adminEntry.path);
+
+      expect(linksFromAdmin.outgoing).toContainEqual({
+        path: stripMd(projectEntry.path),
+        category: 'projects',
+        name: (projectEntry.entry as any).name
+      });
+    } finally {
+      if (projectEntryPath) {
+        await entryService.delete(projectEntryPath, 'chat');
+      }
+      if (adminEntryPath) {
+        await entryService.delete(adminEntryPath, 'chat');
+      }
+    }
+  });
+
+  it('ignores invalid people phrases and does not create/link them', async () => {
+    let adminEntryPath = '';
+
+    try {
+      const adminEntry = await entryService.create(
+        'admin',
+        {
+          name: 'Follow up with editor',
+          status: 'pending',
+          source_channel: 'chat',
+          confidence: 0.8
+        },
+        'chat'
+      );
+      adminEntryPath = adminEntry.path;
+
+      await linkService.linkPeopleForEntry(adminEntry, ['Apologies for delays'], 'chat');
+
+      const linksFromAdmin = await linkService.getLinksForPath(adminEntry.path);
+      const people = await entryService.list('people');
+
+      expect(linksFromAdmin.outgoing).toEqual([]);
+      expect(people).toEqual([]);
+    } finally {
+      if (adminEntryPath) {
+        await entryService.delete(adminEntryPath, 'chat');
+      }
+    }
+  });
 });

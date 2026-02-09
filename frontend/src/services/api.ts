@@ -35,10 +35,20 @@ export interface EntryGraphEdge {
   type: 'mention';
 }
 
+export interface EntryGraphConnection {
+  direction: 'incoming' | 'outgoing';
+  via: 'mention';
+  reason: string;
+  source: EntryLinkSummary;
+  target: EntryLinkSummary;
+  createdAt?: string;
+}
+
 export interface EntryGraphResponse {
   center: EntryLinkSummary;
   nodes: EntryLinkSummary[];
   edges: EntryGraphEdge[];
+  connections?: EntryGraphConnection[];
 }
 
 export interface EntrySummary {

@@ -3,6 +3,7 @@ import {
   Category,
   Channel,
   EntryWithPath,
+  EntryGraphConnection,
   EntryGraphEdge,
   EntryGraphResponse,
   EntryLinkSummary
@@ -47,6 +48,138 @@ function normalizePeopleNames(names: string[]): string[] {
   return Array.from(new Set(trimmed));
 }
 
+const PERSON_STOPWORDS = new Set([
+  'the',
+  'a',
+  'an',
+  'about',
+  'regarding',
+  're',
+  'with',
+  'task',
+  'project',
+  'item',
+  'note',
+  'my',
+  'his',
+  'her',
+  'their',
+  'your',
+  'our',
+  'apology',
+  'apologies',
+  'sorry',
+  'delay',
+  'delays',
+  'for'
+]);
+
+const PROJECT_STOPWORDS = new Set([
+  'project',
+  'projects',
+  'task',
+  'tasks',
+  'idea',
+  'ideas',
+  'admin',
+  'inbox',
+  'entry',
+  'note',
+  'notes'
+]);
+
+interface ProjectLinkOptions {
+  createMissing?: boolean;
+}
+
+function uniqueNormalized(values: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+function toTitleCase(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      if (word.length <= 3 && word.toUpperCase() === word) {
+        return word;
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
+function sanitizePersonCandidate(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const pathMatch = trimmed.match(/^people\/([a-z0-9-]+)(?:\.md)?$/i);
+  if (pathMatch?.[1]) {
+    const words = pathMatch[1]
+      .split('-')
+      .map((word) => word.trim())
+      .filter(Boolean);
+    if (words.length === 0 || words.length > 3) return null;
+    const candidate = toTitleCase(words.join(' '));
+    return candidate.length > 1 ? candidate : null;
+  }
+
+  const words = trimmed
+    .replace(/['"`.,:;!?()[\]{}]/g, ' ')
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+
+  if (words.length === 0 || words.length > 3) return null;
+  if (words.some((word) => PERSON_STOPWORDS.has(word.toLowerCase()))) return null;
+
+  const hasCapitalized = words.some((word) => /^(?:[A-Z][a-z].*|[A-Z]{2,})$/.test(word));
+  if (!hasCapitalized) return null;
+
+  const normalized = words.map((word) => {
+    if (word.length <= 3 && word.toUpperCase() === word) return word;
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  }).join(' ');
+
+  return normalized.length > 1 ? normalized : null;
+}
+
+function sanitizeProjectCandidate(raw: string): string | null {
+  const trimmed = raw.trim().replace(/^["“]|["”]$/g, '');
+  if (!trimmed) return null;
+
+  const pathMatch = trimmed.match(/^projects\/([a-z0-9-]+)(?:\.md)?$/i);
+  if (pathMatch?.[1]) {
+    return toTitleCase(pathMatch[1].replace(/-/g, ' '));
+  }
+
+  const words = trimmed
+    .replace(/['"`.,:;!?()[\]{}]/g, ' ')
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+  if (words.length === 0) return null;
+
+  if (words.length === 1 && PROJECT_STOPWORDS.has(words[0].toLowerCase())) {
+    return null;
+  }
+  if (words.every((word) => PROJECT_STOPWORDS.has(word.toLowerCase()))) {
+    return null;
+  }
+
+  const normalized = toTitleCase(words.join(' '));
+  if (normalized.length < 3 || normalized.length > 120) return null;
+  return normalized;
+}
+
 export class EntryLinkService {
   private prisma = getPrismaClient();
   private entryService: EntryService;
@@ -61,7 +194,11 @@ export class EntryLinkService {
     channel: Channel = 'api'
   ): Promise<void> {
     const userId = requireUserId();
-    const uniqueNames = normalizePeopleNames(peopleNames);
+    const uniqueNames = uniqueNormalized(
+      normalizePeopleNames(peopleNames)
+        .map((name) => sanitizePersonCandidate(name))
+        .filter((name): name is string => Boolean(name))
+    );
     if (uniqueNames.length === 0) return;
 
     const sourceEntryId = (entry.entry as { id?: string }).id;
@@ -118,9 +255,18 @@ export class EntryLinkService {
     });
   }
 
-  async linkProjectsForEntry(entry: EntryWithPath, projectNamesOrSlugs: string[]): Promise<void> {
+  async linkProjectsForEntry(
+    entry: EntryWithPath,
+    projectNamesOrSlugs: string[],
+    channel: Channel = 'api',
+    options?: ProjectLinkOptions
+  ): Promise<void> {
     const userId = requireUserId();
-    const unique = normalizePeopleNames(projectNamesOrSlugs);
+    const unique = uniqueNormalized(
+      normalizePeopleNames(projectNamesOrSlugs)
+        .map((name) => sanitizeProjectCandidate(name))
+        .filter((name): name is string => Boolean(name))
+    );
     if (unique.length === 0) return;
 
     const sourceEntryId = (entry.entry as { id?: string }).id;
@@ -140,6 +286,26 @@ export class EntryLinkService {
       });
       if (existing) {
         targetEntryIds.push(existing.id);
+        continue;
+      }
+
+      if (options?.createMissing) {
+        const created = await this.entryService.create(
+          'projects',
+          {
+            name: ref,
+            status: 'someday',
+            next_action: '',
+            related_people: [],
+            source_channel: channel,
+            confidence: (entry.entry as any).confidence ?? 0.5
+          },
+          channel
+        );
+        const createdId = (created.entry as { id?: string }).id;
+        if (createdId) {
+          targetEntryIds.push(createdId);
+        }
       }
     }
 
@@ -216,6 +382,7 @@ export class EntryLinkService {
     const center = toEntrySummary(entry.category, entry.slug, entry.title);
     const nodesByPath = new Map<string, EntryLinkSummary>([[center.path, center]]);
     const edges: EntryGraphEdge[] = [];
+    const connections: EntryGraphConnection[] = [];
 
     for (const link of outgoingLinks) {
       const target = toEntrySummary(link.targetEntry.category, link.targetEntry.slug, link.targetEntry.title);
@@ -224,6 +391,14 @@ export class EntryLinkService {
         source: center.path,
         target: target.path,
         type: 'mention'
+      });
+      connections.push({
+        direction: 'outgoing',
+        via: 'mention',
+        reason: 'mentioned by this entry',
+        source: center,
+        target,
+        createdAt: link.createdAt.toISOString()
       });
     }
 
@@ -235,12 +410,21 @@ export class EntryLinkService {
         target: center.path,
         type: 'mention'
       });
+      connections.push({
+        direction: 'incoming',
+        via: 'mention',
+        reason: 'mentions this entry',
+        source,
+        target: center,
+        createdAt: link.createdAt.toISOString()
+      });
     }
 
     return {
       center,
       nodes: Array.from(nodesByPath.values()),
-      edges
+      edges,
+      connections
     };
   }
 }

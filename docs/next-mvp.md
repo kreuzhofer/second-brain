@@ -63,6 +63,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - People Linking (Admin Tasks): Improved (verb + name filters, reduced false positives)
 - Link Paths (no `.md`): Completed
 - Conversational disambiguation UX + execution memory: Completed (phase 1)
+- Entity Graph + Backlinks phase 2: In progress (backend reliability slice completed)
 
 ## Notes
 - Prioritize backend-first slices where possible.
@@ -146,3 +147,5 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - 2026-02-07: Verification: backend test suite passing (`73/73` suites, `873` tests). Core real-API mutation scenario stable; extended ambiguity-heavy scenario remains model-sensitive and is tracked for next iteration.
 - 2026-02-08: Started conversational disambiguation + execution memory implementation in `ChatService`: multi-turn pending capture confirmation, deterministic reopen confirmation handling, and numbered reopen option execution from follow-up replies.
 - 2026-02-08: Verification complete for phase 1: targeted integration tests for chat follow-up memory pass and full backend suite passes (`73/73` suites, `876` tests).
+- 2026-02-09: Entity Graph + Backlinks phase 2 backend slice completed: stronger update-time people/project inference, sanitization against false-positive person phrases, project write-through linking with `createMissing`, and graph connection metadata in API types.
+- 2026-02-09: Verification: full workspace test run passing (`frontend 3/3`, `backend 73/73`, `881` backend tests).
