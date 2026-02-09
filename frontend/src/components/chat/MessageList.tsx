@@ -41,7 +41,7 @@ export function MessageList({ messages, onEntryClick, onQuickReply, isLoading }:
   }
 
   return (
-    <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div ref={listRef} className="flex-1 overflow-y-auto p-3 sm:p-3.5 space-y-3">
       {messages.map((message) => (
         <Message 
           key={message.id} 

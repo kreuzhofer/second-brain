@@ -98,7 +98,7 @@ export function SearchPanel({ onEntryClick, variant = 'panel' }: SearchPanelProp
         />
       </div>
       <select
-        className="h-11 rounded-md border border-input bg-background px-3 text-base sm:h-9 sm:text-sm"
+        className="h-11 rounded-md border border-input bg-background px-3 text-base sm:h-9"
         value={category}
         onChange={(event) => setCategory(event.target.value as Category | 'all')}
       >

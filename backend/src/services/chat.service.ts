@@ -283,6 +283,12 @@ export class ChatService {
             captureResponseOverride = this.buildRelationshipCaptureResponse(captureResult.relatedPeople);
           }
         }
+        if (toolName === 'classify_and_capture' && !result.success && result.error) {
+          const duplicateCaptureResponse = this.buildDuplicateCaptureResponse(result.error);
+          if (duplicateCaptureResponse) {
+            captureResponseOverride = duplicateCaptureResponse;
+          }
+        }
 
         toolResults.push({
           role: 'tool',
@@ -949,6 +955,21 @@ export class ChatService {
       ? `${unique[0]} and ${unique[1]}`
       : `${unique.slice(0, -1).join(', ')}, and ${unique[unique.length - 1]}`;
     return `Done. I captured that ${text} have a relationship, created or reused both people entries, and linked them in the graph.`;
+  }
+
+  private buildDuplicateCaptureResponse(error: string): string | null {
+    if (!/already exists/i.test(error)) {
+      return null;
+    }
+
+    const pathMatch = error.match(/([a-z]+\/[a-z0-9-]+)/i);
+    const path = pathMatch?.[1];
+
+    if (path) {
+      return `You already have this entry at ${path}. I did not create a duplicate. Want me to update the existing entry instead?`;
+    }
+
+    return 'This entry already exists. I did not create a duplicate. Want me to update the existing entry instead?';
   }
 
   private buildQuickReplies(content: string): QuickReplyOption[] | undefined {

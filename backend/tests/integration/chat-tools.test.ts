@@ -299,6 +299,67 @@ describe('Chat Tools Integration', () => {
       expect(response.entry?.path).toBe('people/chris');
       expect(response.toolsUsed).toContain('classify_and_capture');
     });
+
+    it('should use deterministic duplicate-capture response and skip second LLM response', async () => {
+      const toolCallId = 'call_capture_duplicate';
+      const mockOpenAI = {
+        chat: {
+          completions: {
+            create: jest.fn().mockResolvedValue({
+              choices: [{
+                message: {
+                  role: 'assistant',
+                  content: null,
+                  tool_calls: [{
+                    id: toolCallId,
+                    type: 'function',
+                    function: {
+                      name: 'classify_and_capture',
+                      arguments: JSON.stringify({ text: 'I have to finish the q4 Tax Report by tomorrow eod' })
+                    }
+                  }]
+                },
+                finish_reason: 'tool_calls'
+              }]
+            })
+          }
+        }
+      } as unknown as OpenAI;
+
+      const mockToolExecutor = {
+        execute: jest.fn().mockResolvedValue({
+          success: false,
+          error: 'Entry already exists: admin/finish-q4-tax-report'
+        })
+      } as unknown as ToolExecutor;
+
+      const chatService = new ChatService(
+        conversationService,
+        createMockContextAssembler(),
+        createMockClassificationAgent() as any,
+        createMockSummarizationService(),
+        createMockEntryService() as any,
+        getToolRegistry(),
+        mockToolExecutor,
+        mockOpenAI
+      );
+
+      const response = await chatService.processMessageWithTools(
+        null,
+        'I have to finish the q4 Tax Report by tomorrow eod'
+      );
+
+      expect(mockOpenAI.chat.completions.create).toHaveBeenCalledTimes(1);
+      expect(response.toolsUsed).toContain('classify_and_capture');
+      expect(response.message.content).toContain('admin/finish-q4-tax-report');
+      expect(response.message.content.toLowerCase()).toContain('did not create a duplicate');
+      expect(response.message.content.toLowerCase()).not.toContain("can't capture");
+      expect(response.message.quickReplies).toEqual([
+        { id: 'confirm_yes', label: 'Yes', message: 'Yes' },
+        { id: 'confirm_no', label: 'No', message: 'No' }
+      ]);
+      expect(response.entry).toBeUndefined();
+    });
   });
 
   // ============================================

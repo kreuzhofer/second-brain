@@ -95,8 +95,8 @@ export function ChatUI({ onEntryClick, className }: ChatUIProps) {
   }, []);
 
   return (
-    <Card className={cn('flex flex-col h-full min-h-[360px] sm:min-h-[520px]', className)}>
-      <CardHeader className="flex-shrink-0 border-b p-4 sm:p-6">
+    <Card className={cn('flex flex-col h-full min-h-0', className)}>
+      <CardHeader className="flex-shrink-0 border-b p-2.5 sm:p-3.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5" />

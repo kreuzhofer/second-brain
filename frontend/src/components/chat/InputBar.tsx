@@ -41,7 +41,7 @@ export function InputBar({ onSend, disabled }: InputBarProps) {
   };
 
   return (
-    <div className="flex-shrink-0 border-t p-3 sm:p-4">
+    <div className="flex-shrink-0 border-t p-2.5 sm:p-3">
       <div className="flex gap-2">
         <Input
           ref={inputRef}

@@ -64,6 +64,8 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Link Paths (no `.md`): Completed
 - Conversational disambiguation UX + execution memory: Completed (phase 1)
 - Entity Graph + Backlinks phase 2: In progress (backend reliability slice completed)
+- Adaptive mobile + desktop space optimization: Completed (phase 1 shell + panel compaction)
+- Duplicate capture failure UX (deterministic existing-entry response): Completed
 
 ## Notes
 - Prioritize backend-first slices where possible.
@@ -151,3 +153,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - 2026-02-09: Verification: full workspace test run passing (`frontend 3/3`, `backend 73/73`, `881` backend tests).
 - 2026-02-09: Added relationship capture for people statements (e.g. `Chris and Amie have a relationship`): creates/reuses separate person entries and writes typed `relationship` links instead of creating synthetic combined-person entries.
 - 2026-02-09: Added `relationship` to graph edge/connection types and updated graph rendering payloads to preserve link type semantics.
+- 2026-02-09: Mobile/desktop layout compaction phase 1 completed: unified adaptive shell spacing tokens, tighter header/footer/main paddings, denser chat/focus panel spacing, and larger segmented right-rail tap targets.
+- 2026-02-09: Enforced minimum `text-base` (16px) for input and textarea controls to prevent mobile browser auto-zoom; kept minimum 44px touch-target sizing for primary mobile controls.
+- 2026-02-09: Added deterministic duplicate-capture handling in chat flow for `Entry already exists` errors from `classify_and_capture`, returning the existing entry path and update prompt instead of generic "can't capture" fallback text.
+- 2026-02-09: Verification complete: targeted integration tests for duplicate-capture response, full backend test suite (`73/73`, `885` tests), frontend tests (`4/4` files, `13` tests), and Docker rebuild/redeploy succeeded.

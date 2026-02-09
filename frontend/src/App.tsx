@@ -10,6 +10,7 @@ import { SearchPanel } from '@/components/SearchPanel';
 import { FocusPanel } from '@/components/FocusPanel';
 import { api, EntryWithPath } from '@/services/api';
 import { EntriesProvider } from '@/state/entries';
+import { APP_SHELL_CLASSES, getMobileNavButtonClass } from '@/components/layout-shell-helpers';
 
 function App() {
   const [authToken, setAuthToken] = useState<string>(() =>
@@ -104,19 +105,19 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen h-screen flex flex-col bg-background">
+    <div className={APP_SHELL_CLASSES.appRoot}>
       {/* Header */}
-      <header className="border-b">
-        <div className="w-full px-3 py-2 sm:px-4 sm:py-4">
-          <div className="flex items-center justify-between gap-2 sm:gap-3 flex-nowrap">
-            <div className="flex items-center gap-2 min-w-0 max-w-[60%] sm:max-w-none">
+      <header className={APP_SHELL_CLASSES.header}>
+        <div className={APP_SHELL_CLASSES.headerInner}>
+          <div className={APP_SHELL_CLASSES.headerRow}>
+            <div className={`${APP_SHELL_CLASSES.brandWrap} max-w-[60%] sm:max-w-none`}>
               <Brain className="h-6 w-6 sm:h-8 sm:w-8 text-primary shrink-0" />
-              <h1 className="text-base sm:text-2xl font-bold whitespace-nowrap truncate leading-none">
+              <h1 className={APP_SHELL_CLASSES.brandTitle}>
                 Second Brain
               </h1>
             </div>
             {isAuthenticated && (
-              <div className="flex items-center gap-2 w-full justify-end min-w-0">
+              <div className={APP_SHELL_CLASSES.headerSearchWrap}>
                 <div className="hidden lg:flex min-w-[360px] max-w-[520px] w-full justify-end">
                   <SearchPanel onEntryClick={handleEntryClick} variant="header" />
                 </div>
@@ -133,7 +134,7 @@ function App() {
             )}
           </div>
           {isAuthenticated && mobileSearchOpen && (
-            <div className="mt-2 lg:hidden">
+            <div className={APP_SHELL_CLASSES.mobileSearchPanelWrap}>
               <SearchPanel onEntryClick={handleEntryClick} variant="header" />
             </div>
           )}
@@ -141,7 +142,7 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="w-full px-2 py-3 sm:px-4 sm:py-6 flex-1 min-h-0 pb-[calc(64px+env(safe-area-inset-bottom))] lg:pb-6">
+      <main className={APP_SHELL_CLASSES.main}>
         {!isAuthenticated ? (
           <Card className="max-w-md mx-auto">
             <CardHeader>
@@ -221,12 +222,12 @@ function App() {
           </Card>
         ) : (
           <EntriesProvider enabled={isAuthenticated}>
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,3fr)] gap-3 sm:gap-6 h-full min-h-0">
+            <div className={APP_SHELL_CLASSES.contentGrid}>
               <div className="hidden lg:flex flex-col min-h-0">
                 <ChatUI onEntryClick={handleEntryClick} className="h-full" />
               </div>
 
-              <div className="hidden lg:flex flex-col gap-4 min-h-0 lg:overflow-y-auto">
+              <div className={APP_SHELL_CLASSES.desktopFocusColumn}>
                 <FocusPanel onEntryClick={handleEntryClick} />
               </div>
 
@@ -254,14 +255,12 @@ function App() {
       {/* Footer */}
       <footer className="border-t mt-auto">
         {isAuthenticated && (
-          <div className="fixed bottom-0 left-0 right-0 lg:hidden border-t bg-background/95 backdrop-blur">
-            <div className="flex items-center justify-around gap-2 px-2 pt-1 pb-[calc(6px+env(safe-area-inset-bottom))]">
+          <div className={APP_SHELL_CLASSES.bottomNav}>
+            <div className={APP_SHELL_CLASSES.bottomNavInner}>
               <button
                 type="button"
                 onClick={() => setMobilePanel('focus')}
-                className={`flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 text-xs ${
-                  mobilePanel === 'focus' ? 'text-foreground' : 'text-muted-foreground'
-                }`}
+                className={getMobileNavButtonClass(mobilePanel === 'focus')}
               >
                 <Target className="h-5 w-5" />
                 Focus
@@ -269,9 +268,7 @@ function App() {
               <button
                 type="button"
                 onClick={() => setMobilePanel('chat')}
-                className={`flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 text-xs ${
-                  mobilePanel === 'chat' ? 'text-foreground' : 'text-muted-foreground'
-                }`}
+                className={getMobileNavButtonClass(mobilePanel === 'chat')}
               >
                 <MessageSquare className="h-5 w-5" />
                 Chat

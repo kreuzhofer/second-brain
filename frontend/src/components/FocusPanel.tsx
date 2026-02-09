@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { api, Category, EntrySummary } from '@/services/api';
 import { useEntries } from '@/state/entries';
+import { getFocusRailButtonClass } from '@/components/layout-shell-helpers';
 import {
   RefreshCw,
   Circle,
@@ -240,9 +241,9 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   };
 
   return (
-    <Card className="flex">
+    <Card className="flex h-full">
       <div className="flex-1 min-w-0">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 p-2.5 sm:p-4">
           <div className="flex items-center gap-2">
             {activeTab === 'ideas' && <Lightbulb className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'people' && <User className="h-4 w-4 text-muted-foreground" />}
@@ -278,19 +279,19 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3 sm:space-y-4 p-3 sm:p-6 pt-0">
+        <CardContent className="space-y-2.5 sm:space-y-3 p-2.5 sm:p-4 pt-0">
         {activeTab === 'focus' && (
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-2 text-[11px] sm:text-xs text-muted-foreground">
-              <div className="rounded-md border border-border px-3 py-2">
+          <div className="space-y-2">
+            <div className="grid grid-cols-3 gap-2 text-[11px] sm:text-xs text-muted-foreground">
+              <div className="rounded-md border border-border px-2 py-1.5">
                 <div className="text-sm font-semibold text-foreground">{activeProjects}</div>
                 <div>Active projects</div>
               </div>
-              <div className="rounded-md border border-border px-3 py-2">
+              <div className="rounded-md border border-border px-2 py-1.5">
                 <div className="text-sm font-semibold text-foreground">{pendingAdmin}</div>
                 <div>Pending tasks</div>
               </div>
-              <div className="rounded-md border border-border px-3 py-2">
+              <div className="rounded-md border border-border px-2 py-1.5">
                 <div className="text-sm font-semibold text-foreground">{inboxCount}</div>
                 <div>Inbox items</div>
               </div>
@@ -313,7 +314,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 key={item.path}
                 type="button"
                 onClick={() => onEntryClick(item.path)}
-                className="w-full min-h-[44px] rounded-md border border-border p-2.5 sm:p-3 text-left hover:bg-accent transition-colors"
+                className="w-full min-h-[44px] rounded-md border border-border p-2 sm:p-2.5 text-left hover:bg-accent transition-colors"
               >
                 <div className="flex items-center gap-2">
                   {item.category === 'admin' ? (
@@ -399,7 +400,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
               </Button>
               <div className="flex gap-2 items-center">
                 <select
-                  className="h-11 rounded-md border border-input bg-background px-2 text-base sm:h-9 sm:text-sm"
+                  className="h-11 rounded-md border border-input bg-background px-2 text-base sm:h-9"
                   value={targetCategory}
                   onChange={(event) => setTargetCategory(event.target.value as Category)}
                 >
@@ -420,7 +421,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
 
             <div className="flex flex-col gap-2">
               <input
-                className="h-11 rounded-md border border-input bg-background px-3 text-base sm:h-9 sm:text-sm"
+                className="h-11 rounded-md border border-input bg-background px-3 text-base sm:h-9"
                 placeholder="Merge into entry path (e.g., projects/project-a)"
                 value={targetPath}
                 onChange={(event) => setTargetPath(event.target.value)}
@@ -481,8 +482,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
         )}
         </CardContent>
       </div>
-      <div className="sticky top-3 self-start mt-3 mr-2 lg:top-4 lg:mt-4 lg:mr-3 flex flex-col shrink-0 max-h-[calc(100vh-140px)]">
-        <div className="rounded-md border border-border overflow-hidden max-h-[calc(100vh-140px)] overflow-y-auto">
+      <div className="sticky top-2 self-start mt-2 mr-2 sm:top-3 sm:mt-3 sm:mr-3 flex flex-col shrink-0 max-h-[calc(100dvh-120px)]">
+        <div className="rounded-md border border-border overflow-hidden max-h-[calc(100dvh-120px)] overflow-y-auto bg-background">
           {([
             { key: 'focus', label: 'Focus' },
             { key: 'ideas', label: 'Ideas' },
@@ -494,9 +495,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
               key={tab.key}
               type="button"
               onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center justify-center min-h-[44px] w-9 sm:w-10 px-1 py-2 text-[10px] uppercase tracking-wider transition-colors ${
-                activeTab === tab.key ? 'bg-foreground text-background' : 'bg-background text-muted-foreground'
-              } ${index < all.length - 1 ? 'border-b border-border' : ''}`}
+              className={getFocusRailButtonClass(activeTab === tab.key, index === all.length - 1)}
               style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
             >
               {tab.label}
