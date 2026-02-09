@@ -225,6 +225,62 @@ Paths in responses omit the `.md` suffix.
 
 ---
 
+### Create Manual Entry Link
+
+Create an outgoing link from the current entry to another entry.
+
+```
+POST /api/entries/:path/links
+POST /api/entries/admin/call-lina-haidu/links
+```
+
+**Request Body**:
+```json
+{
+  "targetPath": "people/lina-haidu",
+  "type": "mention"
+}
+```
+
+`type` is optional and defaults to `mention`. Supported values: `mention`, `relationship`.
+
+**Response** (201 Created):
+```json
+{
+  "ok": true
+}
+```
+
+---
+
+### Remove Entry Link / Backlink
+
+Remove a link between two entries. Use `direction: outgoing` to remove `:path -> targetPath`, or `direction: incoming` to remove `targetPath -> :path`.
+
+```
+DELETE /api/entries/:path/links
+DELETE /api/entries/people/lina-haidu/links
+```
+
+**Request Body**:
+```json
+{
+  "targetPath": "admin/call-lina-haidu",
+  "direction": "incoming"
+}
+```
+
+`direction` is optional and defaults to `outgoing`.
+
+**Response** (200 OK):
+```json
+{
+  "removed": 1
+}
+```
+
+---
+
 ### Get Entry Graph
 
 Get lightweight graph data for an entry: center node, connected nodes, and directed edges.
@@ -244,6 +300,42 @@ GET /api/entries/admin/call-lina-haidu/graph
   ],
   "edges": [
     { "source": "admin/call-lina-haidu", "target": "people/lina-haidu", "type": "mention" }
+  ]
+}
+```
+
+---
+
+### Get Relationship Insights
+
+Return top people relationship summaries derived from existing graph links.
+
+```
+GET /api/insights/relationships
+GET /api/insights/relationships?limit=5
+```
+
+**Query Params**:
+- `limit` (optional): integer from `1` to `20` (default `5`)
+
+**Response** (200 OK):
+```json
+{
+  "insights": [
+    {
+      "person": { "path": "people/chris", "category": "people", "name": "Chris" },
+      "score": 6,
+      "relationshipCount": 1,
+      "projectCount": 1,
+      "mentionCount": 1,
+      "relatedPeople": [
+        { "path": "people/amie", "category": "people", "name": "Amie", "count": 1 }
+      ],
+      "relatedProjects": [
+        { "path": "projects/retail-demo-one-pagers", "category": "projects", "name": "Retail Demo One Pagers", "count": 1 }
+      ],
+      "lastInteractionAt": "2026-02-09T10:00:00.000Z"
+    }
   ]
 }
 ```
@@ -649,6 +741,70 @@ POST /api/entries/merge
   "content": "..."
 }
 ```
+
+---
+
+### Plan Week
+
+Build a focused week plan from pending admin tasks and active projects.
+
+```
+GET /api/calendar/plan-week
+GET /api/calendar/plan-week?startDate=2026-02-09&days=7
+```
+
+**Response** (200 OK):
+```json
+{
+  "startDate": "2026-02-09",
+  "endDate": "2026-02-15",
+  "totalMinutes": 225,
+  "items": [
+    {
+      "entryPath": "admin/draft-retail-demo-one-pager",
+      "category": "admin",
+      "title": "Draft retail demo one pager",
+      "sourceName": "Draft retail demo one pager",
+      "dueDate": "2026-02-12",
+      "start": "2026-02-09T09:00:00.000Z",
+      "end": "2026-02-09T09:45:00.000Z",
+      "durationMinutes": 45,
+      "reason": "Due on 2026-02-12"
+    }
+  ]
+}
+```
+
+---
+
+### Calendar Publish Links
+
+Generate read-only calendar subscription URLs (HTTPS + WebCal).
+
+```
+GET /api/calendar/publish
+```
+
+**Response** (200 OK):
+```json
+{
+  "httpsUrl": "https://your-host/api/calendar/feed.ics?token=...",
+  "webcalUrl": "webcal://your-host/api/calendar/feed.ics?token=...",
+  "expiresAt": "2026-08-08T18:40:00.000Z"
+}
+```
+
+---
+
+### Public ICS Feed
+
+Read-only calendar feed for external calendar apps.
+
+```
+GET /api/calendar/feed.ics?token=...
+```
+
+**Response** (200 OK): `text/calendar`
 
 ---
 

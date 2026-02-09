@@ -62,10 +62,12 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Notes Editing (Entry Modal): Completed
 - People Linking (Admin Tasks): Improved (verb + name filters, reduced false positives)
 - Link Paths (no `.md`): Completed
-- Conversational disambiguation UX + execution memory: Completed (phase 1)
-- Entity Graph + Backlinks phase 2: In progress (backend reliability slice completed)
-- Adaptive mobile + desktop space optimization: Completed (phase 1 shell + panel compaction)
+- Conversational disambiguation UX + execution memory: Completed (phase 2 baseline)
+- Entity Graph + Backlinks phase 2: Completed
+- Adaptive mobile + desktop space optimization: Completed (phase 2 shell + touch-first compaction)
 - Duplicate capture failure UX (deterministic existing-entry response): Completed
+- Calendar MVP phase 1: Completed (week planner + ICS/WebCal publish)
+- Relationship insights phase 1: Completed (top people/project summaries from graph links)
 
 ## Notes
 - Prioritize backend-first slices where possible.
@@ -78,9 +80,9 @@ This is the canonical roadmap document for current MVP progress and next-level f
 ## Next-Level Backlog (Unified)
 
 ### Priority Next
-- Conversational disambiguation UX + execution memory (next): keep pending intent across turns, show quick-reply chips for confirmations, and reduce "please confirm again" loops for multi-turn mutations.
-- Entity Graph + Backlinks phase 2: stronger entity extraction on updates and better auto-link consistency for people/projects created during edits.
-- Full mobile UI optimization phase 2: reduce remaining whitespace, improve segmented rails, and finish touch-first affordances.
+- Entity graph analytics phase 3: graph-level filters and richer link inspection views in modal/panel surfaces.
+- Calendar write-back phase 2: ingest updates from subscribed calendars and reflect delays/reschedules back to entries.
+- Relationship insights phase 2: add project-centric insights, trend windows, and actionable follow-up suggestions.
 
 ### Intelligence and Linking
 - Entity graph across people/projects/ideas with auto-links and backlink views. (In progress: lightweight graph API + modal graph view + cross-category people/project linking)
@@ -157,3 +159,8 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - 2026-02-09: Enforced minimum `text-base` (16px) for input and textarea controls to prevent mobile browser auto-zoom; kept minimum 44px touch-target sizing for primary mobile controls.
 - 2026-02-09: Added deterministic duplicate-capture handling in chat flow for `Entry already exists` errors from `classify_and_capture`, returning the existing entry path and update prompt instead of generic "can't capture" fallback text.
 - 2026-02-09: Verification complete: targeted integration tests for duplicate-capture response, full backend test suite (`73/73`, `885` tests), frontend tests (`4/4` files, `13` tests), and Docker rebuild/redeploy succeeded.
+- 2026-02-09: Confirmed conversational disambiguation + execution memory baseline is already implemented (pending-intent carry-over, follow-up confirmations, numbered-option selection, quick-reply chips) and removed it from `Priority Next`.
+- 2026-02-09: Re-audited roadmap vs implementation details: marked adaptive mobile optimization phase 2 as completed and narrowed Entity Graph phase 2 remaining scope to UI backlink/link-management workflows.
+- 2026-02-09: Completed Entity Graph + Backlinks phase 2 by adding manual link management APIs (`POST/DELETE /api/entries/:path/links`) and entry-modal UI workflows to add links and unlink outgoing/incoming backlinks with live graph refresh.
+- 2026-02-09: Completed Calendar MVP phase 1 by adding week planning (`GET /api/calendar/plan-week`), publish links (`GET /api/calendar/publish`), and tokenized read-only ICS feed (`GET /api/calendar/feed.ics?token=...`) with integration tests.
+- 2026-02-09: Completed Relationship Insights phase 1 with `GET /api/insights/relationships` and People-panel summaries (score, relationship/project/mention counts, top related people/projects).

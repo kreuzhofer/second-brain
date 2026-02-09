@@ -8,7 +8,7 @@ import {
   EntryGraphResponse,
   EntryLinkSummary
 } from '../types/entry.types';
-import { EntryNotFoundError, EntryService, generateSlug } from './entry.service';
+import { EntryNotFoundError, EntryService, InvalidEntryDataError, generateSlug } from './entry.service';
 import { requireUserId } from '../context/user-context';
 
 export interface EntryLinksResponse {
@@ -93,6 +93,8 @@ interface ProjectLinkOptions {
 }
 
 type RelationshipKind = 'relationship';
+export type EntryLinkDirection = 'outgoing' | 'incoming';
+export type EntryLinkKind = 'mention' | 'relationship';
 
 function uniqueNormalized(values: string[]): string[] {
   const out: string[] = [];
@@ -414,17 +416,64 @@ export class EntryLinkService {
     });
   }
 
+  async addManualLink(
+    sourcePath: string,
+    targetPath: string,
+    type: EntryLinkKind = 'mention'
+  ): Promise<void> {
+    const userId = requireUserId();
+    const sourceEntry = await this.resolveEntryByPath(sourcePath, userId);
+    const targetEntry = await this.resolveEntryByPath(targetPath, userId);
+
+    if (sourceEntry.id === targetEntry.id) {
+      throw new InvalidEntryDataError('Cannot link an entry to itself');
+    }
+
+    await this.prisma.entryLink.createMany({
+      data: [
+        {
+          userId,
+          sourceEntryId: sourceEntry.id,
+          targetEntryId: targetEntry.id,
+          type
+        }
+      ],
+      skipDuplicates: true
+    });
+  }
+
+  async removeManualLink(
+    entryPath: string,
+    targetPath: string,
+    direction: EntryLinkDirection = 'outgoing',
+    type?: EntryLinkKind
+  ): Promise<number> {
+    const userId = requireUserId();
+    const entry = await this.resolveEntryByPath(entryPath, userId);
+    const target = await this.resolveEntryByPath(targetPath, userId);
+
+    const where =
+      direction === 'outgoing'
+        ? {
+            userId,
+            sourceEntryId: entry.id,
+            targetEntryId: target.id,
+            ...(type ? { type } : {})
+          }
+        : {
+            userId,
+            sourceEntryId: target.id,
+            targetEntryId: entry.id,
+            ...(type ? { type } : {})
+          };
+
+    const deleted = await this.prisma.entryLink.deleteMany({ where });
+    return deleted.count;
+  }
+
   async getLinksForPath(path: string): Promise<EntryLinksResponse> {
     const userId = requireUserId();
-    const { category, slug } = parseEntryPath(path);
-
-    const entry = await this.prisma.entry.findUnique({
-      where: { userId_category_slug: { userId, category, slug } }
-    });
-
-    if (!entry) {
-      throw new EntryNotFoundError(path);
-    }
+    const entry = await this.resolveEntryByPath(path, userId);
 
     const [outgoingLinks, incomingLinks] = await Promise.all([
       this.prisma.entryLink.findMany({
@@ -450,15 +499,15 @@ export class EntryLinkService {
 
   async getGraphForPath(path: string): Promise<EntryGraphResponse> {
     const userId = requireUserId();
-    const { category, slug } = parseEntryPath(path);
+    const entry = await this.resolveEntryByPath(path, userId);
+    return this.getGraphForEntry(entry, userId);
+  }
 
-    const entry = await this.prisma.entry.findUnique({
-      where: { userId_category_slug: { userId, category, slug } }
-    });
-
-    if (!entry) {
-      throw new EntryNotFoundError(path);
-    }
+  private async getGraphForEntry(
+    entry: { id: string; category: string; slug: string; title: string },
+    userId: string
+  ): Promise<EntryGraphResponse> {
+    const center = toEntrySummary(entry.category, entry.slug, entry.title);
 
     const [outgoingLinks, incomingLinks] = await Promise.all([
       this.prisma.entryLink.findMany({
@@ -471,7 +520,6 @@ export class EntryLinkService {
       })
     ]);
 
-    const center = toEntrySummary(entry.category, entry.slug, entry.title);
     const nodesByPath = new Map<string, EntryLinkSummary>([[center.path, center]]);
     const edges: EntryGraphEdge[] = [];
     const connections: EntryGraphConnection[] = [];
@@ -518,6 +566,22 @@ export class EntryLinkService {
       edges,
       connections
     };
+  }
+
+  private async resolveEntryByPath(path: string, userId: string): Promise<{
+    id: string;
+    category: string;
+    slug: string;
+    title: string;
+  }> {
+    const { category, slug } = parseEntryPath(path);
+    const entry = await this.prisma.entry.findUnique({
+      where: { userId_category_slug: { userId, category, slug } }
+    });
+    if (!entry) {
+      throw new EntryNotFoundError(path);
+    }
+    return entry;
   }
 }
 

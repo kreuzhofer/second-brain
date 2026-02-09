@@ -29,6 +29,14 @@ export interface EntryLinksResponse {
   incoming: EntryLinkSummary[];
 }
 
+export interface LinkMutationOptions {
+  type?: 'mention' | 'relationship';
+}
+
+export interface LinkDeleteOptions extends LinkMutationOptions {
+  direction?: 'outgoing' | 'incoming';
+}
+
 export interface EntryGraphEdge {
   source: string;
   target: string;
@@ -49,6 +57,17 @@ export interface EntryGraphResponse {
   nodes: EntryLinkSummary[];
   edges: EntryGraphEdge[];
   connections?: EntryGraphConnection[];
+}
+
+export interface RelationshipInsight {
+  person: EntryLinkSummary;
+  score: number;
+  relationshipCount: number;
+  projectCount: number;
+  mentionCount: number;
+  relatedPeople: Array<EntryLinkSummary & { count: number }>;
+  relatedProjects: Array<EntryLinkSummary & { count: number }>;
+  lastInteractionAt?: string;
 }
 
 export interface EntrySummary {
@@ -107,6 +126,35 @@ export interface FocusSession {
   notes?: string | null;
   trackId?: string | null;
   createdAt: string;
+}
+
+export interface WeekPlanItem {
+  entryPath: string;
+  category: Category;
+  title: string;
+  sourceName: string;
+  dueDate?: string;
+  start: string;
+  end: string;
+  durationMinutes: number;
+  reason: string;
+}
+
+export interface WeekPlanResponse {
+  startDate: string;
+  endDate: string;
+  items: WeekPlanItem[];
+  totalMinutes: number;
+}
+
+export interface CalendarPublishResponse {
+  httpsUrl: string;
+  webcalUrl: string;
+  expiresAt: string;
+}
+
+export interface RelationshipInsightsResponse {
+  insights: RelationshipInsight[];
 }
 
 export interface EntryFilters {
@@ -271,6 +319,36 @@ class ApiClient {
      */
     links: async (path: string): Promise<EntryLinksResponse> => {
       return this.request<EntryLinksResponse>(`/entries/${path}/links`);
+    },
+
+    addLink: async (
+      path: string,
+      targetPath: string,
+      options?: LinkMutationOptions
+    ): Promise<void> => {
+      await this.request(`/entries/${path}/links`, {
+        method: 'POST',
+        body: JSON.stringify({
+          targetPath,
+          ...(options?.type ? { type: options.type } : {})
+        })
+      });
+    },
+
+    removeLink: async (
+      path: string,
+      targetPath: string,
+      options?: LinkDeleteOptions
+    ): Promise<number> => {
+      const response = await this.request<{ removed: number }>(`/entries/${path}/links`, {
+        method: 'DELETE',
+        body: JSON.stringify({
+          targetPath,
+          ...(options?.direction ? { direction: options.direction } : {}),
+          ...(options?.type ? { type: options.type } : {})
+        })
+      });
+      return response.removed;
     },
 
     /**
@@ -467,6 +545,26 @@ class ApiClient {
         method: 'POST',
         body: JSON.stringify(payload)
       });
+    }
+  };
+
+  calendar = {
+    planWeek: async (startDate?: string, days?: number): Promise<WeekPlanResponse> => {
+      const params = new URLSearchParams();
+      if (startDate) params.set('startDate', startDate);
+      if (typeof days === 'number') params.set('days', String(days));
+      const query = params.toString();
+      const endpoint = query ? `/calendar/plan-week?${query}` : '/calendar/plan-week';
+      return this.request<WeekPlanResponse>(endpoint);
+    },
+    publish: async (): Promise<CalendarPublishResponse> => {
+      return this.request<CalendarPublishResponse>('/calendar/publish');
+    }
+  };
+
+  insights = {
+    relationships: async (limit = 5): Promise<RelationshipInsightsResponse> => {
+      return this.request<RelationshipInsightsResponse>(`/insights/relationships?limit=${limit}`);
     }
   };
 }

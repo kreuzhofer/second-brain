@@ -186,6 +186,141 @@ entriesRouter.get('/:path(*)/graph', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/entries/:path(*)/links
+ * Create a manual outgoing link from :path to targetPath.
+ */
+entriesRouter.post('/:path(*)/links', async (req: Request, res: Response) => {
+  try {
+    const linkService = getEntryLinkService();
+    const path = req.params.path;
+    const { targetPath, type } = req.body as {
+      targetPath?: string;
+      type?: 'mention' | 'relationship';
+    };
+
+    if (!path || !targetPath) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Both entry path and targetPath are required'
+        }
+      });
+      return;
+    }
+
+    if (type && !['mention', 'relationship'].includes(type)) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'type must be either mention or relationship'
+        }
+      });
+      return;
+    }
+
+    await linkService.addManualLink(path, targetPath, type ?? 'mention');
+    res.status(201).json({ ok: true });
+  } catch (error) {
+    if (error instanceof EntryNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: error.message
+        }
+      });
+      return;
+    }
+    if (error instanceof InvalidEntryDataError) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.message
+        }
+      });
+      return;
+    }
+    console.error('Error creating manual link:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to create manual link'
+      }
+    });
+  }
+});
+
+/**
+ * DELETE /api/entries/:path(*)/links
+ * Remove outgoing/incoming links between :path and targetPath.
+ */
+entriesRouter.delete('/:path(*)/links', async (req: Request, res: Response) => {
+  try {
+    const linkService = getEntryLinkService();
+    const path = req.params.path;
+    const { targetPath, direction, type } = req.body as {
+      targetPath?: string;
+      direction?: 'outgoing' | 'incoming';
+      type?: 'mention' | 'relationship';
+    };
+
+    if (!path || !targetPath) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Both entry path and targetPath are required'
+        }
+      });
+      return;
+    }
+
+    if (direction && !['outgoing', 'incoming'].includes(direction)) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'direction must be either outgoing or incoming'
+        }
+      });
+      return;
+    }
+
+    if (type && !['mention', 'relationship'].includes(type)) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'type must be either mention or relationship'
+        }
+      });
+      return;
+    }
+
+    const removed = await linkService.removeManualLink(
+      path,
+      targetPath,
+      direction ?? 'outgoing',
+      type
+    );
+    res.json({ removed });
+  } catch (error) {
+    if (error instanceof EntryNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: error.message
+        }
+      });
+      return;
+    }
+    console.error('Error deleting manual link:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to delete manual link'
+      }
+    });
+  }
+});
+
+/**
  * GET /api/entries/:path(*)
  * Get a single entry by path
  */

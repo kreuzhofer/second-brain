@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { api, EntryWithPath, EntryLinksResponse, EntryGraphResponse } from '@/services/api';
-import { X, Loader2, FileText, User, Briefcase, Lightbulb, ClipboardList, Pencil, Check } from 'lucide-react';
+import { X, Loader2, FileText, User, Briefcase, Lightbulb, ClipboardList, Pencil, Check, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { hasNotesChanges, resizeTextarea, shouldPromptUnsavedNotes } from '@/components/entry-modal-helpers';
 
@@ -31,6 +31,9 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
   const [notesDraft, setNotesDraft] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
+  const [linkDraft, setLinkDraft] = useState('');
+  const [isLinkBusy, setIsLinkBusy] = useState(false);
+  const [linkBusyKey, setLinkBusyKey] = useState<string | null>(null);
   const notesRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -44,6 +47,9 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
       setGraph(null);
       setIsEditingNotes(false);
       setNotesError(null);
+      setLinkDraft('');
+      setIsLinkBusy(false);
+      setLinkBusyKey(null);
     }
   }, [entryPath]);
 
@@ -87,6 +93,46 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
       setGraph(data);
     } catch (err) {
       setGraphError(err instanceof Error ? err.message : 'Failed to load graph');
+    }
+  };
+
+  const refreshLinksAndGraph = async (path: string) => {
+    await Promise.all([loadLinks(path), loadGraph(path)]);
+  };
+
+  const handleAddLink = async () => {
+    if (!entry) return;
+    const targetPath = linkDraft.trim();
+    if (!targetPath) {
+      setLinksError('Enter a path to link (for example: people/lina-haidu).');
+      return;
+    }
+
+    setIsLinkBusy(true);
+    setLinksError(null);
+    try {
+      await api.entries.addLink(entry.path, targetPath);
+      setLinkDraft('');
+      await refreshLinksAndGraph(entry.path);
+    } catch (err) {
+      setLinksError(err instanceof Error ? err.message : 'Failed to add link');
+    } finally {
+      setIsLinkBusy(false);
+    }
+  };
+
+  const handleRemoveLink = async (targetPath: string, direction: 'outgoing' | 'incoming') => {
+    if (!entry) return;
+    const busyKey = `${direction}:${targetPath}`;
+    setLinkBusyKey(busyKey);
+    setLinksError(null);
+    try {
+      await api.entries.removeLink(entry.path, targetPath, { direction });
+      await refreshLinksAndGraph(entry.path);
+    } catch (err) {
+      setLinksError(err instanceof Error ? err.message : 'Failed to remove link');
+    } finally {
+      setLinkBusyKey(null);
     }
   };
 
@@ -283,20 +329,62 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
                   <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
                     Linked items
                   </h3>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      value={linkDraft}
+                      onChange={(event) => setLinkDraft(event.target.value)}
+                      placeholder="Add link path (e.g. people/lina-haidu)"
+                      className="h-11 flex-1 rounded-md border border-border bg-background px-3 text-base"
+                      disabled={isLinkBusy || Boolean(linkBusyKey)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddLink}
+                      disabled={isLinkBusy || Boolean(linkBusyKey)}
+                    >
+                      {isLinkBusy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                      <span className="ml-1">Add</span>
+                    </Button>
+                  </div>
                   {links?.outgoing?.length ? (
                     <div className="mt-2 space-y-2">
                       {links.outgoing.map((link) => (
-                        <button
+                        <div
                           key={link.path}
-                          type="button"
-                          className="w-full text-left rounded-md border border-border p-2 hover:bg-muted transition-colors"
-                          onClick={() => onEntryClick?.(link.path)}
+                          className="w-full rounded-md border border-border p-2"
                         >
-                          <div className="text-sm font-medium">{link.name}</div>
-                          <div className="text-xs text-muted-foreground capitalize">
-                            {link.category}
+                          <div className="flex items-start justify-between gap-2">
+                            <button
+                              type="button"
+                              className="flex-1 text-left hover:bg-muted transition-colors rounded px-1 py-1"
+                              onClick={() => onEntryClick?.(link.path)}
+                            >
+                              <div className="text-sm font-medium">{link.name}</div>
+                              <div className="text-xs text-muted-foreground capitalize">
+                                {link.category}
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Remove link to ${link.name}`}
+                              className="h-11 w-11 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                              onClick={() => handleRemoveLink(link.path, 'outgoing')}
+                              disabled={Boolean(linkBusyKey)}
+                            >
+                              {linkBusyKey === `outgoing:${link.path}` ? (
+                                <Loader2 className="h-4 w-4 mx-auto animate-spin" />
+                              ) : (
+                                <X className="h-4 w-4 mx-auto" />
+                              )}
+                            </button>
                           </div>
-                        </button>
+                        </div>
                       ))}
                     </div>
                   ) : (
@@ -311,17 +399,36 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
                   {links?.incoming?.length ? (
                     <div className="mt-2 space-y-2">
                       {links.incoming.map((link) => (
-                        <button
+                        <div
                           key={link.path}
-                          type="button"
-                          className="w-full text-left rounded-md border border-border p-2 hover:bg-muted transition-colors"
-                          onClick={() => onEntryClick?.(link.path)}
+                          className="w-full rounded-md border border-border p-2"
                         >
-                          <div className="text-sm font-medium">{link.name}</div>
-                          <div className="text-xs text-muted-foreground capitalize">
-                            {link.category}
+                          <div className="flex items-start justify-between gap-2">
+                            <button
+                              type="button"
+                              className="flex-1 text-left hover:bg-muted transition-colors rounded px-1 py-1"
+                              onClick={() => onEntryClick?.(link.path)}
+                            >
+                              <div className="text-sm font-medium">{link.name}</div>
+                              <div className="text-xs text-muted-foreground capitalize">
+                                {link.category}
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Remove backlink from ${link.name}`}
+                              className="h-11 w-11 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                              onClick={() => handleRemoveLink(link.path, 'incoming')}
+                              disabled={Boolean(linkBusyKey)}
+                            >
+                              {linkBusyKey === `incoming:${link.path}` ? (
+                                <Loader2 className="h-4 w-4 mx-auto animate-spin" />
+                              ) : (
+                                <X className="h-4 w-4 mx-auto" />
+                              )}
+                            </button>
                           </div>
-                        </button>
+                        </div>
                       ))}
                     </div>
                   ) : (

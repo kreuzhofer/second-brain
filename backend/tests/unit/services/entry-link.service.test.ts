@@ -238,4 +238,121 @@ describe('EntryLinkService', () => {
       }
     }
   });
+
+  it('adds and removes manual outgoing links between existing entries', async () => {
+    let adminEntryPath = '';
+    let personEntryPath = '';
+
+    try {
+      const adminEntry = await entryService.create(
+        'admin',
+        {
+          name: 'Send follow up',
+          status: 'pending',
+          source_channel: 'chat',
+          confidence: 0.7
+        },
+        'chat'
+      );
+      adminEntryPath = adminEntry.path;
+
+      const personEntry = await entryService.create(
+        'people',
+        {
+          name: 'Mila Bauer',
+          context: 'Vendor contact',
+          follow_ups: [],
+          related_projects: [],
+          source_channel: 'chat',
+          confidence: 0.7
+        },
+        'chat'
+      );
+      personEntryPath = personEntry.path;
+
+      await linkService.addManualLink(adminEntry.path, personEntry.path);
+      let linksFromAdmin = await linkService.getLinksForPath(adminEntry.path);
+      expect(linksFromAdmin.outgoing).toContainEqual({
+        path: stripMd(personEntry.path),
+        category: 'people',
+        name: (personEntry.entry as any).name
+      });
+
+      const removed = await linkService.removeManualLink(
+        adminEntry.path,
+        personEntry.path,
+        'outgoing'
+      );
+      expect(removed).toBe(1);
+
+      linksFromAdmin = await linkService.getLinksForPath(adminEntry.path);
+      expect(linksFromAdmin.outgoing).toEqual([]);
+    } finally {
+      if (personEntryPath) {
+        await entryService.delete(personEntryPath, 'chat');
+      }
+      if (adminEntryPath) {
+        await entryService.delete(adminEntryPath, 'chat');
+      }
+    }
+  });
+
+  it('removes incoming backlinks for a target entry', async () => {
+    let adminEntryPath = '';
+    let personEntryPath = '';
+
+    try {
+      const adminEntry = await entryService.create(
+        'admin',
+        {
+          name: 'Schedule review',
+          status: 'pending',
+          source_channel: 'chat',
+          confidence: 0.8
+        },
+        'chat'
+      );
+      adminEntryPath = adminEntry.path;
+
+      const personEntry = await entryService.create(
+        'people',
+        {
+          name: 'Lena Hart',
+          context: 'Design partner',
+          follow_ups: [],
+          related_projects: [],
+          source_channel: 'chat',
+          confidence: 0.8
+        },
+        'chat'
+      );
+      personEntryPath = personEntry.path;
+
+      await linkService.addManualLink(adminEntry.path, personEntry.path);
+
+      let linksToPerson = await linkService.getLinksForPath(personEntry.path);
+      expect(linksToPerson.incoming).toContainEqual({
+        path: stripMd(adminEntry.path),
+        category: 'admin',
+        name: (adminEntry.entry as any).name
+      });
+
+      const removed = await linkService.removeManualLink(
+        personEntry.path,
+        adminEntry.path,
+        'incoming'
+      );
+      expect(removed).toBe(1);
+
+      linksToPerson = await linkService.getLinksForPath(personEntry.path);
+      expect(linksToPerson.incoming).toEqual([]);
+    } finally {
+      if (personEntryPath) {
+        await entryService.delete(personEntryPath, 'chat');
+      }
+      if (adminEntryPath) {
+        await entryService.delete(adminEntryPath, 'chat');
+      }
+    }
+  });
 });

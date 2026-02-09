@@ -167,6 +167,7 @@ describe('ToolRegistry', () => {
       expect(tool?.function.parameters.required).toContain('targetPath');
       expect(tool?.function.parameters.required).toContain('sourcePaths');
     });
+
   });
 
   describe('validateArguments', () => {

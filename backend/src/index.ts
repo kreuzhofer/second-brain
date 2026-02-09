@@ -14,6 +14,8 @@ import { inboxRouter } from './routes/inbox';
 import { duplicatesRouter } from './routes/duplicates';
 import { queueRouter } from './routes/queue';
 import { focusRouter } from './routes/focus';
+import { calendarRouter, calendarPublicRouter } from './routes/calendar';
+import { insightsRouter } from './routes/insights';
 import { initializeDataFolder, initializeEmailChannel, shutdownEmailChannel } from './services/init.service';
 import { getCronService, resetCronService } from './services/cron.service';
 import { getOfflineQueueService } from './services/offline-queue.service';
@@ -33,6 +35,7 @@ app.use(express.json());
 // Public routes (no auth required)
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/calendar', calendarPublicRouter);
 
 // Protected routes
 app.use('/api/entries', authMiddleware, entriesRouter);
@@ -45,6 +48,8 @@ app.use('/api/inbox', authMiddleware, inboxRouter);
 app.use('/api/duplicates', authMiddleware, duplicatesRouter);
 app.use('/api/queue', authMiddleware, queueRouter);
 app.use('/api/focus', authMiddleware, focusRouter);
+app.use('/api/calendar', authMiddleware, calendarRouter);
+app.use('/api/insights', authMiddleware, insightsRouter);
 
 // Serve frontend static files in production
 if (process.env.NODE_ENV === 'production') {

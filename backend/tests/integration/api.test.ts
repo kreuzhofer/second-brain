@@ -269,6 +269,121 @@ describe('API Integration Tests', () => {
     });
   });
 
+  describe('POST/DELETE /api/entries/:path/links', () => {
+    it('should add and remove an outgoing link', async () => {
+      await request(app)
+        .post('/api/entries')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          category: 'admin',
+          name: 'Prepare proposal draft',
+          status: 'pending',
+          source_channel: 'api',
+          confidence: 0.9
+        })
+        .expect(201);
+
+      await request(app)
+        .post('/api/entries')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          category: 'people',
+          name: 'Nina Weber',
+          context: 'Proposal reviewer',
+          follow_ups: [],
+          related_projects: [],
+          source_channel: 'api',
+          confidence: 0.9
+        })
+        .expect(201);
+
+      await request(app)
+        .post('/api/entries/admin/prepare-proposal-draft/links')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ targetPath: 'people/nina-weber' })
+        .expect(201);
+
+      const linksAfterCreate = await request(app)
+        .get('/api/entries/admin/prepare-proposal-draft/links')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(linksAfterCreate.body.outgoing).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: 'people/nina-weber',
+            category: 'people',
+            name: 'Nina Weber'
+          })
+        ])
+      );
+
+      const removeResponse = await request(app)
+        .delete('/api/entries/admin/prepare-proposal-draft/links')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ targetPath: 'people/nina-weber', direction: 'outgoing' })
+        .expect(200);
+
+      expect(removeResponse.body.removed).toBe(1);
+
+      const linksAfterDelete = await request(app)
+        .get('/api/entries/admin/prepare-proposal-draft/links')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(linksAfterDelete.body.outgoing).toEqual([]);
+    });
+
+    it('should remove an incoming backlink', async () => {
+      await request(app)
+        .post('/api/entries')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          category: 'admin',
+          name: 'Book review session',
+          status: 'pending',
+          source_channel: 'api',
+          confidence: 0.9
+        })
+        .expect(201);
+
+      await request(app)
+        .post('/api/entries')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          category: 'people',
+          name: 'Tom Hardy',
+          context: 'Stakeholder',
+          follow_ups: [],
+          related_projects: [],
+          source_channel: 'api',
+          confidence: 0.9
+        })
+        .expect(201);
+
+      await request(app)
+        .post('/api/entries/admin/book-review-session/links')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ targetPath: 'people/tom-hardy' })
+        .expect(201);
+
+      const removeIncoming = await request(app)
+        .delete('/api/entries/people/tom-hardy/links')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ targetPath: 'admin/book-review-session', direction: 'incoming' })
+        .expect(200);
+
+      expect(removeIncoming.body.removed).toBe(1);
+
+      const linksToPerson = await request(app)
+        .get('/api/entries/people/tom-hardy/links')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(linksToPerson.body.incoming).toEqual([]);
+    });
+  });
+
   describe('PATCH /api/entries/:path', () => {
     it('should update an entry', async () => {
       // First create an entry

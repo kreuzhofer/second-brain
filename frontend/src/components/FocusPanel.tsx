@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { api, Category, EntrySummary } from '@/services/api';
+import { api, Category, EntrySummary, RelationshipInsight } from '@/services/api';
 import { useEntries } from '@/state/entries';
 import { getFocusRailButtonClass } from '@/components/layout-shell-helpers';
 import {
@@ -41,11 +41,56 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const [inboxExpanded, setInboxExpanded] = useState(false);
   const [isTriageLoading, setIsTriageLoading] = useState(false);
   const [recentExpanded, setRecentExpanded] = useState(false);
+  const [peopleInsights, setPeopleInsights] = useState<RelationshipInsight[]>([]);
+  const [peopleInsightsLoading, setPeopleInsightsLoading] = useState(false);
+  const [peopleInsightsError, setPeopleInsightsError] = useState<string | null>(null);
 
   const handleRefresh = async () => {
     await refresh();
     setInboxSelected(new Set());
+    if (activeTab === 'people') {
+      setPeopleInsightsLoading(true);
+      setPeopleInsightsError(null);
+      try {
+        const result = await api.insights.relationships(5);
+        setPeopleInsights(result.insights);
+      } catch (err) {
+        setPeopleInsightsError(err instanceof Error ? err.message : 'Failed to load relationship insights');
+      } finally {
+        setPeopleInsightsLoading(false);
+      }
+    }
   };
+
+  useEffect(() => {
+    if (activeTab !== 'people') {
+      return;
+    }
+
+    let cancelled = false;
+    setPeopleInsightsLoading(true);
+    setPeopleInsightsError(null);
+    api.insights.relationships(5)
+      .then((result) => {
+        if (!cancelled) {
+          setPeopleInsights(result.insights);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPeopleInsightsError(err instanceof Error ? err.message : 'Failed to load relationship insights');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPeopleInsightsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, entries.length]);
 
   const focusItems = useMemo<FocusItem[]>(() => {
     const items = entries
@@ -296,6 +341,47 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 <div>Inbox items</div>
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'people' && (
+          <div className="space-y-2 rounded-md border border-border p-2.5">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Relationship insights
+            </div>
+            {peopleInsightsLoading && (
+              <p className="text-xs text-muted-foreground">Loading insights...</p>
+            )}
+            {!peopleInsightsLoading && peopleInsightsError && (
+              <p className="text-xs text-destructive">{peopleInsightsError}</p>
+            )}
+            {!peopleInsightsLoading && !peopleInsightsError && peopleInsights.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No relationship patterns yet. Add links between people and projects.
+              </p>
+            )}
+            {!peopleInsightsLoading && !peopleInsightsError && peopleInsights.length > 0 && (
+              <div className="space-y-1.5">
+                {peopleInsights.slice(0, 3).map((insight) => (
+                  <button
+                    key={insight.person.path}
+                    type="button"
+                    onClick={() => onEntryClick(insight.person.path)}
+                    className="w-full min-h-[44px] rounded-md border border-border px-2.5 py-2 text-left hover:bg-accent transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{insight.person.name}</span>
+                      <span className="text-[11px] text-muted-foreground">Score {insight.score}</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+                      <span>{insight.relationshipCount} relationship(s)</span>
+                      <span>{insight.projectCount} project link(s)</span>
+                      <span>{insight.mentionCount} mention(s)</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

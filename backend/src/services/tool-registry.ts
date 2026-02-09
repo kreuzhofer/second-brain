@@ -340,6 +340,7 @@ export class ToolRegistry {
         }
       }
     });
+
   }
 
   /**

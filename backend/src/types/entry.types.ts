@@ -123,6 +123,21 @@ export interface EntryGraphResponse {
   connections?: EntryGraphConnection[];
 }
 
+export interface RelationshipInsight {
+  person: EntryLinkSummary;
+  score: number;
+  relationshipCount: number;
+  projectCount: number;
+  mentionCount: number;
+  relatedPeople: Array<EntryLinkSummary & { count: number }>;
+  relatedProjects: Array<EntryLinkSummary & { count: number }>;
+  lastInteractionAt?: string;
+}
+
+export interface RelationshipInsightsResponse {
+  insights: RelationshipInsight[];
+}
+
 /**
  * Summary type for list operations
  */
