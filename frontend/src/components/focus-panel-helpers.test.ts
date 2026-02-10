@@ -1,0 +1,20 @@
+import { describe, expect, it } from 'vitest';
+import { getVisibleItems, shouldShowExpandToggle } from './focus-panel-helpers';
+
+describe('focus-panel-helpers', () => {
+  it('returns limited items when collapsed', () => {
+    const items = ['a', 'b', 'c', 'd'];
+    expect(getVisibleItems(items, false, 2)).toEqual(['a', 'b']);
+  });
+
+  it('returns all items when expanded', () => {
+    const items = ['a', 'b', 'c', 'd'];
+    expect(getVisibleItems(items, true, 2)).toEqual(items);
+  });
+
+  it('shows expand toggle only when total exceeds max', () => {
+    expect(shouldShowExpandToggle(6, 5)).toBe(true);
+    expect(shouldShowExpandToggle(5, 5)).toBe(false);
+    expect(shouldShowExpandToggle(4, 5)).toBe(false);
+  });
+});

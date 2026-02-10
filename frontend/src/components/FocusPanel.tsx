@@ -12,6 +12,7 @@ import {
 } from '@/services/api';
 import { useEntries } from '@/state/entries';
 import { getFocusRailButtonClass } from '@/components/layout-shell-helpers';
+import { getVisibleItems, shouldShowExpandToggle } from '@/components/focus-panel-helpers';
 import {
   formatBlockTime,
   formatExpiresAt,
@@ -52,6 +53,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'focus' | 'ideas' | 'people' | 'inbox' | 'recent' | 'calendar'>('focus');
   const [focusSort, setFocusSort] = useState<'overdue' | 'newest'>('overdue');
+  const [focusExpanded, setFocusExpanded] = useState(false);
   const [inboxSelected, setInboxSelected] = useState<Set<string>>(new Set());
   const [targetCategory, setTargetCategory] = useState<Category>('projects');
   const [targetPath, setTargetPath] = useState('');
@@ -297,8 +299,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       return b.updatedAtValue - a.updatedAtValue;
     });
 
-    return sorted.map((entry) => entry.item).slice(0, maxItems);
-  }, [entries, focusSort, maxItems]);
+    return sorted.map((entry) => entry.item);
+  }, [entries, focusSort]);
 
   const ideaItems = useMemo<FocusItem[]>(() => {
     return entries
@@ -338,7 +340,11 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const activeProjects = entries.filter((entry) => entry.category === 'projects' && entry.status === 'active').length;
   const pendingAdmin = entries.filter((entry) => isTaskCategory(entry.category) && entry.status === 'pending').length;
 
-  const currentItems = activeTab === 'ideas' ? ideaItems : activeTab === 'people' ? peopleItems : focusItems;
+  const currentItems = activeTab === 'ideas'
+    ? ideaItems
+    : activeTab === 'people'
+      ? peopleItems
+      : getVisibleItems(focusItems, focusExpanded, maxItems);
   const emptyMessage = activeTab === 'focus'
     ? 'No active actions found. Capture a task or pick something from the inbox.'
     : activeTab === 'ideas'
@@ -840,6 +846,16 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 </div>
               </button>
             ))}
+            {activeTab === 'focus' && shouldShowExpandToggle(focusItems.length, maxItems) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                onClick={() => setFocusExpanded((prev) => !prev)}
+              >
+                {focusExpanded ? 'Show less' : `Show all (${focusItems.length})`}
+              </Button>
+            )}
           </div>
         )}
 
