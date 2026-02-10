@@ -24,14 +24,34 @@ export interface WeekPlanItem {
   reason: string;
 }
 
+export type UnscheduledReasonCode =
+  | 'outside_window'
+  | 'outside_working_hours'
+  | 'fixed_conflict'
+  | 'no_free_slot';
+
+export interface WeekPlanUnscheduledItem {
+  entryPath: string;
+  category: Category;
+  title: string;
+  sourceName: string;
+  dueDate?: string;
+  durationMinutes: number;
+  reasonCode: UnscheduledReasonCode;
+  reason: string;
+}
+
 export interface WeekPlan {
   startDate: string;
   endDate: string;
   granularityMinutes: number;
   bufferMinutes: number;
   items: WeekPlanItem[];
+  unscheduled: WeekPlanUnscheduledItem[];
   totalMinutes: number;
   warnings: string[];
+  generatedAt: string;
+  revision: string;
 }
 
 export interface CalendarSourceInput {
@@ -66,6 +86,12 @@ export interface CalendarSyncResult {
   totalBlocks: number;
 }
 
+export interface CalendarSettingsRecord {
+  workdayStartTime: string;
+  workdayEndTime: string;
+  workingDays: number[];
+}
+
 interface Candidate {
   entryPath: string;
   category: Category;
@@ -75,6 +101,7 @@ interface Candidate {
   fixedAt?: Date;
   title: string;
   durationMinutes: number;
+  taskPriority: number;
   priority: number;
   reason: string;
 }
@@ -94,8 +121,9 @@ interface ParsedBusyEvent {
   isAllDay: boolean;
 }
 
-const WORKDAY_START_MINUTES = 9 * 60;
-const WORKDAY_END_MINUTES = 17 * 60;
+const DEFAULT_WORKDAY_START_TIME = '09:00';
+const DEFAULT_WORKDAY_END_TIME = '17:00';
+const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5];
 const SLOT_GRANULARITY_MINUTES = 15;
 const MISSED_TASK_GRACE_MINUTES = 15;
 const MIN_SLOT_GRANULARITY_MINUTES = 5;
@@ -171,6 +199,33 @@ function parseBufferMinutes(value?: number): number {
     throw new Error(`Invalid bufferMinutes. Use an integer between 0 and ${MAX_BUFFER_MINUTES}`);
   }
   return parsed;
+}
+
+function parseTimeOfDayToMinutes(value: string, fieldName: string): number {
+  if (!/^\d{2}:\d{2}$/.test(value)) {
+    throw new Error(`Invalid ${fieldName}. Use HH:mm`);
+  }
+  const [hoursString, minutesString] = value.split(':');
+  const hours = Number(hoursString);
+  const minutes = Number(minutesString);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
+    throw new Error(`Invalid ${fieldName}. Use HH:mm`);
+  }
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    throw new Error(`Invalid ${fieldName}. Use HH:mm`);
+  }
+  return hours * 60 + minutes;
+}
+
+function normalizeWorkingDays(value: number[] | null | undefined): number[] {
+  const source = Array.isArray(value) ? value : DEFAULT_WORKING_DAYS;
+  const uniqueSorted = Array.from(
+    new Set(source.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))
+  ).sort((a, b) => a - b);
+  if (uniqueSorted.length === 0) {
+    return [...DEFAULT_WORKING_DAYS];
+  }
+  return uniqueSorted;
 }
 
 function alignUpToStep(value: number, step: number): number {
@@ -374,12 +429,47 @@ export class CalendarService {
   private prisma = getPrismaClient();
   private config = getConfig();
 
+  async getSettingsForUser(userId: string): Promise<CalendarSettingsRecord> {
+    const settings = await this.ensureSettingsForUser(userId);
+    return this.serializeSettings(settings);
+  }
+
+  async updateSettingsForUser(
+    userId: string,
+    updates: Partial<CalendarSettingsRecord>
+  ): Promise<CalendarSettingsRecord> {
+    const existing = await this.ensureSettingsForUser(userId);
+    const nextStart = updates.workdayStartTime ?? existing.workdayStartTime;
+    const nextEnd = updates.workdayEndTime ?? existing.workdayEndTime;
+    const nextDays = updates.workingDays ?? existing.workingDays;
+    const startMinutes = parseTimeOfDayToMinutes(nextStart, 'workdayStartTime');
+    const endMinutes = parseTimeOfDayToMinutes(nextEnd, 'workdayEndTime');
+    if (endMinutes <= startMinutes) {
+      throw new Error('workdayEndTime must be later than workdayStartTime');
+    }
+
+    const normalizedDays = normalizeWorkingDays(nextDays);
+    const updated = await this.prisma.calendarSettings.update({
+      where: { id: existing.id },
+      data: {
+        workdayStartTime: nextStart,
+        workdayEndTime: nextEnd,
+        workingDays: normalizedDays
+      }
+    });
+    return this.serializeSettings(updated);
+  }
+
   async listSourcesForUser(userId: string): Promise<CalendarSourceRecord[]> {
     const sources = await this.prisma.calendarSource.findMany({
       where: { userId },
       orderBy: { createdAt: 'asc' }
     });
     return sources.map(serializeSource);
+  }
+
+  async buildReplanForUser(userId: string, options?: WeekPlanOptions): Promise<WeekPlan> {
+    return this.buildWeekPlanForUser(userId, options);
   }
 
   async createSourceForUser(userId: string, input: CalendarSourceInput): Promise<CalendarSourceRecord> {
@@ -553,6 +643,10 @@ export class CalendarService {
     const windowEndExclusive = addDays(end, 1);
     const startYmd = toYmd(start);
     const endYmd = toYmd(end);
+    const settings = await this.ensureSettingsForUser(userId);
+    const workdayStartMinutes = parseTimeOfDayToMinutes(settings.workdayStartTime, 'workdayStartTime');
+    const workdayEndMinutes = parseTimeOfDayToMinutes(settings.workdayEndTime, 'workdayEndTime');
+    const workingDays = normalizeWorkingDays(settings.workingDays);
 
     const entries = await this.prisma.entry.findMany({
       where: {
@@ -579,7 +673,8 @@ export class CalendarService {
         const dueAt = entry.adminDetails.dueDate ?? undefined;
         const dueDate = dueAt ? toYmd(dueAt) : undefined;
         const fixedAt = entry.adminDetails.fixedAt ?? undefined;
-        const priority = this.computePriority(dueAt, startYmd, endYmd, 'task');
+        const taskPriority = entry.adminDetails.priority ?? 3;
+        const priority = this.computePriority(dueAt, startYmd, endYmd, 'task', taskPriority);
         return {
           entryPath: `task/${entry.slug}`,
           category: 'task',
@@ -589,6 +684,7 @@ export class CalendarService {
           dueAt,
           fixedAt,
           durationMinutes: Math.max(5, entry.adminDetails.durationMinutes || 30),
+          taskPriority,
           priority,
           reason: fixedAt
             ? `Fixed at ${fixedAt.toISOString()}`
@@ -610,6 +706,7 @@ export class CalendarService {
         dueDate: projectDueDate,
         dueAt: projectDueAt,
         durationMinutes: 90,
+        taskPriority: 3,
         priority,
         reason: projectDueDate ? `Project due on ${projectDueDate}` : 'Active project momentum'
       };
@@ -630,9 +727,19 @@ export class CalendarService {
     const dayLoads = Array<number>(days).fill(0);
     const dayIntervals = Array.from({ length: days }, () => [] as Array<{ startMinute: number; endMinute: number }>);
     const warnings: string[] = [];
+    const unscheduled: WeekPlanUnscheduledItem[] = [];
 
     for (const block of busyBlocks) {
-      const intervals = this.toBusyIntervalsForWindow(block.startAt, block.endAt, start, days, bufferMinutes);
+      const intervals = this.toBusyIntervalsForWindow(
+        block.startAt,
+        block.endAt,
+        start,
+        days,
+        bufferMinutes,
+        workdayStartMinutes,
+        workdayEndMinutes,
+        workingDays
+      );
       for (const interval of intervals) {
         dayIntervals[interval.dayIndex].push({
           startMinute: interval.startMinute,
@@ -659,7 +766,25 @@ export class CalendarService {
       ) - start.getTime()) / (24 * 60 * 60 * 1000));
 
       if (dayIndex < 0 || dayIndex >= days) {
-        warnings.push(`Skipped ${candidate.sourceName}: fixed appointment is outside planning window`);
+        this.pushUnscheduled(
+          unscheduled,
+          warnings,
+          candidate,
+          'outside_window',
+          `Skipped ${candidate.sourceName}: fixed appointment is outside planning window`
+        );
+        continue;
+      }
+
+      const candidateDate = addDays(start, dayIndex);
+      if (!this.isWorkingDay(candidateDate, workingDays)) {
+        this.pushUnscheduled(
+          unscheduled,
+          warnings,
+          candidate,
+          'outside_working_hours',
+          `Skipped ${candidate.sourceName}: fixed appointment is on a non-working day`
+        );
         continue;
       }
 
@@ -676,8 +801,14 @@ export class CalendarService {
         });
         continue;
       }
-      if (startMinute < WORKDAY_START_MINUTES || endMinute > WORKDAY_END_MINUTES) {
-        warnings.push(`Skipped ${candidate.sourceName}: fixed appointment is outside working hours`);
+      if (startMinute < workdayStartMinutes || endMinute > workdayEndMinutes) {
+        this.pushUnscheduled(
+          unscheduled,
+          warnings,
+          candidate,
+          'outside_working_hours',
+          `Skipped ${candidate.sourceName}: fixed appointment is outside working hours`
+        );
         continue;
       }
 
@@ -685,7 +816,13 @@ export class CalendarService {
         overlaps(startMinute, endMinute, interval.startMinute, interval.endMinute)
       );
       if (blocked) {
-        warnings.push(`Skipped ${candidate.sourceName}: fixed appointment conflicts with busy blocks`);
+        this.pushUnscheduled(
+          unscheduled,
+          warnings,
+          candidate,
+          'fixed_conflict',
+          `Skipped ${candidate.sourceName}: fixed appointment conflicts with busy blocks`
+        );
         continue;
       }
 
@@ -714,27 +851,47 @@ export class CalendarService {
     const minimumDayIndex = enforceCurrentTime ? Math.max(0, Math.min(days, todayIndex)) : 0;
 
     for (const candidate of allFlexibleCandidates) {
-      const dayOrder = this.getCandidateDayOrder(candidate, startYmd, days, dayLoads, minimumDayIndex);
+      const dayOrder = this.getCandidateDayOrder(
+        candidate,
+        startYmd,
+        start,
+        days,
+        dayLoads,
+        workingDays,
+        minimumDayIndex
+      );
       let scheduled = false;
 
+      if (dayOrder.length === 0) {
+        this.pushUnscheduled(
+          unscheduled,
+          warnings,
+          candidate,
+          'outside_working_hours',
+          `Skipped ${candidate.sourceName}: no working-day window in planning range`
+        );
+        continue;
+      }
+
       for (const dayIndex of dayOrder) {
-        const latestEndMinute = this.getLatestEndMinuteForDay(candidate, start, dayIndex);
+        const latestEndMinute = this.getLatestEndMinuteForDay(candidate, start, dayIndex, workdayEndMinutes);
         const minimumStartMinute =
           enforceCurrentTime && dayIndex === todayIndex
             ? Math.min(
-                WORKDAY_END_MINUTES,
+                workdayEndMinutes,
                 Math.max(
-                  WORKDAY_START_MINUTES,
+                  workdayStartMinutes,
                   alignUpToStep(nowMinute + MISSED_TASK_GRACE_MINUTES, granularityMinutes)
                 )
               )
-            : WORKDAY_START_MINUTES;
+            : workdayStartMinutes;
         const slotStart = this.findFirstAvailableSlot(
           dayIntervals[dayIndex],
           candidate.durationMinutes,
           latestEndMinute,
           granularityMinutes,
-          minimumStartMinute
+          minimumStartMinute,
+          workdayStartMinutes
         );
         if (slotStart === null) continue;
 
@@ -764,11 +921,19 @@ export class CalendarService {
       }
 
       if (!scheduled) {
-        warnings.push(`Skipped ${candidate.sourceName}: no free slot in planning window`);
+        this.pushUnscheduled(
+          unscheduled,
+          warnings,
+          candidate,
+          'no_free_slot',
+          `Skipped ${candidate.sourceName}: no free slot in planning window`
+        );
       }
     }
 
     items.sort((a, b) => a.start.localeCompare(b.start));
+    const generatedAt = new Date().toISOString();
+    const revision = this.computePlanRevision(startYmd, endYmd, items, unscheduled, granularityMinutes, bufferMinutes);
 
     return {
       startDate: startYmd,
@@ -776,8 +941,11 @@ export class CalendarService {
       granularityMinutes,
       bufferMinutes,
       items,
+      unscheduled,
       totalMinutes: items.reduce((sum, item) => sum + item.durationMinutes, 0),
-      warnings
+      warnings,
+      generatedAt,
+      revision
     };
   }
 
@@ -810,10 +978,13 @@ export class CalendarService {
     }
   }
 
-  async buildIcsFeedForUser(userId: string, options?: WeekPlanOptions): Promise<string> {
+  async buildIcsFeedForUser(
+    userId: string,
+    options?: WeekPlanOptions
+  ): Promise<{ ics: string; generatedAt: string; revision: string }> {
     const plan = await this.buildWeekPlanForUser(userId, options);
-    const generatedAt = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
-    const sequence = Math.floor(Date.now() / 1000);
+    const generatedAt = plan.generatedAt.replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+    const sequence = Number.parseInt(plan.revision.slice(0, 8), 16);
     const lines = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
@@ -847,7 +1018,11 @@ export class CalendarService {
       }),
       'END:VCALENDAR'
     ];
-    return `${lines.join('\r\n')}\r\n`;
+    return {
+      ics: `${lines.join('\r\n')}\r\n`,
+      generatedAt: plan.generatedAt,
+      revision: plan.revision
+    };
   }
 
   private validateSourceUrl(url: string | undefined): asserts url is string {
@@ -869,9 +1044,10 @@ export class CalendarService {
     dueAt: Date | undefined,
     startYmd: string,
     endYmd: string,
-    category: Category
+    category: Category,
+    taskPriority = 3
   ): number {
-    let score = isTaskCategory(category) ? 120 : 90;
+    let score = isTaskCategory(category) ? 120 + (Math.max(1, Math.min(5, taskPriority)) - 3) * 25 : 90;
     if (!dueAt) return score;
 
     const dueDate = toYmd(dueAt);
@@ -898,7 +1074,10 @@ export class CalendarService {
     endAt: Date,
     windowStart: Date,
     days: number,
-    bufferMinutes: number
+    bufferMinutes: number,
+    workdayStartMinutes: number,
+    workdayEndMinutes: number,
+    workingDays: number[]
   ): BusyInterval[] {
     const intervals: BusyInterval[] = [];
     const expandedStart = new Date(startAt.getTime() - bufferMinutes * 60 * 1000);
@@ -907,6 +1086,9 @@ export class CalendarService {
     for (let dayIndex = 0; dayIndex < days; dayIndex += 1) {
       const dayStart = addDays(windowStart, dayIndex);
       const dayEnd = addDays(dayStart, 1);
+      if (!this.isWorkingDay(dayStart, workingDays)) {
+        continue;
+      }
       if (!overlaps(expandedStart.getTime(), expandedEnd.getTime(), dayStart.getTime(), dayEnd.getTime())) {
         continue;
       }
@@ -919,8 +1101,8 @@ export class CalendarService {
       const startMinute = startDate.getUTCHours() * 60 + startDate.getUTCMinutes();
       const endMinute = endDate.getUTCHours() * 60 + endDate.getUTCMinutes();
 
-      const boundedStart = Math.max(WORKDAY_START_MINUTES, startMinute);
-      const boundedEnd = Math.min(WORKDAY_END_MINUTES, endMinute);
+      const boundedStart = Math.max(workdayStartMinutes, startMinute);
+      const boundedEnd = Math.min(workdayEndMinutes, endMinute);
       if (boundedEnd <= boundedStart) {
         continue;
       }
@@ -938,8 +1120,10 @@ export class CalendarService {
   private getCandidateDayOrder(
     candidate: Candidate,
     startYmd: string,
+    windowStart: Date,
     days: number,
     dayLoads: number[],
+    workingDays: number[],
     minimumDayIndex = 0
   ): number[] {
     if (minimumDayIndex >= days) {
@@ -956,9 +1140,13 @@ export class CalendarService {
     if (dueIndex !== null) {
       const boundedDue = Math.max(0, Math.min(days - 1, dueIndex));
       if (boundedDue < minimumDayIndex) {
-        return Array.from({ length: days - minimumDayIndex }, (_, i) => i + minimumDayIndex);
+        return Array.from({ length: days - minimumDayIndex }, (_, i) => i + minimumDayIndex).filter((dayIndex) =>
+          this.isWorkingDay(addDays(windowStart, dayIndex), workingDays)
+        );
       }
-      return Array.from({ length: boundedDue - minimumDayIndex + 1 }, (_, i) => i + minimumDayIndex);
+      return Array.from({ length: boundedDue - minimumDayIndex + 1 }, (_, i) => i + minimumDayIndex).filter((dayIndex) =>
+        this.isWorkingDay(addDays(windowStart, dayIndex), workingDays)
+      );
     }
 
     return Array.from({ length: days - minimumDayIndex }, (_, i) => i + minimumDayIndex).sort((a, b) => {
@@ -966,18 +1154,20 @@ export class CalendarService {
         return a - b;
       }
       return dayLoads[a] - dayLoads[b];
-    });
+    }).filter((dayIndex) => this.isWorkingDay(addDays(windowStart, dayIndex), workingDays));
   }
 
   private findFirstAvailableSlot(
     intervals: Array<{ startMinute: number; endMinute: number }>,
     durationMinutes: number,
-    latestEndMinute = WORKDAY_END_MINUTES,
+    latestEndMinute: number,
     granularityMinutes = SLOT_GRANULARITY_MINUTES,
-    minimumStartMinute = WORKDAY_START_MINUTES
+    minimumStartMinute: number,
+    workdayStartMinutes: number
   ): number | null {
+    const startMinute = Math.max(workdayStartMinutes, minimumStartMinute);
     for (
-      let cursor = minimumStartMinute;
+      let cursor = startMinute;
       cursor + durationMinutes <= latestEndMinute;
       cursor += granularityMinutes
     ) {
@@ -990,22 +1180,105 @@ export class CalendarService {
     return null;
   }
 
-  private getLatestEndMinuteForDay(candidate: Candidate, windowStart: Date, dayIndex: number): number {
+  private getLatestEndMinuteForDay(
+    candidate: Candidate,
+    windowStart: Date,
+    dayIndex: number,
+    workdayEndMinutes: number
+  ): number {
     if (!candidate.dueAt) {
-      return WORKDAY_END_MINUTES;
+      return workdayEndMinutes;
     }
     const dueAt = candidate.dueAt;
     const dueAtMinute = dueAt.getUTCHours() * 60 + dueAt.getUTCMinutes();
     // Date-only due dates are stored at midnight; do not treat them as same-day hard time cutoffs.
     if (dueAtMinute === 0) {
-      return WORKDAY_END_MINUTES;
+      return workdayEndMinutes;
     }
     const dueYmd = toYmd(dueAt);
     const candidateDay = toYmd(addDays(windowStart, dayIndex));
     if (candidateDay !== dueYmd) {
-      return WORKDAY_END_MINUTES;
+      return workdayEndMinutes;
     }
-    return Math.min(WORKDAY_END_MINUTES, dueAtMinute);
+    return Math.min(workdayEndMinutes, dueAtMinute);
+  }
+
+  private isWorkingDay(date: Date, workingDays: number[]): boolean {
+    const day = date.getUTCDay();
+    return workingDays.includes(day);
+  }
+
+  private pushUnscheduled(
+    unscheduled: WeekPlanUnscheduledItem[],
+    warnings: string[],
+    candidate: Candidate,
+    reasonCode: UnscheduledReasonCode,
+    reason: string
+  ): void {
+    unscheduled.push({
+      entryPath: candidate.entryPath,
+      category: candidate.category,
+      title: candidate.title,
+      sourceName: candidate.sourceName,
+      dueDate: candidate.dueDate,
+      durationMinutes: candidate.durationMinutes,
+      reasonCode,
+      reason
+    });
+    warnings.push(reason);
+  }
+
+  private serializeSettings(settings: {
+    workdayStartTime: string;
+    workdayEndTime: string;
+    workingDays: number[] | null;
+  }): CalendarSettingsRecord {
+    return {
+      workdayStartTime: settings.workdayStartTime,
+      workdayEndTime: settings.workdayEndTime,
+      workingDays: normalizeWorkingDays(settings.workingDays)
+    };
+  }
+
+  private async ensureSettingsForUser(userId: string): Promise<{
+    id: string;
+    workdayStartTime: string;
+    workdayEndTime: string;
+    workingDays: number[] | null;
+  }> {
+    const existing = await this.prisma.calendarSettings.findUnique({
+      where: { userId }
+    });
+    if (existing) {
+      return existing;
+    }
+    return this.prisma.calendarSettings.create({
+      data: {
+        userId,
+        workdayStartTime: DEFAULT_WORKDAY_START_TIME,
+        workdayEndTime: DEFAULT_WORKDAY_END_TIME,
+        workingDays: [...DEFAULT_WORKING_DAYS]
+      }
+    });
+  }
+
+  private computePlanRevision(
+    startDate: string,
+    endDate: string,
+    items: WeekPlanItem[],
+    unscheduled: WeekPlanUnscheduledItem[],
+    granularityMinutes: number,
+    bufferMinutes: number
+  ): string {
+    const payload = JSON.stringify({
+      startDate,
+      endDate,
+      granularityMinutes,
+      bufferMinutes,
+      items,
+      unscheduled
+    });
+    return crypto.createHash('sha1').update(payload).digest('hex').slice(0, 16);
   }
 }
 

@@ -9,6 +9,7 @@ const MAX_GRANULARITY_MINUTES = 60;
 const MIN_BUFFER_MINUTES = 0;
 const MAX_BUFFER_MINUTES = 120;
 const FEED_DEFAULT_DAYS = 14;
+const TIME_REGEX = /^\d{2}:\d{2}$/;
 
 function parseDays(raw: unknown): number | undefined {
   if (raw === undefined) return undefined;
@@ -43,6 +44,14 @@ function parseBuffer(raw: unknown): number | undefined {
 
 function isBoolean(value: unknown): value is boolean {
   return typeof value === 'boolean';
+}
+
+function parseWorkingDays(value: unknown): number[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => Number(item))
+    .filter((item) => Number.isInteger(item) && item >= 0 && item <= 6);
 }
 
 export const calendarPublicRouter = Router();
@@ -105,7 +114,7 @@ calendarPublicRouter.get('/feed.ics', async (req: Request, res: Response) => {
   }
 
   try {
-    const ics = await calendarService.buildIcsFeedForUser(verified.userId, {
+    const feed = await calendarService.buildIcsFeedForUser(verified.userId, {
       startDate,
       days: parsedDays ?? FEED_DEFAULT_DAYS,
       granularityMinutes: parsedGranularity,
@@ -117,9 +126,82 @@ calendarPublicRouter.get('/feed.ics', async (req: Request, res: Response) => {
     res.setHeader('Surrogate-Control', 'no-store');
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Content-Disposition', 'inline; filename="second-brain-week-plan.ics"');
-    res.send(ics);
+    res.setHeader('X-Generated-At', feed.generatedAt);
+    res.setHeader('X-Plan-Revision', feed.revision);
+    res.send(feed.ics);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to build calendar feed';
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message
+      }
+    });
+  }
+});
+
+calendarRouter.get('/settings', async (_req: Request, res: Response) => {
+  const calendarService = getCalendarService();
+  const userId = requireUserId();
+  const settings = await calendarService.getSettingsForUser(userId);
+  res.json(settings);
+});
+
+calendarRouter.patch('/settings', async (req: Request, res: Response) => {
+  const calendarService = getCalendarService();
+  const userId = requireUserId();
+  const { workdayStartTime, workdayEndTime, workingDays } = req.body || {};
+  const updates: {
+    workdayStartTime?: string;
+    workdayEndTime?: string;
+    workingDays?: number[];
+  } = {};
+
+  if (workdayStartTime !== undefined) {
+    if (typeof workdayStartTime !== 'string' || !TIME_REGEX.test(workdayStartTime)) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'workdayStartTime must use HH:mm format'
+        }
+      });
+      return;
+    }
+    updates.workdayStartTime = workdayStartTime;
+  }
+
+  if (workdayEndTime !== undefined) {
+    if (typeof workdayEndTime !== 'string' || !TIME_REGEX.test(workdayEndTime)) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'workdayEndTime must use HH:mm format'
+        }
+      });
+      return;
+    }
+    updates.workdayEndTime = workdayEndTime;
+  }
+
+  if (workingDays !== undefined) {
+    const parsed = parseWorkingDays(workingDays);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'workingDays must be an array of integers between 0 and 6'
+        }
+      });
+      return;
+    }
+    updates.workingDays = parsed;
+  }
+
+  try {
+    const settings = await calendarService.updateSettingsForUser(userId, updates);
+    res.json(settings);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update settings';
     res.status(400).json({
       error: {
         code: 'VALIDATION_ERROR',
@@ -175,6 +257,60 @@ calendarRouter.get('/plan-week', async (req: Request, res: Response) => {
     res.json(plan);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to build week plan';
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message
+      }
+    });
+  }
+});
+
+calendarRouter.post('/replan', async (req: Request, res: Response) => {
+  const calendarService = getCalendarService();
+  const userId = requireUserId();
+  const { startDate, days, granularityMinutes, bufferMinutes } = req.body || {};
+  const parsedDays = parseDays(days);
+  const parsedGranularity = parseGranularity(granularityMinutes);
+  const parsedBuffer = parseBuffer(bufferMinutes);
+  if (Number.isNaN(parsedDays)) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: `Invalid days. Use an integer between ${MIN_DAYS} and ${MAX_DAYS}`
+      }
+    });
+    return;
+  }
+  if (Number.isNaN(parsedGranularity)) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: `Invalid granularityMinutes. Use an integer between ${MIN_GRANULARITY_MINUTES} and ${MAX_GRANULARITY_MINUTES}`
+      }
+    });
+    return;
+  }
+  if (Number.isNaN(parsedBuffer)) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: `Invalid bufferMinutes. Use an integer between ${MIN_BUFFER_MINUTES} and ${MAX_BUFFER_MINUTES}`
+      }
+    });
+    return;
+  }
+
+  try {
+    const plan = await calendarService.buildReplanForUser(userId, {
+      startDate: typeof startDate === 'string' ? startDate : undefined,
+      days: parsedDays,
+      granularityMinutes: parsedGranularity,
+      bufferMinutes: parsedBuffer
+    });
+    res.json(plan);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to replan schedule';
     res.status(400).json({
       error: {
         code: 'VALIDATION_ERROR',

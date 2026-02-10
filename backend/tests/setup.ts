@@ -60,6 +60,7 @@ export async function resetDatabase(): Promise<void> {
   await prisma.$transaction([
     prisma.calendarBusyBlock.deleteMany(),
     prisma.calendarSource.deleteMany(),
+    prisma.calendarSettings.deleteMany(),
     prisma.entryLink.deleteMany(),
     prisma.entryEmbedding.deleteMany(),
     prisma.entryRevision.deleteMany(),

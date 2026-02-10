@@ -50,6 +50,7 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
   const [linkBusyKey, setLinkBusyKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'schedule' | 'links' | 'meta'>('overview');
   const [taskDurationDraft, setTaskDurationDraft] = useState<string>('');
+  const [taskPriorityDraft, setTaskPriorityDraft] = useState<string>('3');
   const [taskDueDateDraft, setTaskDueDateDraft] = useState<string>('');
   const [taskDueTimeDraft, setTaskDueTimeDraft] = useState<string>('');
   const [taskDueTimeEnabled, setTaskDueTimeEnabled] = useState<boolean>(false);
@@ -87,6 +88,7 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
   useEffect(() => {
     if (!entry || !isTaskCategory(entry.category)) {
       setTaskDurationDraft('');
+      setTaskPriorityDraft('3');
       setTaskDueDateDraft('');
       setTaskDueTimeDraft('');
       setTaskDueTimeEnabled(false);
@@ -96,11 +98,13 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
       return;
     }
     const duration = (entry.entry as any).duration_minutes;
+    const priority = (entry.entry as any).priority;
     const dueAt = selectTaskDueInput((entry.entry as any).due_date, (entry.entry as any).due_at);
     const fixedAt = (entry.entry as any).fixed_at;
     const dueDraft = parseTaskDateTime(dueAt);
     const fixedDraft = parseTaskDateTime(fixedAt);
     setTaskDurationDraft(duration ? String(duration) : '30');
+    setTaskPriorityDraft(priority ? String(priority) : '3');
     setTaskDueDateDraft(dueDraft.date);
     setTaskDueTimeDraft(dueDraft.time);
     setTaskDueTimeEnabled(dueDraft.hasTime);
@@ -258,6 +262,11 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
       setTaskScheduleError('Duration must be between 5 and 720 minutes.');
       return;
     }
+    const parsedPriority = Number(taskPriorityDraft || '3');
+    if (!Number.isFinite(parsedPriority) || parsedPriority < 1 || parsedPriority > 5) {
+      setTaskScheduleError('Priority must be between 1 (low) and 5 (high).');
+      return;
+    }
 
     setIsSavingTaskSchedule(true);
     setTaskScheduleError(null);
@@ -275,6 +284,7 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
       const updated = await runMutationAndRefresh(
         () => api.entries.update(entry.path, {
           duration_minutes: Math.floor(parsedDuration),
+          priority: Math.floor(parsedPriority),
           ...duePayload,
           ...fixedPayload
         }),
@@ -364,7 +374,7 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
   };
 
   const hiddenFields = ['id', 'name', 'suggested_name', 'source_channel'];
-  const taskScheduleFields = ['due_date', 'due_at', 'duration_minutes', 'fixed_at'];
+  const taskScheduleFields = ['due_date', 'due_at', 'duration_minutes', 'fixed_at', 'priority'];
   const metaFields = ['created_at', 'updated_at', 'confidence', 'total_focus_minutes', 'last_touched'];
 
   const getOverviewFieldEntries = (value: Record<string, unknown>) =>
@@ -487,6 +497,9 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
                         Duration: {(entry.entry as any).duration_minutes ?? 30}m
                       </p>
                       <p className="text-sm">
+                        Priority: {(entry.entry as any).priority ?? 3}/5
+                      </p>
+                      <p className="text-sm">
                         Deadline: {formatTaskDeadline((entry.entry as any).due_date, (entry.entry as any).due_at)}
                       </p>
                       <p className="text-sm">
@@ -591,6 +604,21 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
                           onChange={(event) => setTaskDurationDraft(event.target.value)}
                           disabled={isSavingTaskSchedule}
                         />
+                      </label>
+                      <label className="space-y-1 block">
+                        <span className="text-xs text-muted-foreground">Priority</span>
+                        <select
+                          className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+                          value={taskPriorityDraft}
+                          onChange={(event) => setTaskPriorityDraft(event.target.value)}
+                          disabled={isSavingTaskSchedule}
+                        >
+                          <option value="1">1 (Low)</option>
+                          <option value="2">2</option>
+                          <option value="3">3 (Medium)</option>
+                          <option value="4">4</option>
+                          <option value="5">5 (High)</option>
+                        </select>
                       </label>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <label className="space-y-1">

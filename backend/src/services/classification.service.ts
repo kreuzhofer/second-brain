@@ -479,6 +479,14 @@ ${context.indexContent || '(No existing entries)'}
       Number.isFinite(parsedDuration) && parsedDuration >= 5
         ? Math.floor(parsedDuration)
         : undefined;
+    const rawPriority = fields.priority;
+    const parsedPriority = typeof rawPriority === 'number'
+      ? rawPriority
+      : (typeof rawPriority === 'string' && rawPriority.trim() !== '' ? Number(rawPriority) : NaN);
+    const priority =
+      Number.isFinite(parsedPriority) && parsedPriority >= 1 && parsedPriority <= 5
+        ? Math.floor(parsedPriority)
+        : undefined;
 
     return {
       status: 'pending',
@@ -492,6 +500,7 @@ ${context.indexContent || '(No existing entries)'}
       fixedAt: fields.fixedAt || fields.fixed_at
         ? String(fields.fixedAt || fields.fixed_at)
         : undefined,
+      priority,
       relatedPeople: this.normalizeStringArray(
         fields.relatedPeople || fields.related_people
       ),

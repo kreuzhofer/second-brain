@@ -601,6 +601,8 @@ export class ToolExecutor {
     const normalizedFixedAt = typeof rawFixedAt === 'string' && rawFixedAt.trim() ? rawFixedAt : undefined;
     const rawDurationMinutes = fields.durationMinutes ?? fields.duration_minutes;
     const inferredDurationMinutes = this.extractDurationMinutes(rawDurationMinutes, sourceText);
+    const rawPriority = fields.priority;
+    const inferredPriority = this.extractTaskPriority(rawPriority, sourceText);
 
     switch (result.category) {
       case 'people':
@@ -632,7 +634,8 @@ export class ToolExecutor {
           due_date: normalizedDueDate,
           due_at: normalizedDueAt,
           duration_minutes: inferredDurationMinutes,
-          fixed_at: normalizedFixedAt
+          fixed_at: normalizedFixedAt,
+          priority: inferredPriority
         };
     }
   }
@@ -658,6 +661,32 @@ export class ToolExecutor {
       return Math.max(5, Math.floor(Number(hourMatch[1]) * 60));
     }
 
+    return undefined;
+  }
+
+  private extractTaskPriority(rawValue: unknown, sourceText: string): number | undefined {
+    if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
+      const bounded = Math.floor(rawValue);
+      return bounded >= 1 && bounded <= 5 ? bounded : undefined;
+    }
+    if (typeof rawValue === 'string' && rawValue.trim()) {
+      const parsed = Number(rawValue);
+      if (Number.isFinite(parsed)) {
+        const bounded = Math.floor(parsed);
+        return bounded >= 1 && bounded <= 5 ? bounded : undefined;
+      }
+    }
+
+    const lowered = sourceText.toLowerCase();
+    if (/\b(urgent|highest priority|very important)\b/.test(lowered)) {
+      return 5;
+    }
+    if (/\b(high priority|important)\b/.test(lowered)) {
+      return 4;
+    }
+    if (/\b(low priority|someday|whenever)\b/.test(lowered)) {
+      return 2;
+    }
     return undefined;
   }
 

@@ -70,6 +70,11 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Calendar blocker ingest phase 1: Completed (external ICS/WebCal sources + busy-block-aware autoscheduling)
 - Relationship insights phase 1: Completed (top people/project summaries from graph links)
 - Task autoscheduler v1 + calendar export coherence: Completed (configurable slot granularity, blocker buffers, stable ICS UIDs)
+- Task detail modal schedule UX cleanup: Completed (overview/schedule/meta tabs, reduced clutter, explicit mark-done action)
+- Task deadline display/save correctness: Completed (date-only deadlines no longer render fake local times; date-only saves preserved)
+- Task list consistency after modal mutations: Completed (save/mark-done/notes edits trigger shared entries refresh)
+- Focus list expansion control: Completed (default top 5 + Show all/Show less for pending focus items)
+- Task model rework phase 3: Completed (task priority editor, working-hours settings, manual replan endpoint, structured unscheduled reasons, feed freshness metadata)
 
 ## Notes
 - Prioritize backend-first slices where possible.
@@ -84,7 +89,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 ### Priority Next
 - Entity graph analytics phase 3: graph-level filters and richer link inspection views in modal/panel surfaces.
 - Relationship insights phase 2: add project-centric insights, trend windows, and actionable follow-up suggestions.
-- Task model rework phase 3: task priority editor + configurable working hours + optional proactive replan trigger endpoint.
+- Task scheduling automation phase 4: proactive replan trigger orchestration (on task mutations/blocker sync), schedule explanation UX, and configurable planning policy presets.
 
 ### Admin -> Task Migration Plan (Phases 1-3)
 1. Phase 1 (DB migration, additive + backfill):
@@ -151,6 +156,17 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Structured analytics dashboard for usage metrics.
 
 ## Progress Log
+- 2026-02-10: Completed Task model rework phase 3 end-to-end.
+- 2026-02-10: Added task-level `priority` (1-5) persistence in `AdminTaskDetails`, API create/update/list/read payloads, tool capture normalization, and entry-modal schedule editor controls.
+- 2026-02-10: Added per-user calendar scheduler settings (`workdayStartTime`, `workdayEndTime`, `workingDays`) with new calendar settings API (`GET/PATCH /api/calendar/settings`) and planner enforcement of non-working days/hours.
+- 2026-02-10: Added manual replan endpoint (`POST /api/calendar/replan`) and planner response metadata (`generatedAt`, `revision`) with feed freshness headers (`X-Generated-At`, `X-Plan-Revision`) on ICS responses.
+- 2026-02-10: Added structured unscheduled plan payload (`unscheduled[]` with `reasonCode`) and Focus calendar UI surfacing for unscheduled items plus working-hours controls and explicit `Replan now`.
+- 2026-02-10: Verification complete: full workspace tests passing (`frontend 7/7`, `backend 75/75`, `910` backend tests), workspace build pass, and Docker rebuild/redeploy (`docker compose up -d --build`) pass.
+- 2026-02-10: Added focus-list expansion in Focus tab (`Show all (N)` / `Show less`) so pending tasks beyond default top 5 are accessible without page reload.
+- 2026-02-10: Completed task detail modal UX cleanup: split into `Overview`, `Schedule`, `Links`, `Meta` tabs; moved non-essential metadata out of default view; added explicit mark-done action.
+- 2026-02-10: Fixed deadline rendering ambiguity: date-only task deadlines no longer show timezone-shifted clock values (e.g. `01:00:00`) in UI.
+- 2026-02-10: Fixed date-only schedule save regression: editing a date-only deadline no longer clears due date on save.
+- 2026-02-10: Wired entry-modal task mutations (schedule save, mark done, notes save) to shared entries refresh so Focus/task lists update immediately without manual refresh.
 - 2026-02-10: Completed auto-scheduler v1 + calendar export coherence slice.
 - 2026-02-10: Added `granularityMinutes` and `bufferMinutes` support to week planning/feed APIs (`/api/calendar/plan-week`, `/api/calendar/feed.ics`) with validation and defaults.
 - 2026-02-10: Added planner support for blocker buffers by expanding busy windows before slot search; added configurable slot step for flexible-task placement.

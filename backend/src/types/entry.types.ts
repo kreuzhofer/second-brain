@@ -62,6 +62,7 @@ export interface AdminEntry extends BaseEntry {
   due_at?: string;
   duration_minutes?: number;
   fixed_at?: string;
+  priority?: number;
 }
 
 /**
@@ -158,6 +159,7 @@ export interface EntrySummary {
   due_at?: string;
   duration_minutes?: number;
   fixed_at?: string;
+  priority?: number;
   context?: string;
   last_touched?: string;
   original_text?: string;
@@ -212,6 +214,7 @@ export interface CreateAdminInput {
   due_at?: string;
   duration_minutes?: number;
   fixed_at?: string;
+  priority?: number;
   tags?: string[];
   source_channel: Channel;
   confidence: number;
@@ -272,6 +275,7 @@ export interface UpdateAdminInput {
   due_at?: string | null;
   duration_minutes?: number;
   fixed_at?: string | null;
+  priority?: number;
   tags?: string[];
   confidence?: number;
 }

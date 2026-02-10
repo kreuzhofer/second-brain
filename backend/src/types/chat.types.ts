@@ -77,6 +77,7 @@ export interface AdminFields {
   dueAt?: string;
   durationMinutes?: number;
   fixedAt?: string;
+  priority?: number;
   relatedPeople: string[];
 }
 

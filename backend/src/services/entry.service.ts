@@ -119,6 +119,18 @@ function parseTaskDurationMinutes(value: unknown, fallback = 30): number {
   return rounded;
 }
 
+function parseTaskPriority(value: unknown, fallback = 3): number {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new InvalidEntryDataError('priority must be an integer between 1 and 5');
+  }
+  const rounded = Math.floor(value);
+  if (rounded < 1 || rounded > 5) {
+    throw new InvalidEntryDataError('priority must be between 1 and 5');
+  }
+  return rounded;
+}
+
 function parseEntryPath(path: string): { category: Category; slug: string } {
   const [rawCategory, rawSlug] = path.split('/');
   if (!rawCategory || !rawSlug) {
@@ -264,7 +276,8 @@ export class EntryService {
             status: payload.status || 'pending',
             dueDate,
             durationMinutes: parseTaskDurationMinutes(payload.duration_minutes, 30),
-            fixedAt: parseOptionalDateTime(payload.fixed_at, 'fixed_at')
+            fixedAt: parseOptionalDateTime(payload.fixed_at, 'fixed_at'),
+            priority: parseTaskPriority(payload.priority, 3)
           }
         });
       }
@@ -428,6 +441,7 @@ export class EntryService {
           summary.fixed_at = entry.adminDetails.fixedAt
             ? entry.adminDetails.fixedAt.toISOString()
             : undefined;
+          summary.priority = entry.adminDetails.priority ?? 3;
         }
 
         if (entry.category === 'ideas' && entry.ideaDetails) {
@@ -543,6 +557,7 @@ export class EntryService {
         const hasDueDate = Object.prototype.hasOwnProperty.call(updates as any, 'due_date');
         const hasDurationMinutes = Object.prototype.hasOwnProperty.call(updates as any, 'duration_minutes');
         const hasFixedAt = Object.prototype.hasOwnProperty.call(updates as any, 'fixed_at');
+        const hasPriority = Object.prototype.hasOwnProperty.call(updates as any, 'priority');
 
         let dueDateData: Date | null | undefined;
         if (hasDueAt) {
@@ -564,13 +579,19 @@ export class EntryService {
           fixedAtData = parseOptionalDateTime((updates as any).fixed_at, 'fixed_at');
         }
 
+        let priorityData: number | undefined;
+        if (hasPriority) {
+          priorityData = parseTaskPriority((updates as any).priority, existing.adminDetails?.priority ?? 3);
+        }
+
         await tx.adminTaskDetails.update({
           where: { entryId: existing.id },
           data: {
             status: (updates as any).status ?? existing.adminDetails?.status,
             dueDate: dueDateData,
             durationMinutes: durationMinutesData,
-            fixedAt: fixedAtData
+            fixedAt: fixedAtData,
+            priority: priorityData
           }
         });
       }
@@ -749,7 +770,8 @@ export class EntryService {
             status: entry.status || 'pending',
             dueDate,
             durationMinutes: parseTaskDurationMinutes(entry.duration_minutes, 30),
-            fixedAt: parseOptionalDateTime(entry.fixed_at, 'fixed_at')
+            fixedAt: parseOptionalDateTime(entry.fixed_at, 'fixed_at'),
+            priority: parseTaskPriority(entry.priority, 3)
           }
         });
       }
@@ -950,7 +972,8 @@ export class EntryService {
           duration_minutes: entry.adminDetails?.durationMinutes ?? 30,
           fixed_at: entry.adminDetails?.fixedAt
             ? entry.adminDetails.fixedAt.toISOString()
-            : undefined
+            : undefined,
+          priority: entry.adminDetails?.priority ?? 3
         } as AdminEntry;
       case 'inbox':
         return {
@@ -1033,7 +1056,8 @@ export class EntryService {
         transformed = {
           ...base,
           status: 'pending',
-          duration_minutes: 30
+          duration_minutes: 30,
+          priority: 3
         } as AdminEntry;
         break;
       case 'inbox':

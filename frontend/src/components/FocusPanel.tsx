@@ -8,7 +8,8 @@ import {
   RelationshipInsight,
   WeekPlanResponse,
   CalendarPublishResponse,
-  CalendarSource
+  CalendarSource,
+  CalendarSettings
 } from '@/services/api';
 import { useEntries } from '@/state/entries';
 import { getFocusRailButtonClass } from '@/components/layout-shell-helpers';
@@ -76,6 +77,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const [calendarSourceName, setCalendarSourceName] = useState('');
   const [calendarSourceUrl, setCalendarSourceUrl] = useState('');
   const [calendarSourceActionId, setCalendarSourceActionId] = useState<string | null>(null);
+  const [calendarSettings, setCalendarSettings] = useState<CalendarSettings | null>(null);
+  const [calendarSettingsSaving, setCalendarSettingsSaving] = useState(false);
 
   const handleRefresh = async () => {
     await refresh();
@@ -93,7 +96,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       }
     }
     if (activeTab === 'calendar') {
-      await Promise.all([loadCalendarPlan(), loadCalendarSources()]);
+      await Promise.all([loadCalendarPlan(), loadCalendarSources(), loadCalendarSettings()]);
     }
   };
 
@@ -108,6 +111,47 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       setCalendarPlan(plan);
     } catch (err) {
       setCalendarError(err instanceof Error ? err.message : 'Failed to load week plan');
+    } finally {
+      setCalendarLoading(false);
+    }
+  };
+
+  const loadCalendarSettings = async () => {
+    try {
+      const settings = await api.calendar.settings();
+      setCalendarSettings(settings);
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to load calendar settings');
+    }
+  };
+
+  const saveCalendarSettings = async () => {
+    if (!calendarSettings) return;
+    setCalendarError(null);
+    setCalendarSettingsSaving(true);
+    try {
+      const updated = await api.calendar.updateSettings(calendarSettings);
+      setCalendarSettings(updated);
+      await loadCalendarPlan();
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to save calendar settings');
+    } finally {
+      setCalendarSettingsSaving(false);
+    }
+  };
+
+  const runManualReplan = async () => {
+    setCalendarError(null);
+    setCalendarLoading(true);
+    try {
+      const plan = await api.calendar.replan({
+        days: calendarPlanDays,
+        granularityMinutes: calendarGranularityMinutes,
+        bufferMinutes: calendarBufferMinutes
+      });
+      setCalendarPlan(plan);
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to replan');
     } finally {
       setCalendarLoading(false);
     }
@@ -248,7 +292,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
 
   useEffect(() => {
     if (activeTab !== 'calendar') return;
-    Promise.all([loadCalendarPlan(), loadCalendarSources()]);
+    Promise.all([loadCalendarPlan(), loadCalendarSources(), loadCalendarSettings()]);
   }, [activeTab, calendarPlanDays, calendarGranularityMinutes, calendarBufferMinutes, entries.length]);
 
   const focusItems = useMemo<FocusItem[]>(() => {
@@ -526,6 +570,15 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                     </option>
                   ))}
                 </select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2 text-xs"
+                  onClick={runManualReplan}
+                  disabled={calendarLoading}
+                >
+                  Replan now
+                </Button>
               </div>
             )}
             <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isLoading}>
@@ -612,6 +665,9 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 <div className="text-xs text-muted-foreground">
                   {calendarPlan.items.length} scheduled block(s)
                 </div>
+                <div className="text-[11px] text-muted-foreground">
+                  Generated {formatDate(calendarPlan.generatedAt)} | Rev {calendarPlan.revision}
+                </div>
                 {calendarPlan.warnings && calendarPlan.warnings.length > 0 && (
                   <div className="text-xs text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-md px-2 py-1">
                     {calendarPlan.warnings.length} item(s) could not be scheduled in this window.
@@ -619,6 +675,91 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 )}
               </div>
             )}
+
+            <div className="rounded-md border border-border p-2.5 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Working hours</div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2 text-xs"
+                  onClick={saveCalendarSettings}
+                  disabled={!calendarSettings || calendarSettingsSaving}
+                >
+                  {calendarSettingsSaving ? 'Saving...' : 'Save hours'}
+                </Button>
+              </div>
+              {calendarSettings && (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-1">
+                      <span className="text-[11px] text-muted-foreground">Start</span>
+                      <input
+                        type="time"
+                        className="h-11 w-full rounded-md border border-input bg-background px-3 text-base sm:text-sm"
+                        value={calendarSettings.workdayStartTime}
+                        onChange={(event) =>
+                          setCalendarSettings((prev) =>
+                            prev ? { ...prev, workdayStartTime: event.target.value } : prev
+                          )
+                        }
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[11px] text-muted-foreground">End</span>
+                      <input
+                        type="time"
+                        className="h-11 w-full rounded-md border border-input bg-background px-3 text-base sm:text-sm"
+                        value={calendarSettings.workdayEndTime}
+                        onChange={(event) =>
+                          setCalendarSettings((prev) =>
+                            prev ? { ...prev, workdayEndTime: event.target.value } : prev
+                          )
+                        }
+                      />
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { value: 1, label: 'Mon' },
+                      { value: 2, label: 'Tue' },
+                      { value: 3, label: 'Wed' },
+                      { value: 4, label: 'Thu' },
+                      { value: 5, label: 'Fri' },
+                      { value: 6, label: 'Sat' },
+                      { value: 0, label: 'Sun' }
+                    ].map((day) => {
+                      const enabled = calendarSettings.workingDays.includes(day.value);
+                      return (
+                        <button
+                          key={day.value}
+                          type="button"
+                          className={`h-9 rounded-md border px-2 text-xs ${
+                            enabled
+                              ? 'border-foreground bg-foreground text-background'
+                              : 'border-border text-muted-foreground'
+                          }`}
+                          onClick={() => {
+                            setCalendarSettings((prev) => {
+                              if (!prev) return prev;
+                              const next = enabled
+                                ? prev.workingDays.filter((current) => current !== day.value)
+                                : [...prev.workingDays, day.value].sort((a, b) => a - b);
+                              return {
+                                ...prev,
+                                workingDays: next.length > 0 ? next : prev.workingDays
+                              };
+                            });
+                          }}
+                        >
+                          {day.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
 
             <div className="rounded-md border border-border p-2.5 space-y-2">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">External blocker calendars</div>
@@ -798,6 +939,25 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                     {calendarBlocksExpanded ? 'Show less' : `Show all (${calendarPlan.items.length})`}
                   </Button>
                 )}
+              </div>
+            )}
+            {!calendarLoading && calendarPlan && calendarPlan.unscheduled.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Unscheduled</div>
+                {calendarPlan.unscheduled.map((item) => (
+                  <button
+                    key={`${item.entryPath}-${item.reasonCode}`}
+                    type="button"
+                    onClick={() => onEntryClick(item.entryPath)}
+                    className="w-full min-h-[44px] rounded-md border border-amber-500/40 bg-amber-500/10 p-2 sm:p-2.5 text-left"
+                  >
+                    <div className="text-sm font-medium">{item.sourceName}</div>
+                    <div className="mt-1 text-xs text-amber-800">{item.reason}</div>
+                    <div className="mt-1 text-[11px] text-amber-900/80 uppercase tracking-wide">
+                      {item.reasonCode.replace(/_/g, ' ')}
+                    </div>
+                  </button>
+                ))}
               </div>
             )}
             {!calendarLoading && calendarPlan && calendarPlan.items.length === 0 && (

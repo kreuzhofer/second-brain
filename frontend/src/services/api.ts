@@ -83,6 +83,7 @@ export interface EntrySummary {
   due_at?: string;
   duration_minutes?: number;
   fixed_at?: string;
+  priority?: number;
   context?: string;
   last_touched?: string;
   original_text?: string;
@@ -143,6 +144,17 @@ export interface WeekPlanItem {
   reason: string;
 }
 
+export interface WeekPlanUnscheduledItem {
+  entryPath: string;
+  category: Category;
+  title: string;
+  sourceName: string;
+  dueDate?: string;
+  durationMinutes: number;
+  reasonCode: 'outside_window' | 'outside_working_hours' | 'fixed_conflict' | 'no_free_slot';
+  reason: string;
+}
+
 export interface WeekPlanResponse {
   startDate: string;
   endDate: string;
@@ -151,6 +163,9 @@ export interface WeekPlanResponse {
   items: WeekPlanItem[];
   totalMinutes: number;
   warnings?: string[];
+  unscheduled: WeekPlanUnscheduledItem[];
+  generatedAt: string;
+  revision: string;
 }
 
 export interface CalendarPublishResponse {
@@ -177,6 +192,12 @@ export interface CalendarSyncResponse {
   source: CalendarSource;
   importedBlocks: number;
   totalBlocks: number;
+}
+
+export interface CalendarSettings {
+  workdayStartTime: string;
+  workdayEndTime: string;
+  workingDays: number[];
 }
 
 export interface RelationshipInsightsResponse {
@@ -599,6 +620,26 @@ class ApiClient {
     listSources: async (): Promise<CalendarSource[]> => {
       const response = await this.request<{ sources: CalendarSource[] }>('/calendar/sources');
       return response.sources;
+    },
+    settings: async (): Promise<CalendarSettings> => {
+      return this.request<CalendarSettings>('/calendar/settings');
+    },
+    updateSettings: async (payload: Partial<CalendarSettings>): Promise<CalendarSettings> => {
+      return this.request<CalendarSettings>('/calendar/settings', {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+    },
+    replan: async (payload?: {
+      startDate?: string;
+      days?: number;
+      granularityMinutes?: number;
+      bufferMinutes?: number;
+    }): Promise<WeekPlanResponse> => {
+      return this.request<WeekPlanResponse>('/calendar/replan', {
+        method: 'POST',
+        body: JSON.stringify(payload || {})
+      });
     },
     createSource: async (payload: { name: string; url: string; color?: string }): Promise<CalendarSource> => {
       return this.request<CalendarSource>('/calendar/sources', {

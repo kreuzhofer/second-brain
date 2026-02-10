@@ -87,6 +87,7 @@ model User {
   entryLinks         EntryLink[]
   calendarSources    CalendarSource[]
   calendarBusyBlocks CalendarBusyBlock[]
+  calendarSettings   CalendarSettings?
 }
 
 model Conversation {
@@ -277,6 +278,18 @@ model AdminTaskDetails {
   dueDate          DateTime?
   durationMinutes  Int         @default(30)
   fixedAt          DateTime?
+  priority         Int         @default(3)
+}
+
+model CalendarSettings {
+  id               String   @id @default(uuid())
+  userId           String?  @unique
+  user             User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workdayStartTime String   @default("09:00")
+  workdayEndTime   String   @default("17:00")
+  workingDays      Int[]    @default([1, 2, 3, 4, 5])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model IdeaDetails {

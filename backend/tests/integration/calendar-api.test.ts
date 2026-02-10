@@ -143,6 +143,8 @@ describe('Calendar API Integration Tests', () => {
 
     expect(feedResponse.headers['content-type']).toContain('text/calendar');
     expect(feedResponse.headers['cache-control']).toContain('no-store');
+    expect(feedResponse.headers['x-generated-at']).toBeTruthy();
+    expect(feedResponse.headers['x-plan-revision']).toBeTruthy();
     expect(feedResponse.text).toContain('BEGIN:VCALENDAR');
     expect(feedResponse.text).toContain('REFRESH-INTERVAL;VALUE=DURATION:PT5M');
     expect(feedResponse.text).toContain('X-PUBLISHED-TTL:PT5M');
@@ -571,5 +573,201 @@ describe('Calendar API Integration Tests', () => {
     expect(item).toBeDefined();
     expect(new Date(item.start).getTime()).toBeGreaterThanOrEqual(now.getTime());
     expect(item.reason).toContain('Rescheduled after missed fixed slot');
+  });
+
+  it('gets and updates scheduler settings, then applies working hours to planning', async () => {
+    const initial = await request(app)
+      .get('/api/calendar/settings')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(initial.body).toEqual(
+      expect.objectContaining({
+        workdayStartTime: '09:00',
+        workdayEndTime: '17:00',
+        workingDays: [1, 2, 3, 4, 5]
+      })
+    );
+
+    const updated = await request(app)
+      .patch('/api/calendar/settings')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        workdayStartTime: '13:00',
+        workdayEndTime: '15:00',
+        workingDays: [1]
+      })
+      .expect(200);
+
+    expect(updated.body).toEqual(
+      expect.objectContaining({
+        workdayStartTime: '13:00',
+        workdayEndTime: '15:00',
+        workingDays: [1]
+      })
+    );
+
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Afternoon-only test task',
+        status: 'pending',
+        due_date: '2026-02-09',
+        source_channel: 'api',
+        confidence: 0.9
+      })
+      .expect(201);
+
+    const plan = await request(app)
+      .get('/api/calendar/plan-week?startDate=2026-02-09&days=1')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(plan.body.items).toHaveLength(1);
+    expect(plan.body.items[0].start).toContain('2026-02-09T13:00:00.000Z');
+  });
+
+  it('uses task priority to schedule higher priority tasks first', async () => {
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Low priority task',
+        status: 'pending',
+        due_date: '2026-02-09',
+        priority: 1,
+        source_channel: 'api',
+        confidence: 0.9
+      })
+      .expect(201);
+
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'High priority task',
+        status: 'pending',
+        due_date: '2026-02-09',
+        priority: 5,
+        source_channel: 'api',
+        confidence: 0.9
+      })
+      .expect(201);
+
+    const plan = await request(app)
+      .get('/api/calendar/plan-week?startDate=2026-02-09&days=1')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(plan.body.items).toHaveLength(2);
+    expect(plan.body.items[0].entryPath).toBe('task/high-priority-task');
+    expect(plan.body.items[1].entryPath).toBe('task/low-priority-task');
+  });
+
+  it('exposes a manual replan endpoint', async () => {
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Replan endpoint task',
+        status: 'pending',
+        due_date: '2026-02-09',
+        source_channel: 'api',
+        confidence: 0.9
+      })
+      .expect(201);
+
+    const response = await request(app)
+      .post('/api/calendar/replan')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        startDate: '2026-02-09',
+        days: 1
+      })
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        startDate: '2026-02-09',
+        endDate: '2026-02-09',
+        items: expect.any(Array),
+        generatedAt: expect.any(String),
+        revision: expect.any(String)
+      })
+    );
+  });
+
+  it('returns structured unscheduled reasons when no slots remain', async () => {
+    await request(app)
+      .patch('/api/calendar/settings')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        workdayStartTime: '09:00',
+        workdayEndTime: '10:00',
+        workingDays: [1]
+      })
+      .expect(200);
+
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Task A',
+        status: 'pending',
+        due_date: '2026-02-09',
+        duration_minutes: 30,
+        source_channel: 'api',
+        confidence: 0.9
+      })
+      .expect(201);
+
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Task B',
+        status: 'pending',
+        due_date: '2026-02-09',
+        duration_minutes: 30,
+        source_channel: 'api',
+        confidence: 0.9
+      })
+      .expect(201);
+
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Task C',
+        status: 'pending',
+        due_date: '2026-02-09',
+        duration_minutes: 30,
+        source_channel: 'api',
+        confidence: 0.9
+      })
+      .expect(201);
+
+    const plan = await request(app)
+      .get('/api/calendar/plan-week?startDate=2026-02-09&days=1')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(plan.body.items).toHaveLength(2);
+    expect(Array.isArray(plan.body.unscheduled)).toBe(true);
+    expect(plan.body.unscheduled.length).toBeGreaterThan(0);
+    expect(plan.body.unscheduled[0]).toEqual(
+      expect.objectContaining({
+        entryPath: expect.any(String),
+        reasonCode: expect.stringMatching(/no_free_slot|outside_working_hours|fixed_conflict/)
+      })
+    );
   });
 });
