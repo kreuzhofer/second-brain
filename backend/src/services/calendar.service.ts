@@ -8,6 +8,8 @@ import { isTaskCategory } from '../utils/category';
 export interface WeekPlanOptions {
   startDate?: string;
   days?: number;
+  granularityMinutes?: number;
+  bufferMinutes?: number;
 }
 
 export interface WeekPlanItem {
@@ -25,6 +27,8 @@ export interface WeekPlanItem {
 export interface WeekPlan {
   startDate: string;
   endDate: string;
+  granularityMinutes: number;
+  bufferMinutes: number;
   items: WeekPlanItem[];
   totalMinutes: number;
   warnings: string[];
@@ -93,6 +97,11 @@ interface ParsedBusyEvent {
 const WORKDAY_START_MINUTES = 9 * 60;
 const WORKDAY_END_MINUTES = 17 * 60;
 const SLOT_GRANULARITY_MINUTES = 15;
+const MISSED_TASK_GRACE_MINUTES = 15;
+const MIN_SLOT_GRANULARITY_MINUTES = 5;
+const MAX_SLOT_GRANULARITY_MINUTES = 60;
+const DEFAULT_BUFFER_MINUTES = 0;
+const MAX_BUFFER_MINUTES = 120;
 
 function isValidYmd(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -134,6 +143,40 @@ function parseDays(days?: number): number {
     throw new Error('Invalid days. Use a number between 1 and 14');
   }
   return Math.floor(parsed);
+}
+
+function parseGranularityMinutes(value?: number): number {
+  if (value === undefined) return SLOT_GRANULARITY_MINUTES;
+  if (!Number.isFinite(value)) {
+    throw new Error(
+      `Invalid granularityMinutes. Use an integer between ${MIN_SLOT_GRANULARITY_MINUTES} and ${MAX_SLOT_GRANULARITY_MINUTES}`
+    );
+  }
+  const parsed = Math.floor(value);
+  if (parsed < MIN_SLOT_GRANULARITY_MINUTES || parsed > MAX_SLOT_GRANULARITY_MINUTES) {
+    throw new Error(
+      `Invalid granularityMinutes. Use an integer between ${MIN_SLOT_GRANULARITY_MINUTES} and ${MAX_SLOT_GRANULARITY_MINUTES}`
+    );
+  }
+  return parsed;
+}
+
+function parseBufferMinutes(value?: number): number {
+  if (value === undefined) return DEFAULT_BUFFER_MINUTES;
+  if (!Number.isFinite(value)) {
+    throw new Error(`Invalid bufferMinutes. Use an integer between 0 and ${MAX_BUFFER_MINUTES}`);
+  }
+  const parsed = Math.floor(value);
+  if (parsed < 0 || parsed > MAX_BUFFER_MINUTES) {
+    throw new Error(`Invalid bufferMinutes. Use an integer between 0 and ${MAX_BUFFER_MINUTES}`);
+  }
+  return parsed;
+}
+
+function alignUpToStep(value: number, step: number): number {
+  const remainder = value % step;
+  if (remainder === 0) return value;
+  return value + (step - remainder);
 }
 
 function minutesToTime(minutesFromMidnight: number): { hour: number; minute: number } {
@@ -497,6 +540,15 @@ export class CalendarService {
   async buildWeekPlanForUser(userId: string, options?: WeekPlanOptions): Promise<WeekPlan> {
     const start = parseStartDate(options?.startDate);
     const days = parseDays(options?.days);
+    const granularityMinutes = parseGranularityMinutes(options?.granularityMinutes);
+    const bufferMinutes = parseBufferMinutes(options?.bufferMinutes);
+    const enforceCurrentTime = !options?.startDate;
+    const now = new Date();
+    const nowYmd = toYmd(now);
+    const nowMinute = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const todayIndex = enforceCurrentTime
+      ? Math.floor((parseYmdAsUtc(nowYmd).getTime() - start.getTime()) / (24 * 60 * 60 * 1000))
+      : -1;
     const end = addDays(start, days - 1);
     const windowEndExclusive = addDays(end, 1);
     const startYmd = toYmd(start);
@@ -580,7 +632,7 @@ export class CalendarService {
     const warnings: string[] = [];
 
     for (const block of busyBlocks) {
-      const intervals = this.toBusyIntervalsForWindow(block.startAt, block.endAt, start, days);
+      const intervals = this.toBusyIntervalsForWindow(block.startAt, block.endAt, start, days, bufferMinutes);
       for (const interval of intervals) {
         dayIntervals[interval.dayIndex].push({
           startMinute: interval.startMinute,
@@ -594,6 +646,7 @@ export class CalendarService {
     }
 
     const items: WeekPlanItem[] = [];
+    const missedFixedCandidates: Candidate[] = [];
     const fixedCandidates = candidates.filter((candidate) => Boolean(candidate.fixedAt));
     const flexibleCandidates = candidates.filter((candidate) => !candidate.fixedAt);
 
@@ -612,6 +665,17 @@ export class CalendarService {
 
       const startMinute = fixedAt.getUTCHours() * 60 + fixedAt.getUTCMinutes();
       const endMinute = startMinute + candidate.durationMinutes;
+      if (
+        enforceCurrentTime &&
+        (dayIndex < todayIndex || (dayIndex === todayIndex && endMinute + MISSED_TASK_GRACE_MINUTES <= nowMinute))
+      ) {
+        missedFixedCandidates.push({
+          ...candidate,
+          fixedAt: undefined,
+          reason: `Rescheduled after missed fixed slot (${candidate.reason})`
+        });
+        continue;
+      }
       if (startMinute < WORKDAY_START_MINUTES || endMinute > WORKDAY_END_MINUTES) {
         warnings.push(`Skipped ${candidate.sourceName}: fixed appointment is outside working hours`);
         continue;
@@ -645,16 +709,32 @@ export class CalendarService {
       });
     }
 
-    for (const candidate of flexibleCandidates) {
-      const dayOrder = this.getCandidateDayOrder(candidate, startYmd, days, dayLoads);
+    const allFlexibleCandidates = [...flexibleCandidates, ...missedFixedCandidates];
+    allFlexibleCandidates.sort((a, b) => b.priority - a.priority);
+    const minimumDayIndex = enforceCurrentTime ? Math.max(0, Math.min(days, todayIndex)) : 0;
+
+    for (const candidate of allFlexibleCandidates) {
+      const dayOrder = this.getCandidateDayOrder(candidate, startYmd, days, dayLoads, minimumDayIndex);
       let scheduled = false;
 
       for (const dayIndex of dayOrder) {
         const latestEndMinute = this.getLatestEndMinuteForDay(candidate, start, dayIndex);
+        const minimumStartMinute =
+          enforceCurrentTime && dayIndex === todayIndex
+            ? Math.min(
+                WORKDAY_END_MINUTES,
+                Math.max(
+                  WORKDAY_START_MINUTES,
+                  alignUpToStep(nowMinute + MISSED_TASK_GRACE_MINUTES, granularityMinutes)
+                )
+              )
+            : WORKDAY_START_MINUTES;
         const slotStart = this.findFirstAvailableSlot(
           dayIntervals[dayIndex],
           candidate.durationMinutes,
-          latestEndMinute
+          latestEndMinute,
+          granularityMinutes,
+          minimumStartMinute
         );
         if (slotStart === null) continue;
 
@@ -693,6 +773,8 @@ export class CalendarService {
     return {
       startDate: startYmd,
       endDate: endYmd,
+      granularityMinutes,
+      bufferMinutes,
       items,
       totalMinutes: items.reduce((sum, item) => sum + item.durationMinutes, 0),
       warnings
@@ -738,7 +820,7 @@ export class CalendarService {
       'CALSCALE:GREGORIAN',
       'METHOD:PUBLISH',
       'X-WR-CALNAME:Second Brain Week Plan',
-      ...plan.items.flatMap((item, index) => {
+      ...plan.items.flatMap((item) => {
         const start = item.start.slice(0, 16);
         const end = item.end.slice(0, 16);
         const dateYmd = start.slice(0, 10);
@@ -746,7 +828,7 @@ export class CalendarService {
         const startMinute = Number(start.slice(14, 16));
         const endHour = Number(end.slice(11, 13));
         const endMinute = Number(end.slice(14, 16));
-        const uid = `${item.entryPath.replace('/', '-')}-${index}@second-brain`;
+        const uid = `${crypto.createHash('sha1').update(item.entryPath).digest('hex').slice(0, 16)}@second-brain`;
         return [
           'BEGIN:VEVENT',
           `UID:${uid}`,
@@ -806,18 +888,26 @@ export class CalendarService {
     return score + 5;
   }
 
-  private toBusyIntervalsForWindow(startAt: Date, endAt: Date, windowStart: Date, days: number): BusyInterval[] {
+  private toBusyIntervalsForWindow(
+    startAt: Date,
+    endAt: Date,
+    windowStart: Date,
+    days: number,
+    bufferMinutes: number
+  ): BusyInterval[] {
     const intervals: BusyInterval[] = [];
+    const expandedStart = new Date(startAt.getTime() - bufferMinutes * 60 * 1000);
+    const expandedEnd = new Date(endAt.getTime() + bufferMinutes * 60 * 1000);
 
     for (let dayIndex = 0; dayIndex < days; dayIndex += 1) {
       const dayStart = addDays(windowStart, dayIndex);
       const dayEnd = addDays(dayStart, 1);
-      if (!overlaps(startAt.getTime(), endAt.getTime(), dayStart.getTime(), dayEnd.getTime())) {
+      if (!overlaps(expandedStart.getTime(), expandedEnd.getTime(), dayStart.getTime(), dayEnd.getTime())) {
         continue;
       }
 
-      const clampedStart = Math.max(startAt.getTime(), dayStart.getTime());
-      const clampedEnd = Math.min(endAt.getTime(), dayEnd.getTime());
+      const clampedStart = Math.max(expandedStart.getTime(), dayStart.getTime());
+      const clampedEnd = Math.min(expandedEnd.getTime(), dayEnd.getTime());
 
       const startDate = new Date(clampedStart);
       const endDate = new Date(clampedEnd);
@@ -840,7 +930,16 @@ export class CalendarService {
     return intervals;
   }
 
-  private getCandidateDayOrder(candidate: Candidate, startYmd: string, days: number, dayLoads: number[]): number[] {
+  private getCandidateDayOrder(
+    candidate: Candidate,
+    startYmd: string,
+    days: number,
+    dayLoads: number[],
+    minimumDayIndex = 0
+  ): number[] {
+    if (minimumDayIndex >= days) {
+      return [];
+    }
     const dueAnchorDate = candidate.dueAt ? toYmd(candidate.dueAt) : candidate.dueDate;
     const dueIndex = dueAnchorDate
       ? Math.floor(
@@ -851,10 +950,13 @@ export class CalendarService {
 
     if (dueIndex !== null) {
       const boundedDue = Math.max(0, Math.min(days - 1, dueIndex));
-      return Array.from({ length: boundedDue + 1 }, (_, i) => i);
+      if (boundedDue < minimumDayIndex) {
+        return Array.from({ length: days - minimumDayIndex }, (_, i) => i + minimumDayIndex);
+      }
+      return Array.from({ length: boundedDue - minimumDayIndex + 1 }, (_, i) => i + minimumDayIndex);
     }
 
-    return Array.from({ length: days }, (_, i) => i).sort((a, b) => {
+    return Array.from({ length: days - minimumDayIndex }, (_, i) => i + minimumDayIndex).sort((a, b) => {
       if (dayLoads[a] === dayLoads[b]) {
         return a - b;
       }
@@ -865,12 +967,14 @@ export class CalendarService {
   private findFirstAvailableSlot(
     intervals: Array<{ startMinute: number; endMinute: number }>,
     durationMinutes: number,
-    latestEndMinute = WORKDAY_END_MINUTES
+    latestEndMinute = WORKDAY_END_MINUTES,
+    granularityMinutes = SLOT_GRANULARITY_MINUTES,
+    minimumStartMinute = WORKDAY_START_MINUTES
   ): number | null {
     for (
-      let cursor = WORKDAY_START_MINUTES;
+      let cursor = minimumStartMinute;
       cursor + durationMinutes <= latestEndMinute;
-      cursor += SLOT_GRANULARITY_MINUTES
+      cursor += granularityMinutes
     ) {
       const slotEnd = cursor + durationMinutes;
       const blocked = intervals.some((interval) => overlaps(cursor, slotEnd, interval.startMinute, interval.endMinute));

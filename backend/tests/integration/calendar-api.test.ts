@@ -5,6 +5,33 @@ import { entriesRouter } from '../../src/routes/entries';
 import { calendarRouter, calendarPublicRouter } from '../../src/routes/calendar';
 import { authMiddleware } from '../../src/middleware/auth';
 
+function parseIcsEvents(ics: string): Array<{ uid?: string; summary?: string; dtStart?: string }> {
+  const lines = ics.split(/\r?\n/);
+  const events: Array<{ uid?: string; summary?: string; dtStart?: string }> = [];
+  let inEvent = false;
+  let current: { uid?: string; summary?: string; dtStart?: string } = {};
+
+  for (const line of lines) {
+    const upper = line.toUpperCase();
+    if (upper === 'BEGIN:VEVENT') {
+      inEvent = true;
+      current = {};
+      continue;
+    }
+    if (upper === 'END:VEVENT') {
+      inEvent = false;
+      events.push(current);
+      continue;
+    }
+    if (!inEvent) continue;
+    if (upper.startsWith('UID:')) current.uid = line.slice(4);
+    if (upper.startsWith('SUMMARY:')) current.summary = line.slice(8);
+    if (upper.startsWith('DTSTART:')) current.dtStart = line.slice(8);
+  }
+
+  return events;
+}
+
 jest.mock('../../src/config/env', () => ({
   getConfig: () => ({
     JWT_SECRET: TEST_JWT_SECRET,
@@ -270,5 +297,243 @@ describe('Calendar API Integration Tests', () => {
     const regular = plan.body.items.find((item: any) => item.entryPath === 'task/quick-status-check');
     expect(regular).toBeDefined();
     expect(regular.durationMinutes).toBe(30);
+  });
+
+  it('applies custom granularity and blocker buffer when planning', async () => {
+    const source = await request(app)
+      .post('/api/calendar/sources')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        name: 'Outlook',
+        url: 'https://example.com/outlook-buffer.ics'
+      })
+      .expect(201);
+
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:busy-buffer-1',
+      'DTSTART:20260209T090000Z',
+      'DTEND:20260209T100000Z',
+      'SUMMARY:Morning call',
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ].join('\r\n');
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {
+        get: () => null
+      },
+      text: async () => ics
+    } as any);
+
+    await request(app)
+      .post(`/api/calendar/sources/${source.body.id}/sync`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Prepare summary',
+        status: 'pending',
+        due_date: '2026-02-09',
+        duration_minutes: 30,
+        source_channel: 'api',
+        confidence: 0.95
+      })
+      .expect(201);
+
+    const plan = await request(app)
+      .get('/api/calendar/plan-week?startDate=2026-02-09&days=1&granularityMinutes=30&bufferMinutes=15')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(plan.body.items).toHaveLength(1);
+    expect(plan.body.items[0].start).toContain('2026-02-09T10:30:00.000Z');
+    expect(plan.body.items[0].end).toContain('2026-02-09T11:00:00.000Z');
+  });
+
+  it('combines blockers from multiple enabled calendar sources', async () => {
+    const sourceA = await request(app)
+      .post('/api/calendar/sources')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        name: 'Work',
+        url: 'https://example.com/work.ics'
+      })
+      .expect(201);
+
+    const sourceB = await request(app)
+      .post('/api/calendar/sources')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        name: 'Private',
+        url: 'https://example.com/private.ics'
+      })
+      .expect(201);
+
+    const icsA = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:work-1',
+      'DTSTART:20260209T090000Z',
+      'DTEND:20260209T100000Z',
+      'SUMMARY:Work blocker',
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ].join('\r\n');
+
+    const icsB = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:private-1',
+      'DTSTART:20260209T100000Z',
+      'DTEND:20260209T110000Z',
+      'SUMMARY:Private blocker',
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ].join('\r\n');
+
+    global.fetch = jest.fn().mockImplementation(async (url: string) => {
+      const body = url.includes('/work.ics') ? icsA : icsB;
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () => body
+      } as any;
+    });
+
+    await request(app)
+      .post(`/api/calendar/sources/${sourceA.body.id}/sync`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    await request(app)
+      .post(`/api/calendar/sources/${sourceB.body.id}/sync`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Plan sprint sync',
+        status: 'pending',
+        due_date: '2026-02-09',
+        duration_minutes: 30,
+        source_channel: 'api',
+        confidence: 0.95
+      })
+      .expect(201);
+
+    const plan = await request(app)
+      .get('/api/calendar/plan-week?startDate=2026-02-09&days=1')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(plan.body.items).toHaveLength(1);
+    expect(plan.body.items[0].start).toContain('2026-02-09T11:00:00.000Z');
+    expect(plan.body.items[0].end).toContain('2026-02-09T11:30:00.000Z');
+  });
+
+  it('keeps event UIDs stable for the same task across replans', async () => {
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Task Alpha',
+        status: 'pending',
+        due_date: '2026-02-09',
+        source_channel: 'api',
+        confidence: 0.9
+      })
+      .expect(201);
+
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Task Beta',
+        status: 'pending',
+        due_date: '2026-02-10',
+        source_channel: 'api',
+        confidence: 0.9
+      })
+      .expect(201);
+
+    const publishResponse = await request(app)
+      .get('/api/calendar/publish')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    const token = new URL(publishResponse.body.httpsUrl).searchParams.get('token') as string;
+
+    const feedBefore = await request(app)
+      .get(`/api/calendar/feed.ics?token=${encodeURIComponent(token)}&startDate=2026-02-09&days=1`)
+      .expect(200);
+
+    const eventsBefore = parseIcsEvents(feedBefore.text);
+    const alphaBefore = eventsBefore.find((event) => event.summary === 'Task Alpha');
+    expect(alphaBefore?.uid).toBeTruthy();
+
+    await request(app)
+      .patch('/api/entries/task/task-alpha')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        fixed_at: '2026-02-09T16:00:00.000Z'
+      })
+      .expect(200);
+
+    const feedAfter = await request(app)
+      .get(`/api/calendar/feed.ics?token=${encodeURIComponent(token)}&startDate=2026-02-09&days=1`)
+      .expect(200);
+
+    const eventsAfter = parseIcsEvents(feedAfter.text);
+    const alphaAfter = eventsAfter.find((event) => event.summary === 'Task Alpha');
+    expect(alphaAfter?.uid).toBe(alphaBefore?.uid);
+    expect(alphaAfter?.dtStart).toBe('20260209T160000');
+  });
+
+  it('automatically reschedules missed tasks after 15 minutes grace', async () => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const missedFixedAt = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
+
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Missed deep work slot',
+        status: 'pending',
+        due_date: today,
+        duration_minutes: 30,
+        fixed_at: missedFixedAt,
+        source_channel: 'api',
+        confidence: 0.9
+      })
+      .expect(201);
+
+    const plan = await request(app)
+      .get('/api/calendar/plan-week?days=7&granularityMinutes=15')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    const item = plan.body.items.find((entry: any) => entry.entryPath === 'task/missed-deep-work-slot');
+    expect(item).toBeDefined();
+    expect(new Date(item.start).getTime()).toBeGreaterThanOrEqual(now.getTime());
+    expect(item.reason).toContain('Rescheduled after missed fixed slot');
   });
 });

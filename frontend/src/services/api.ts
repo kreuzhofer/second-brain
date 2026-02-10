@@ -146,6 +146,8 @@ export interface WeekPlanItem {
 export interface WeekPlanResponse {
   startDate: string;
   endDate: string;
+  granularityMinutes: number;
+  bufferMinutes: number;
   items: WeekPlanItem[];
   totalMinutes: number;
   warnings?: string[];
@@ -573,10 +575,20 @@ class ApiClient {
   };
 
   calendar = {
-    planWeek: async (startDate?: string, days?: number): Promise<WeekPlanResponse> => {
+    planWeek: async (
+      startDate?: string,
+      days?: number,
+      options?: { granularityMinutes?: number; bufferMinutes?: number }
+    ): Promise<WeekPlanResponse> => {
       const params = new URLSearchParams();
       if (startDate) params.set('startDate', startDate);
       if (typeof days === 'number') params.set('days', String(days));
+      if (typeof options?.granularityMinutes === 'number') {
+        params.set('granularityMinutes', String(options.granularityMinutes));
+      }
+      if (typeof options?.bufferMinutes === 'number') {
+        params.set('bufferMinutes', String(options.bufferMinutes));
+      }
       const query = params.toString();
       const endpoint = query ? `/calendar/plan-week?${query}` : '/calendar/plan-week';
       return this.request<WeekPlanResponse>(endpoint);

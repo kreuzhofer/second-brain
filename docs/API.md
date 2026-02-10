@@ -751,6 +751,7 @@ Build a focused week plan from pending tasks and active projects.
 ```
 GET /api/calendar/plan-week
 GET /api/calendar/plan-week?startDate=2026-02-09&days=7
+GET /api/calendar/plan-week?startDate=2026-02-09&days=7&granularityMinutes=15&bufferMinutes=10
 ```
 
 **Response** (200 OK):
@@ -758,6 +759,8 @@ GET /api/calendar/plan-week?startDate=2026-02-09&days=7
 {
   "startDate": "2026-02-09",
   "endDate": "2026-02-15",
+  "granularityMinutes": 15,
+  "bufferMinutes": 10,
   "totalMinutes": 225,
   "warnings": [],
   "items": [
@@ -768,9 +771,9 @@ GET /api/calendar/plan-week?startDate=2026-02-09&days=7
       "sourceName": "Draft retail demo one pager",
       "dueDate": "2026-02-12",
       "start": "2026-02-09T09:00:00.000Z",
-      "end": "2026-02-09T09:45:00.000Z",
-      "durationMinutes": 45,
-      "reason": "Due on 2026-02-12"
+      "end": "2026-02-09T09:30:00.000Z",
+      "durationMinutes": 30,
+      "reason": "Due at 2026-02-12T00:00:00.000Z"
     }
   ]
 }
@@ -868,6 +871,7 @@ Read-only calendar feed for external calendar apps.
 
 ```
 GET /api/calendar/feed.ics?token=...
+GET /api/calendar/feed.ics?token=...&startDate=2026-02-09&days=7&granularityMinutes=15&bufferMinutes=10
 ```
 
 **Response** (200 OK): `text/calendar`

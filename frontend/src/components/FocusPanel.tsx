@@ -63,6 +63,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const [peopleInsightsError, setPeopleInsightsError] = useState<string | null>(null);
   const [calendarPlan, setCalendarPlan] = useState<WeekPlanResponse | null>(null);
   const [calendarPlanDays, setCalendarPlanDays] = useState(7);
+  const [calendarGranularityMinutes, setCalendarGranularityMinutes] = useState(15);
+  const [calendarBufferMinutes, setCalendarBufferMinutes] = useState(0);
   const [calendarPublish, setCalendarPublish] = useState<CalendarPublishResponse | null>(null);
   const [calendarSources, setCalendarSources] = useState<CalendarSource[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
@@ -97,7 +99,10 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
     setCalendarLoading(true);
     setCalendarError(null);
     try {
-      const plan = await api.calendar.planWeek(undefined, calendarPlanDays);
+      const plan = await api.calendar.planWeek(undefined, calendarPlanDays, {
+        granularityMinutes: calendarGranularityMinutes,
+        bufferMinutes: calendarBufferMinutes
+      });
       setCalendarPlan(plan);
     } catch (err) {
       setCalendarError(err instanceof Error ? err.message : 'Failed to load week plan');
@@ -242,7 +247,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   useEffect(() => {
     if (activeTab !== 'calendar') return;
     Promise.all([loadCalendarPlan(), loadCalendarSources()]);
-  }, [activeTab, calendarPlanDays, entries.length]);
+  }, [activeTab, calendarPlanDays, calendarGranularityMinutes, calendarBufferMinutes, entries.length]);
 
   const focusItems = useMemo<FocusItem[]>(() => {
     const items = entries
@@ -488,6 +493,30 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                   {[5, 7, 10, 14].map((dayCount) => (
                     <option key={dayCount} value={dayCount}>
                       {dayCount}
+                    </option>
+                  ))}
+                </select>
+                <label className="text-xs text-muted-foreground">Slot</label>
+                <select
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  value={calendarGranularityMinutes}
+                  onChange={(event) => setCalendarGranularityMinutes(Number(event.target.value))}
+                >
+                  {[15, 30, 60].map((minutes) => (
+                    <option key={minutes} value={minutes}>
+                      {minutes}m
+                    </option>
+                  ))}
+                </select>
+                <label className="text-xs text-muted-foreground">Buffer</label>
+                <select
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  value={calendarBufferMinutes}
+                  onChange={(event) => setCalendarBufferMinutes(Number(event.target.value))}
+                >
+                  {[0, 5, 10, 15, 30].map((minutes) => (
+                    <option key={minutes} value={minutes}>
+                      {minutes}m
                     </option>
                   ))}
                 </select>

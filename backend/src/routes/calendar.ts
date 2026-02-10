@@ -4,11 +4,37 @@ import { getCalendarService } from '../services/calendar.service';
 
 const MIN_DAYS = 1;
 const MAX_DAYS = 14;
+const MIN_GRANULARITY_MINUTES = 5;
+const MAX_GRANULARITY_MINUTES = 60;
+const MIN_BUFFER_MINUTES = 0;
+const MAX_BUFFER_MINUTES = 120;
 
 function parseDays(raw: unknown): number | undefined {
   if (raw === undefined) return undefined;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < MIN_DAYS || parsed > MAX_DAYS) {
+    return NaN;
+  }
+  return Math.floor(parsed);
+}
+
+function parseGranularity(raw: unknown): number | undefined {
+  if (raw === undefined) return undefined;
+  const parsed = Number(raw);
+  if (
+    !Number.isFinite(parsed) ||
+    parsed < MIN_GRANULARITY_MINUTES ||
+    parsed > MAX_GRANULARITY_MINUTES
+  ) {
+    return NaN;
+  }
+  return Math.floor(parsed);
+}
+
+function parseBuffer(raw: unknown): number | undefined {
+  if (raw === undefined) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < MIN_BUFFER_MINUTES || parsed > MAX_BUFFER_MINUTES) {
     return NaN;
   }
   return Math.floor(parsed);
@@ -47,6 +73,8 @@ calendarPublicRouter.get('/feed.ics', async (req: Request, res: Response) => {
 
   const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
   const parsedDays = parseDays(req.query.days);
+  const parsedGranularity = parseGranularity(req.query.granularityMinutes);
+  const parsedBuffer = parseBuffer(req.query.bufferMinutes);
   if (Number.isNaN(parsedDays)) {
     res.status(400).json({
       error: {
@@ -56,11 +84,31 @@ calendarPublicRouter.get('/feed.ics', async (req: Request, res: Response) => {
     });
     return;
   }
+  if (Number.isNaN(parsedGranularity)) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: `Invalid granularityMinutes. Use an integer between ${MIN_GRANULARITY_MINUTES} and ${MAX_GRANULARITY_MINUTES}`
+      }
+    });
+    return;
+  }
+  if (Number.isNaN(parsedBuffer)) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: `Invalid bufferMinutes. Use an integer between ${MIN_BUFFER_MINUTES} and ${MAX_BUFFER_MINUTES}`
+      }
+    });
+    return;
+  }
 
   try {
     const ics = await calendarService.buildIcsFeedForUser(verified.userId, {
       startDate,
-      days: parsedDays
+      days: parsedDays,
+      granularityMinutes: parsedGranularity,
+      bufferMinutes: parsedBuffer
     });
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Content-Disposition', 'inline; filename="second-brain-week-plan.ics"');
@@ -82,6 +130,8 @@ calendarRouter.get('/plan-week', async (req: Request, res: Response) => {
 
   const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
   const parsedDays = parseDays(req.query.days);
+  const parsedGranularity = parseGranularity(req.query.granularityMinutes);
+  const parsedBuffer = parseBuffer(req.query.bufferMinutes);
   if (Number.isNaN(parsedDays)) {
     res.status(400).json({
       error: {
@@ -91,11 +141,31 @@ calendarRouter.get('/plan-week', async (req: Request, res: Response) => {
     });
     return;
   }
+  if (Number.isNaN(parsedGranularity)) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: `Invalid granularityMinutes. Use an integer between ${MIN_GRANULARITY_MINUTES} and ${MAX_GRANULARITY_MINUTES}`
+      }
+    });
+    return;
+  }
+  if (Number.isNaN(parsedBuffer)) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: `Invalid bufferMinutes. Use an integer between ${MIN_BUFFER_MINUTES} and ${MAX_BUFFER_MINUTES}`
+      }
+    });
+    return;
+  }
 
   try {
     const plan = await calendarService.buildWeekPlanForUser(userId, {
       startDate,
-      days: parsedDays
+      days: parsedDays,
+      granularityMinutes: parsedGranularity,
+      bufferMinutes: parsedBuffer
     });
     res.json(plan);
   } catch (error) {

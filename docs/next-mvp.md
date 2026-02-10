@@ -69,6 +69,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Calendar MVP phase 1: Completed (week planner + ICS/WebCal publish)
 - Calendar blocker ingest phase 1: Completed (external ICS/WebCal sources + busy-block-aware autoscheduling)
 - Relationship insights phase 1: Completed (top people/project summaries from graph links)
+- Task autoscheduler v1 + calendar export coherence: Completed (configurable slot granularity, blocker buffers, stable ICS UIDs)
 
 ## Notes
 - Prioritize backend-first slices where possible.
@@ -81,9 +82,9 @@ This is the canonical roadmap document for current MVP progress and next-level f
 ## Next-Level Backlog (Unified)
 
 ### Priority Next
-- Task model rework phase 2: add priority-aware auto-rescheduling loops with configurable granularity/buffer windows and multi-calendar blocker support.
 - Entity graph analytics phase 3: graph-level filters and richer link inspection views in modal/panel surfaces.
 - Relationship insights phase 2: add project-centric insights, trend windows, and actionable follow-up suggestions.
+- Task model rework phase 3: task priority editor + configurable working hours + optional proactive replan trigger endpoint.
 
 ### Admin -> Task Migration Plan (Phases 1-3)
 1. Phase 1 (DB migration, additive + backfill):
@@ -150,6 +151,12 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Structured analytics dashboard for usage metrics.
 
 ## Progress Log
+- 2026-02-10: Completed auto-scheduler v1 + calendar export coherence slice.
+- 2026-02-10: Added `granularityMinutes` and `bufferMinutes` support to week planning/feed APIs (`/api/calendar/plan-week`, `/api/calendar/feed.ics`) with validation and defaults.
+- 2026-02-10: Added planner support for blocker buffers by expanding busy windows before slot search; added configurable slot step for flexible-task placement.
+- 2026-02-10: Added stable per-task ICS UIDs (path-hash based) so UID does not change when ordering shifts after replans.
+- 2026-02-10: Added Focus panel controls for calendar planning granularity/buffer and wired those parameters through API client.
+- 2026-02-10: Verification complete: calendar integration tests updated (`8/8`), full workspace test run passing (`75/75` backend suites, `903` backend tests, `5/5` frontend test files), frontend build pass, and Docker rebuild/redeploy (`docker compose up -d --build`) pass.
 - 2026-02-10: Completed Task model rework phase 1.
 - 2026-02-10: Added task scheduling fields end-to-end: `duration_minutes` (default 30), `due_at` (datetime), and `fixed_at` (optional fixed appointment) with additive Prisma migration `20260210085809_task_schedule_fields_phase1`.
 - 2026-02-10: Updated capture/update pipelines to parse and persist scheduling fields from chat/tool inputs; added support for clearing date/time fields on update.
