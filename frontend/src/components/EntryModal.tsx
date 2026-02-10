@@ -10,7 +10,20 @@ import { createPortal } from 'react-dom';
 import { api, EntryWithPath, EntryLinksResponse, EntryGraphResponse } from '@/services/api';
 import { X, Loader2, FileText, User, Briefcase, Lightbulb, ClipboardList, Pencil, Check, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { hasNotesChanges, resizeTextarea, shouldPromptUnsavedNotes } from '@/components/entry-modal-helpers';
+import {
+  hasNotesChanges,
+  resizeTextarea,
+  runMutationAndRefresh,
+  shouldPromptUnsavedNotes
+} from '@/components/entry-modal-helpers';
+import {
+  buildTaskDuePayload,
+  buildTaskFixedPayload,
+  formatTaskDeadline,
+  selectTaskDueInput,
+  parseTaskDateTime
+} from '@/components/entry-modal-task-schedule-helpers';
+import { useEntries } from '@/state/entries';
 
 interface EntryModalProps {
   entryPath: string | null;
@@ -20,6 +33,7 @@ interface EntryModalProps {
 }
 
 export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: EntryModalProps) {
+  const { refresh } = useEntries();
   const [entry, setEntry] = useState<EntryWithPath | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,11 +48,17 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
   const [linkDraft, setLinkDraft] = useState('');
   const [isLinkBusy, setIsLinkBusy] = useState(false);
   const [linkBusyKey, setLinkBusyKey] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'schedule' | 'links' | 'meta'>('overview');
   const [taskDurationDraft, setTaskDurationDraft] = useState<string>('');
-  const [taskDueAtDraft, setTaskDueAtDraft] = useState<string>('');
-  const [taskFixedAtDraft, setTaskFixedAtDraft] = useState<string>('');
+  const [taskDueDateDraft, setTaskDueDateDraft] = useState<string>('');
+  const [taskDueTimeDraft, setTaskDueTimeDraft] = useState<string>('');
+  const [taskDueTimeEnabled, setTaskDueTimeEnabled] = useState<boolean>(false);
+  const [taskFixedDateDraft, setTaskFixedDateDraft] = useState<string>('');
+  const [taskFixedTimeDraft, setTaskFixedTimeDraft] = useState<string>('');
+  const [taskFixedTimeEnabled, setTaskFixedTimeEnabled] = useState<boolean>(false);
   const [isSavingTaskSchedule, setIsSavingTaskSchedule] = useState(false);
   const [taskScheduleError, setTaskScheduleError] = useState<string | null>(null);
+  const [isMarkingTaskDone, setIsMarkingTaskDone] = useState(false);
   const notesRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -50,6 +70,7 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
       setEntry(null);
       setLinks(null);
       setGraph(null);
+      setActiveTab('overview');
       setIsEditingNotes(false);
       setNotesError(null);
       setLinkDraft('');
@@ -66,16 +87,26 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
   useEffect(() => {
     if (!entry || !isTaskCategory(entry.category)) {
       setTaskDurationDraft('');
-      setTaskDueAtDraft('');
-      setTaskFixedAtDraft('');
+      setTaskDueDateDraft('');
+      setTaskDueTimeDraft('');
+      setTaskDueTimeEnabled(false);
+      setTaskFixedDateDraft('');
+      setTaskFixedTimeDraft('');
+      setTaskFixedTimeEnabled(false);
       return;
     }
     const duration = (entry.entry as any).duration_minutes;
-    const dueAt = (entry.entry as any).due_at;
+    const dueAt = selectTaskDueInput((entry.entry as any).due_date, (entry.entry as any).due_at);
     const fixedAt = (entry.entry as any).fixed_at;
+    const dueDraft = parseTaskDateTime(dueAt);
+    const fixedDraft = parseTaskDateTime(fixedAt);
     setTaskDurationDraft(duration ? String(duration) : '30');
-    setTaskDueAtDraft(toDateTimeLocalValue(dueAt));
-    setTaskFixedAtDraft(toDateTimeLocalValue(fixedAt));
+    setTaskDueDateDraft(dueDraft.date);
+    setTaskDueTimeDraft(dueDraft.time);
+    setTaskDueTimeEnabled(dueDraft.hasTime);
+    setTaskFixedDateDraft(fixedDraft.date);
+    setTaskFixedTimeDraft(fixedDraft.time);
+    setTaskFixedTimeEnabled(fixedDraft.hasTime);
     setTaskScheduleError(null);
   }, [entry]);
 
@@ -206,7 +237,11 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
     setIsSavingNotes(true);
     setNotesError(null);
     try {
-      const updated = await api.entries.update(entry.path, { content: notesDraft });
+      const updated = await runMutationAndRefresh(
+        () => api.entries.update(entry.path, { content: notesDraft }),
+        refresh,
+        () => setNotesError('Notes saved, but list refresh failed. Please refresh.')
+      );
       setEntry(updated);
       setIsEditingNotes(false);
     } catch (err) {
@@ -227,16 +262,47 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
     setIsSavingTaskSchedule(true);
     setTaskScheduleError(null);
     try {
-      const updated = await api.entries.update(entry.path, {
-        duration_minutes: Math.floor(parsedDuration),
-        due_at: taskDueAtDraft ? fromDateTimeLocalValue(taskDueAtDraft) : null,
-        fixed_at: taskFixedAtDraft ? fromDateTimeLocalValue(taskFixedAtDraft) : null
+      const duePayload = buildTaskDuePayload({
+        date: taskDueDateDraft,
+        time: taskDueTimeDraft,
+        hasTime: taskDueTimeEnabled
       });
+      const fixedPayload = buildTaskFixedPayload({
+        date: taskFixedDateDraft,
+        time: taskFixedTimeDraft,
+        hasTime: taskFixedTimeEnabled
+      });
+      const updated = await runMutationAndRefresh(
+        () => api.entries.update(entry.path, {
+          duration_minutes: Math.floor(parsedDuration),
+          ...duePayload,
+          ...fixedPayload
+        }),
+        refresh,
+        () => setTaskScheduleError('Schedule saved, but list refresh failed. Please refresh.')
+      );
       setEntry(updated);
     } catch (err) {
       setTaskScheduleError(err instanceof Error ? err.message : 'Failed to update task schedule');
     } finally {
       setIsSavingTaskSchedule(false);
+    }
+  };
+
+  const markTaskDone = async () => {
+    if (!entry || !isTaskCategory(entry.category) || (entry.entry as any)?.status === 'done') return;
+    setIsMarkingTaskDone(true);
+    try {
+      const updated = await runMutationAndRefresh(
+        () => api.entries.update(entry.path, { status: 'done' }),
+        refresh,
+        () => setTaskScheduleError('Task marked done, but list refresh failed. Please refresh.')
+      );
+      setEntry(updated);
+    } catch (err) {
+      setTaskScheduleError(err instanceof Error ? err.message : 'Failed to mark task as done');
+    } finally {
+      setIsMarkingTaskDone(false);
     }
   };
 
@@ -297,8 +363,27 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
     return String(value);
   };
 
-  // Fields to exclude from display
-  const excludedFields = ['id', 'source_channel'];
+  const hiddenFields = ['id', 'name', 'suggested_name', 'source_channel'];
+  const taskScheduleFields = ['due_date', 'due_at', 'duration_minutes', 'fixed_at'];
+  const metaFields = ['created_at', 'updated_at', 'confidence', 'total_focus_minutes', 'last_touched'];
+
+  const getOverviewFieldEntries = (value: Record<string, unknown>) =>
+    Object.entries(value).filter(
+      ([key]) => !hiddenFields.includes(key) && !taskScheduleFields.includes(key) && !metaFields.includes(key)
+    );
+
+  const getMetaFieldEntries = (value: Record<string, unknown>) =>
+    Object.entries(value).filter(([key]) => metaFields.includes(key));
+
+  const formatDateTimeDisplay = (value: unknown): string => {
+    if (typeof value !== 'string' || !value) return '-';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return new Date(`${value}T00:00:00`).toLocaleDateString();
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return String(value);
+    return parsed.toLocaleString();
+  };
 
   const modalContent = (
     <div 
@@ -318,7 +403,7 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
               {String(entry?.entry?.name || entry?.entry?.suggested_name || 'Entry Details')}
             </h2>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
+          <Button variant="ghost" size="icon" onClick={handleClose} aria-label="Close">
             <X className="h-5 w-5" />
           </Button>
         </div>
@@ -350,330 +435,441 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
                 <span className="text-sm text-muted-foreground">{entry.path}</span>
               </div>
 
-              {/* Frontmatter fields */}
-              <div className="space-y-4">
-                <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                  Details
-                </h3>
-                <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {Object.entries(entry.entry)
-                    .filter(([key]) => !excludedFields.includes(key))
-                    .map(([key, value]) => (
-                      <div key={key} className="space-y-1">
-                        <dt className="text-sm font-medium text-muted-foreground">
-                          {formatFieldName(key)}
-                        </dt>
-                        <dd className="text-sm">
-                          {renderFieldValue(key, value)}
-                        </dd>
-                      </div>
-                    ))}
-                </dl>
+              <div className="rounded-md border border-border p-1">
+                {(['overview', 'schedule', 'links', 'meta'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveTab(tab)}
+                    className={`h-11 rounded px-3 text-sm font-medium capitalize transition-colors ${
+                      activeTab === tab
+                        ? 'bg-foreground text-background'
+                        : 'text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
               </div>
 
-              {isTaskCategory(entry.category) && (
-                <div className="space-y-3 rounded-md border border-border p-3">
-                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                    Task schedule
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <label className="space-y-1">
-                      <span className="text-xs text-muted-foreground">Duration (minutes)</span>
-                      <input
-                        type="number"
-                        min={5}
-                        max={720}
-                        step={5}
-                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
-                        value={taskDurationDraft}
-                        onChange={(event) => setTaskDurationDraft(event.target.value)}
-                        disabled={isSavingTaskSchedule}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs text-muted-foreground">Deadline (optional)</span>
-                      <input
-                        type="datetime-local"
-                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
-                        value={taskDueAtDraft}
-                        onChange={(event) => setTaskDueAtDraft(event.target.value)}
-                        disabled={isSavingTaskSchedule}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs text-muted-foreground">Fixed time (optional)</span>
-                      <input
-                        type="datetime-local"
-                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
-                        value={taskFixedAtDraft}
-                        onChange={(event) => setTaskFixedAtDraft(event.target.value)}
-                        disabled={isSavingTaskSchedule}
-                      />
-                    </label>
+              {activeTab === 'overview' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {getOverviewFieldEntries(entry.entry as Record<string, unknown>).map(([key, value]) => (
+                      <div key={key} className="space-y-1">
+                        <dt className="text-sm font-medium text-muted-foreground">{formatFieldName(key)}</dt>
+                        <dd className="text-sm">{renderFieldValue(key, value)}</dd>
+                      </div>
+                    ))}
+                    {getOverviewFieldEntries(entry.entry as Record<string, unknown>).length === 0 && (
+                      <p className="text-sm text-muted-foreground">No overview fields available.</p>
+                    )}
                   </div>
-                  {taskScheduleError && (
-                    <p className="text-sm text-destructive">{taskScheduleError}</p>
+
+                  {isTaskCategory(entry.category) && (
+                    <div className="rounded-md border border-border p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                          Current schedule
+                        </h3>
+                        {(entry.entry as any)?.status !== 'done' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={markTaskDone}
+                            disabled={isMarkingTaskDone}
+                          >
+                            {isMarkingTaskDone ? 'Marking...' : 'Mark done'}
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-sm">
+                        Duration: {(entry.entry as any).duration_minutes ?? 30}m
+                      </p>
+                      <p className="text-sm">
+                        Deadline: {formatTaskDeadline((entry.entry as any).due_date, (entry.entry as any).due_at)}
+                      </p>
+                      <p className="text-sm">
+                        Fixed slot: {formatDateTimeDisplay((entry.entry as any).fixed_at)}
+                      </p>
+                    </div>
                   )}
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={saveTaskSchedule}
-                      disabled={isSavingTaskSchedule}
-                    >
-                      {isSavingTaskSchedule ? 'Saving...' : 'Save schedule'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={isSavingTaskSchedule}
-                      onClick={() => {
-                        setTaskDueAtDraft('');
-                        setTaskFixedAtDraft('');
-                      }}
-                    >
-                      Clear dates
-                    </Button>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                        Notes
+                      </h3>
+                      <div className="flex items-center gap-1">
+                        {!isEditingNotes && (
+                          <button
+                            type="button"
+                            onClick={startNotesEdit}
+                            className="h-8 w-8 rounded-md border border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                            aria-label="Edit notes"
+                          >
+                            <Pencil className="h-4 w-4 mx-auto" />
+                          </button>
+                        )}
+                        {isEditingNotes && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={saveNotes}
+                              disabled={isSavingNotes || !hasNotesChanges(entry.content, notesDraft)}
+                              className="h-8 w-8 rounded-md border border-transparent text-emerald-600 hover:bg-emerald-50 disabled:opacity-40 transition-colors"
+                              aria-label="Save notes"
+                            >
+                              {isSavingNotes ? (
+                                <Loader2 className="h-4 w-4 mx-auto animate-spin" />
+                              ) : (
+                                <Check className="h-4 w-4 mx-auto" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirmDiscardNotes()) {
+                                  cancelNotesEdit();
+                                }
+                              }}
+                              disabled={isSavingNotes}
+                              className="h-8 w-8 rounded-md border border-transparent text-rose-600 hover:bg-rose-50 disabled:opacity-40 transition-colors"
+                              aria-label="Discard notes changes"
+                            >
+                              <X className="h-4 w-4 mx-auto" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {notesError && (
+                      <p className="text-sm text-destructive">{notesError}</p>
+                    )}
+
+                    {isEditingNotes ? (
+                      <textarea
+                        ref={notesRef}
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        value={notesDraft}
+                        onChange={(event) => {
+                          setNotesDraft(event.target.value);
+                          resizeTextarea(event.currentTarget);
+                        }}
+                        placeholder="Add notes..."
+                      />
+                    ) : (
+                      <div className="prose prose-sm max-w-none">
+                        {entry.content ? (
+                          <p className="whitespace-pre-wrap">{entry.content}</p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No notes yet.</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* Links section */}
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                    Linked items
-                  </h3>
-                  <div className="mt-2 flex items-center gap-2">
-                    <input
-                      value={linkDraft}
-                      onChange={(event) => setLinkDraft(event.target.value)}
-                      placeholder="Add link path (e.g. people/lina-haidu)"
-                      className="h-11 flex-1 rounded-md border border-border bg-background px-3 text-base"
-                      disabled={isLinkBusy || Boolean(linkBusyKey)}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleAddLink}
-                      disabled={isLinkBusy || Boolean(linkBusyKey)}
-                    >
-                      {isLinkBusy ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Plus className="h-4 w-4" />
-                      )}
-                      <span className="ml-1">Add</span>
-                    </Button>
-                  </div>
-                  {links?.outgoing?.length ? (
-                    <div className="mt-2 space-y-2">
-                      {links.outgoing.map((link) => (
-                        <div
-                          key={link.path}
-                          className="w-full rounded-md border border-border p-2"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <button
-                              type="button"
-                              className="flex-1 text-left hover:bg-muted transition-colors rounded px-1 py-1"
-                              onClick={() => onEntryClick?.(link.path)}
-                            >
-                              <div className="text-sm font-medium">{link.name}</div>
-                              <div className="text-xs text-muted-foreground capitalize">
-                                {link.category}
-                              </div>
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Remove link to ${link.name}`}
-                              className="h-11 w-11 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                              onClick={() => handleRemoveLink(link.path, 'outgoing')}
-                              disabled={Boolean(linkBusyKey)}
-                            >
-                              {linkBusyKey === `outgoing:${link.path}` ? (
-                                <Loader2 className="h-4 w-4 mx-auto animate-spin" />
-                              ) : (
-                                <X className="h-4 w-4 mx-auto" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground mt-2">No linked items yet.</p>
-                  )}
-                </div>
-
-                <div>
-                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                    Backlinks
-                  </h3>
-                  {links?.incoming?.length ? (
-                    <div className="mt-2 space-y-2">
-                      {links.incoming.map((link) => (
-                        <div
-                          key={link.path}
-                          className="w-full rounded-md border border-border p-2"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <button
-                              type="button"
-                              className="flex-1 text-left hover:bg-muted transition-colors rounded px-1 py-1"
-                              onClick={() => onEntryClick?.(link.path)}
-                            >
-                              <div className="text-sm font-medium">{link.name}</div>
-                              <div className="text-xs text-muted-foreground capitalize">
-                                {link.category}
-                              </div>
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Remove backlink from ${link.name}`}
-                              className="h-11 w-11 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                              onClick={() => handleRemoveLink(link.path, 'incoming')}
-                              disabled={Boolean(linkBusyKey)}
-                            >
-                              {linkBusyKey === `incoming:${link.path}` ? (
-                                <Loader2 className="h-4 w-4 mx-auto animate-spin" />
-                              ) : (
-                                <X className="h-4 w-4 mx-auto" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground mt-2">No backlinks yet.</p>
-                  )}
-                </div>
-
-                <div>
-                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                    Entity graph
-                  </h3>
-                  {graph ? (
+              {activeTab === 'schedule' && (
+                <div className="space-y-3 rounded-md border border-border p-3">
+                  {isTaskCategory(entry.category) ? (
                     <>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        {graph.nodes.length - 1} connected item(s), {graph.edges.length} link(s)
-                      </p>
-                      <div className="mt-2 rounded-md border border-border p-3">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Center</div>
-                        <div className="text-sm font-medium mt-1">{graph.center.name}</div>
-                        <div className="text-xs text-muted-foreground capitalize">{graph.center.category}</div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {graph.nodes
-                            .filter((node) => node.path !== graph.center.path)
-                            .map((node) => (
-                              <button
-                                key={node.path}
-                                type="button"
-                                className="rounded-full border border-border px-3 py-1 text-xs hover:bg-muted transition-colors"
-                                onClick={() => onEntryClick?.(node.path)}
-                              >
-                                {node.name}
-                              </button>
-                            ))}
-                          {graph.nodes.length <= 1 && (
-                            <span className="text-sm text-muted-foreground">No connected items yet.</span>
+                      <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                        Task schedule
+                      </h3>
+                      <label className="space-y-1 block">
+                        <span className="text-xs text-muted-foreground">Duration (minutes)</span>
+                        <input
+                          type="number"
+                          min={5}
+                          max={720}
+                          step={5}
+                          className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+                          value={taskDurationDraft}
+                          onChange={(event) => setTaskDurationDraft(event.target.value)}
+                          disabled={isSavingTaskSchedule}
+                        />
+                      </label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <label className="space-y-1">
+                          <span className="text-xs text-muted-foreground">Deadline date (optional)</span>
+                          <input
+                            type="date"
+                            className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+                            value={taskDueDateDraft}
+                            onChange={(event) => setTaskDueDateDraft(event.target.value)}
+                            disabled={isSavingTaskSchedule}
+                          />
+                        </label>
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={taskDueTimeEnabled}
+                              onChange={(event) => setTaskDueTimeEnabled(event.target.checked)}
+                              disabled={isSavingTaskSchedule}
+                            />
+                            Set deadline time
+                          </label>
+                          {taskDueTimeEnabled && (
+                            <input
+                              type="time"
+                              className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+                              value={taskDueTimeDraft}
+                              onChange={(event) => setTaskDueTimeDraft(event.target.value)}
+                              disabled={isSavingTaskSchedule}
+                            />
                           )}
                         </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <label className="space-y-1">
+                          <span className="text-xs text-muted-foreground">Fixed slot date (optional)</span>
+                          <input
+                            type="date"
+                            className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+                            value={taskFixedDateDraft}
+                            onChange={(event) => setTaskFixedDateDraft(event.target.value)}
+                            disabled={isSavingTaskSchedule}
+                          />
+                        </label>
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={taskFixedTimeEnabled}
+                              onChange={(event) => setTaskFixedTimeEnabled(event.target.checked)}
+                              disabled={isSavingTaskSchedule}
+                            />
+                            Set fixed time
+                          </label>
+                          {taskFixedTimeEnabled && (
+                            <input
+                              type="time"
+                              className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+                              value={taskFixedTimeDraft}
+                              onChange={(event) => setTaskFixedTimeDraft(event.target.value)}
+                              disabled={isSavingTaskSchedule}
+                            />
+                          )}
+                        </div>
+                      </div>
+                      {taskScheduleError && (
+                        <p className="text-sm text-destructive">{taskScheduleError}</p>
+                      )}
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={saveTaskSchedule}
+                          disabled={isSavingTaskSchedule}
+                        >
+                          {isSavingTaskSchedule ? 'Saving...' : 'Save schedule'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isSavingTaskSchedule}
+                          onClick={() => {
+                            setTaskDueDateDraft('');
+                            setTaskDueTimeDraft('');
+                            setTaskDueTimeEnabled(false);
+                            setTaskFixedDateDraft('');
+                            setTaskFixedTimeDraft('');
+                            setTaskFixedTimeEnabled(false);
+                          }}
+                        >
+                          Clear schedule
+                        </Button>
                       </div>
                     </>
                   ) : (
-                    <p className="text-sm text-muted-foreground mt-2">No graph data available yet.</p>
+                    <p className="text-sm text-muted-foreground">Schedule settings are available for tasks only.</p>
                   )}
                 </div>
-              </div>
-
-              {linksError && (
-                <div className="text-sm text-destructive">
-                  {linksError}
-                </div>
-              )}
-              {graphError && (
-                <div className="text-sm text-destructive">
-                  {graphError}
-                </div>
               )}
 
-              {/* Content section */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                    Notes
-                  </h3>
-                  <div className="flex items-center gap-1">
-                    {!isEditingNotes && (
-                      <button
+              {activeTab === 'links' && (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                      Linked items
+                    </h3>
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        value={linkDraft}
+                        onChange={(event) => setLinkDraft(event.target.value)}
+                        placeholder="Add link path (e.g. people/lina-haidu)"
+                        className="h-11 flex-1 rounded-md border border-border bg-background px-3 text-base"
+                        disabled={isLinkBusy || Boolean(linkBusyKey)}
+                      />
+                      <Button
                         type="button"
-                        onClick={startNotesEdit}
-                        className="h-8 w-8 rounded-md border border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                        aria-label="Edit notes"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddLink}
+                        disabled={isLinkBusy || Boolean(linkBusyKey)}
                       >
-                        <Pencil className="h-4 w-4 mx-auto" />
-                      </button>
-                    )}
-                    {isEditingNotes && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={saveNotes}
-                          disabled={isSavingNotes || !hasNotesChanges(entry.content, notesDraft)}
-                          className="h-8 w-8 rounded-md border border-transparent text-emerald-600 hover:bg-emerald-50 disabled:opacity-40 transition-colors"
-                          aria-label="Save notes"
-                        >
-                          {isSavingNotes ? (
-                            <Loader2 className="h-4 w-4 mx-auto animate-spin" />
-                          ) : (
-                            <Check className="h-4 w-4 mx-auto" />
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirmDiscardNotes()) {
-                              cancelNotesEdit();
-                            }
-                          }}
-                          disabled={isSavingNotes}
-                          className="h-8 w-8 rounded-md border border-transparent text-rose-600 hover:bg-rose-50 disabled:opacity-40 transition-colors"
-                          aria-label="Discard notes changes"
-                        >
-                          <X className="h-4 w-4 mx-auto" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {notesError && (
-                  <p className="text-sm text-destructive">{notesError}</p>
-                )}
-
-                {isEditingNotes ? (
-                  <textarea
-                    ref={notesRef}
-                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={notesDraft}
-                    onChange={(event) => {
-                      setNotesDraft(event.target.value);
-                      resizeTextarea(event.currentTarget);
-                    }}
-                    placeholder="Add notes..."
-                  />
-                ) : (
-                  <div className="prose prose-sm max-w-none">
-                    {entry.content ? (
-                      <p className="whitespace-pre-wrap">{entry.content}</p>
+                        {isLinkBusy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Plus className="h-4 w-4" />
+                        )}
+                        <span className="ml-1">Add</span>
+                      </Button>
+                    </div>
+                    {links?.outgoing?.length ? (
+                      <div className="mt-2 space-y-2">
+                        {links.outgoing.map((link) => (
+                          <div
+                            key={link.path}
+                            className="w-full rounded-md border border-border p-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <button
+                                type="button"
+                                className="flex-1 text-left hover:bg-muted transition-colors rounded px-1 py-1"
+                                onClick={() => onEntryClick?.(link.path)}
+                              >
+                                <div className="text-sm font-medium">{link.name}</div>
+                                <div className="text-xs text-muted-foreground capitalize">
+                                  {link.category}
+                                </div>
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Remove link to ${link.name}`}
+                                className="h-11 w-11 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                                onClick={() => handleRemoveLink(link.path, 'outgoing')}
+                                disabled={Boolean(linkBusyKey)}
+                              >
+                                {linkBusyKey === `outgoing:${link.path}` ? (
+                                  <Loader2 className="h-4 w-4 mx-auto animate-spin" />
+                                ) : (
+                                  <X className="h-4 w-4 mx-auto" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">No notes yet.</p>
+                      <p className="text-sm text-muted-foreground mt-2">No linked items yet.</p>
                     )}
                   </div>
-                )}
-              </div>
+
+                  <div>
+                    <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                      Backlinks
+                    </h3>
+                    {links?.incoming?.length ? (
+                      <div className="mt-2 space-y-2">
+                        {links.incoming.map((link) => (
+                          <div
+                            key={link.path}
+                            className="w-full rounded-md border border-border p-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <button
+                                type="button"
+                                className="flex-1 text-left hover:bg-muted transition-colors rounded px-1 py-1"
+                                onClick={() => onEntryClick?.(link.path)}
+                              >
+                                <div className="text-sm font-medium">{link.name}</div>
+                                <div className="text-xs text-muted-foreground capitalize">
+                                  {link.category}
+                                </div>
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Remove backlink from ${link.name}`}
+                                className="h-11 w-11 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                                onClick={() => handleRemoveLink(link.path, 'incoming')}
+                                disabled={Boolean(linkBusyKey)}
+                              >
+                                {linkBusyKey === `incoming:${link.path}` ? (
+                                  <Loader2 className="h-4 w-4 mx-auto animate-spin" />
+                                ) : (
+                                  <X className="h-4 w-4 mx-auto" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground mt-2">No backlinks yet.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                      Entity graph
+                    </h3>
+                    {graph ? (
+                      <>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          {graph.nodes.length - 1} connected item(s), {graph.edges.length} link(s)
+                        </p>
+                        <div className="mt-2 rounded-md border border-border p-3">
+                          <div className="text-xs uppercase tracking-wide text-muted-foreground">Center</div>
+                          <div className="text-sm font-medium mt-1">{graph.center.name}</div>
+                          <div className="text-xs text-muted-foreground capitalize">{graph.center.category}</div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {graph.nodes
+                              .filter((node) => node.path !== graph.center.path)
+                              .map((node) => (
+                                <button
+                                  key={node.path}
+                                  type="button"
+                                  className="rounded-full border border-border px-3 py-1 text-xs hover:bg-muted transition-colors"
+                                  onClick={() => onEntryClick?.(node.path)}
+                                >
+                                  {node.name}
+                                </button>
+                              ))}
+                            {graph.nodes.length <= 1 && (
+                              <span className="text-sm text-muted-foreground">No connected items yet.</span>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground mt-2">No graph data available yet.</p>
+                    )}
+                  </div>
+
+                  {linksError && (
+                    <div className="text-sm text-destructive">{linksError}</div>
+                  )}
+                  {graphError && (
+                    <div className="text-sm text-destructive">{graphError}</div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'meta' && (
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <dt className="text-sm font-medium text-muted-foreground">Path</dt>
+                    <dd className="text-sm">{entry.path}</dd>
+                  </div>
+                  <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {getMetaFieldEntries(entry.entry as Record<string, unknown>).map(([key, value]) => (
+                      <div key={key} className="space-y-1">
+                        <dt className="text-sm font-medium text-muted-foreground">{formatFieldName(key)}</dt>
+                        <dd className="text-sm">{renderFieldValue(key, value)}</dd>
+                      </div>
+                    ))}
+                    {getMetaFieldEntries(entry.entry as Record<string, unknown>).length === 0 && (
+                      <p className="text-sm text-muted-foreground">No metadata fields available.</p>
+                    )}
+                  </dl>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -681,6 +877,15 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 flex-shrink-0">
           <div className="flex justify-end gap-2">
+            {entry && isTaskCategory(entry.category) && (entry.entry as any)?.status !== 'done' && (
+              <Button
+                variant="outline"
+                onClick={markTaskDone}
+                disabled={isMarkingTaskDone}
+              >
+                {isMarkingTaskDone ? 'Marking...' : 'Mark done'}
+              </Button>
+            )}
             {entry && isTaskCategory(entry.category) && (entry.entry as any)?.status !== 'done' && onStartFocus && (
               <Button
                 onClick={() => {
@@ -701,24 +906,4 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
   );
 
   return createPortal(modalContent, document.body);
-}
-
-function toDateTimeLocalValue(value: unknown): string {
-  if (typeof value !== 'string' || !value) return '';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '';
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, '0');
-  const day = String(parsed.getDate()).padStart(2, '0');
-  const hour = String(parsed.getHours()).padStart(2, '0');
-  const minute = String(parsed.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day}T${hour}:${minute}`;
-}
-
-function fromDateTimeLocalValue(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return parsed.toISOString();
 }
