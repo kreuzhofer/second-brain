@@ -455,6 +455,62 @@ describe('API Integration Tests', () => {
     });
   });
 
+  describe('Task scheduling fields', () => {
+    it('stores and returns duration, deadline datetime, and fixed appointment', async () => {
+      const createResponse = await request(app)
+        .post('/api/entries')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          category: 'task',
+          name: 'Schedule-aware task',
+          status: 'pending',
+          due_at: '2026-02-12T15:00:00.000Z',
+          fixed_at: '2026-02-10T09:30:00.000Z',
+          duration_minutes: 90,
+          source_channel: 'api',
+          confidence: 0.9
+        })
+        .expect(201);
+
+      expect(createResponse.body.path).toBe('task/schedule-aware-task');
+      expect(createResponse.body.entry.duration_minutes).toBe(90);
+      expect(createResponse.body.entry.due_at).toBe('2026-02-12T15:00:00.000Z');
+      expect(createResponse.body.entry.fixed_at).toBe('2026-02-10T09:30:00.000Z');
+      expect(createResponse.body.entry.due_date).toBe('2026-02-12');
+    });
+
+    it('updates and clears task scheduling fields', async () => {
+      await request(app)
+        .post('/api/entries')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          category: 'task',
+          name: 'Mutable schedule task',
+          status: 'pending',
+          due_date: '2026-02-12',
+          fixed_at: '2026-02-10T09:30:00.000Z',
+          source_channel: 'api',
+          confidence: 0.9
+        })
+        .expect(201);
+
+      const updated = await request(app)
+        .patch('/api/entries/task/mutable-schedule-task')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          duration_minutes: 45,
+          due_at: '2026-02-13T10:00:00.000Z',
+          fixed_at: null
+        })
+        .expect(200);
+
+      expect(updated.body.entry.duration_minutes).toBe(45);
+      expect(updated.body.entry.due_at).toBe('2026-02-13T10:00:00.000Z');
+      expect(updated.body.entry.fixed_at).toBeUndefined();
+      expect(updated.body.entry.due_date).toBe('2026-02-13');
+    });
+  });
+
   describe('DELETE /api/entries/:path', () => {
     it('should delete an entry', async () => {
       // First create an entry

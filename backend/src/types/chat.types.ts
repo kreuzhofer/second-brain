@@ -74,6 +74,9 @@ export interface IdeasFields {
 export interface AdminFields {
   status: 'pending';
   dueDate?: string;
+  dueAt?: string;
+  durationMinutes?: number;
+  fixedAt?: string;
   relatedPeople: string[];
 }
 

@@ -595,6 +595,12 @@ export class ToolExecutor {
     const fields = result.fields as unknown as Record<string, unknown>;
     const rawDueDate = (fields.dueDate ?? fields.due_date) as string | undefined;
     const normalizedDueDate = normalizeDueDate(rawDueDate, sourceText);
+    const rawDueAt = (fields.dueAt ?? fields.due_at) as string | undefined;
+    const normalizedDueAt = typeof rawDueAt === 'string' && rawDueAt.trim() ? rawDueAt : undefined;
+    const rawFixedAt = (fields.fixedAt ?? fields.fixed_at) as string | undefined;
+    const normalizedFixedAt = typeof rawFixedAt === 'string' && rawFixedAt.trim() ? rawFixedAt : undefined;
+    const rawDurationMinutes = fields.durationMinutes ?? fields.duration_minutes;
+    const inferredDurationMinutes = this.extractDurationMinutes(rawDurationMinutes, sourceText);
 
     switch (result.category) {
       case 'people':
@@ -623,9 +629,36 @@ export class ToolExecutor {
         return {
           ...baseData,
           status: 'pending' as const,
-          due_date: normalizedDueDate
+          due_date: normalizedDueDate,
+          due_at: normalizedDueAt,
+          duration_minutes: inferredDurationMinutes,
+          fixed_at: normalizedFixedAt
         };
     }
+  }
+
+  private extractDurationMinutes(rawValue: unknown, sourceText: string): number | undefined {
+    if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
+      return Math.max(5, Math.floor(rawValue));
+    }
+    if (typeof rawValue === 'string' && rawValue.trim()) {
+      const parsed = Number(rawValue);
+      if (Number.isFinite(parsed)) {
+        return Math.max(5, Math.floor(parsed));
+      }
+    }
+
+    const durationMatch = sourceText.match(/\b(\d{1,3})\s*(?:m|min|mins|minute|minutes)\b/i);
+    if (durationMatch) {
+      return Math.max(5, Math.floor(Number(durationMatch[1])));
+    }
+
+    const hourMatch = sourceText.match(/\b(\d{1,2})\s*(?:h|hr|hrs|hour|hours)\b/i);
+    if (hourMatch) {
+      return Math.max(5, Math.floor(Number(hourMatch[1]) * 60));
+    }
+
+    return undefined;
   }
 
   /**

@@ -42,7 +42,7 @@ const CLASSIFICATION_SCHEMA = `{
     // For people: { "context": string, "followUps": string[], "relatedProjects": string[] }
     // For projects: { "status": "active"|"waiting"|"blocked"|"someday", "nextAction": string, "relatedPeople": string[], "dueDate"?: string }
     // For ideas: { "oneLiner": string, "relatedProjects": string[] }
-    // For task: { "status": "pending", "dueDate"?: string, "relatedPeople": string[] }
+    // For task: { "status": "pending", "dueDate"?: string, "dueAt"?: string, "durationMinutes"?: number, "fixedAt"?: string, "relatedPeople": string[] }
   },
   "related_entries": ["slug1", "slug2"],
   "reasoning": "Brief explanation of classification decision",
@@ -189,11 +189,14 @@ Given a raw thought, classify it into one of these categories:
 - people: Information about a specific person (contact, relationship, follow-ups)
 - projects: Something with multiple steps, a goal, and a timeline
 - ideas: A concept, insight, or potential future thing (no active commitment yet)
-- task: A single task/errand with an optional due date
+- task: A single task/errand with an optional deadline, optional fixed appointment time, and optional duration
 
 Extract structured fields based on the category. Return JSON only.
 Today's date is ${today}. Convert relative dates (e.g. today, tomorrow, next week) to YYYY-MM-DD.
 For tasks, extract relatedPeople as an array of full names mentioned (empty array if none).
+For tasks, infer durationMinutes when explicitly mentioned (e.g. "30 minute task"). Default to 30 when unspecified.
+For tasks, use dueAt for date+time deadlines when present (e.g. "tomorrow by 3pm"), and dueDate when only date is known.
+For tasks, use fixedAt when the user explicitly requests a fixed execution slot/time.
 
 Schema:
 ${CLASSIFICATION_SCHEMA}
@@ -468,10 +471,26 @@ ${context.indexContent || '(No existing entries)'}
    * Normalize admin category fields.
    */
   private normalizeAdminFields(fields: Record<string, unknown>): AdminFields {
+    const rawDuration = fields.durationMinutes ?? fields.duration_minutes;
+    const parsedDuration = typeof rawDuration === 'number'
+      ? rawDuration
+      : (typeof rawDuration === 'string' && rawDuration.trim() !== '' ? Number(rawDuration) : NaN);
+    const durationMinutes =
+      Number.isFinite(parsedDuration) && parsedDuration >= 5
+        ? Math.floor(parsedDuration)
+        : undefined;
+
     return {
       status: 'pending',
       dueDate: fields.dueDate || fields.due_date
         ? String(fields.dueDate || fields.due_date)
+        : undefined,
+      dueAt: fields.dueAt || fields.due_at
+        ? String(fields.dueAt || fields.due_at)
+        : undefined,
+      durationMinutes,
+      fixedAt: fields.fixedAt || fields.fixed_at
+        ? String(fields.fixedAt || fields.fixed_at)
         : undefined,
       relatedPeople: this.normalizeStringArray(
         fields.relatedPeople || fields.related_people

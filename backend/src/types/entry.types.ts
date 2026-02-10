@@ -59,6 +59,9 @@ export interface IdeasEntry extends BaseEntry {
 export interface AdminEntry extends BaseEntry {
   status: AdminStatus;
   due_date?: string;
+  due_at?: string;
+  duration_minutes?: number;
+  fixed_at?: string;
 }
 
 /**
@@ -152,6 +155,9 @@ export interface EntrySummary {
   next_action?: string;
   one_liner?: string;
   due_date?: string;
+  due_at?: string;
+  duration_minutes?: number;
+  fixed_at?: string;
   context?: string;
   last_touched?: string;
   original_text?: string;
@@ -203,6 +209,9 @@ export interface CreateAdminInput {
   name: string;
   status?: AdminStatus;
   due_date?: string;
+  due_at?: string;
+  duration_minutes?: number;
+  fixed_at?: string;
   tags?: string[];
   source_channel: Channel;
   confidence: number;
@@ -259,7 +268,10 @@ export interface UpdateIdeasInput {
 export interface UpdateAdminInput {
   name?: string;
   status?: AdminStatus;
-  due_date?: string;
+  due_date?: string | null;
+  due_at?: string | null;
+  duration_minutes?: number;
+  fixed_at?: string | null;
   tags?: string[];
   confidence?: number;
 }

@@ -271,10 +271,12 @@ model ProjectDetails {
 }
 
 model AdminTaskDetails {
-  entryId   String      @id
-  entry     Entry       @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  status    AdminStatus
-  dueDate   DateTime?
+  entryId          String      @id
+  entry            Entry       @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  status           AdminStatus
+  dueDate          DateTime?
+  durationMinutes  Int         @default(30)
+  fixedAt          DateTime?
 }
 
 model IdeaDetails {

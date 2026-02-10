@@ -224,6 +224,51 @@ describe('Calendar API Integration Tests', () => {
 
     expect(plan.body.items).toHaveLength(1);
     expect(plan.body.items[0].start).toContain('2026-02-09T12:00:00.000Z');
-    expect(plan.body.items[0].end).toContain('2026-02-09T12:45:00.000Z');
+    expect(plan.body.items[0].end).toContain('2026-02-09T12:30:00.000Z');
+  });
+
+  it('uses fixed task appointment and custom task duration in week planning', async () => {
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Prepare launch notes',
+        status: 'pending',
+        due_date: '2026-02-09',
+        duration_minutes: 60,
+        fixed_at: '2026-02-09T13:15:00.000Z',
+        source_channel: 'api',
+        confidence: 0.95
+      })
+      .expect(201);
+
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Quick status check',
+        status: 'pending',
+        due_date: '2026-02-09',
+        source_channel: 'api',
+        confidence: 0.9
+      })
+      .expect(201);
+
+    const plan = await request(app)
+      .get('/api/calendar/plan-week?startDate=2026-02-09&days=1')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    const fixed = plan.body.items.find((item: any) => item.entryPath === 'task/prepare-launch-notes');
+    expect(fixed).toBeDefined();
+    expect(fixed.start).toBe('2026-02-09T13:15:00.000Z');
+    expect(fixed.end).toBe('2026-02-09T14:15:00.000Z');
+    expect(fixed.durationMinutes).toBe(60);
+
+    const regular = plan.body.items.find((item: any) => item.entryPath === 'task/quick-status-check');
+    expect(regular).toBeDefined();
+    expect(regular.durationMinutes).toBe(30);
   });
 });

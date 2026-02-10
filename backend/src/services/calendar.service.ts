@@ -67,6 +67,8 @@ interface Candidate {
   category: Category;
   sourceName: string;
   dueDate?: string;
+  dueAt?: Date;
+  fixedAt?: Date;
   title: string;
   durationMinutes: number;
   priority: number;
@@ -522,29 +524,39 @@ export class CalendarService {
 
     const candidates: Candidate[] = entries.map((entry) => {
       if (isTaskCategory(entry.category) && entry.adminDetails) {
-        const dueDate = entry.adminDetails.dueDate ? toYmd(entry.adminDetails.dueDate) : undefined;
-        const priority = this.computePriority(dueDate, startYmd, endYmd, 'task');
+        const dueAt = entry.adminDetails.dueDate ?? undefined;
+        const dueDate = dueAt ? toYmd(dueAt) : undefined;
+        const fixedAt = entry.adminDetails.fixedAt ?? undefined;
+        const priority = this.computePriority(dueAt, startYmd, endYmd, 'task');
         return {
           entryPath: `task/${entry.slug}`,
           category: 'task',
           sourceName: entry.title,
           title: entry.title,
           dueDate,
-          durationMinutes: 45,
+          dueAt,
+          fixedAt,
+          durationMinutes: Math.max(5, entry.adminDetails.durationMinutes || 30),
           priority,
-          reason: dueDate ? `Due on ${dueDate}` : 'Pending task'
+          reason: fixedAt
+            ? `Fixed at ${fixedAt.toISOString()}`
+            : dueAt
+              ? `Due at ${dueAt.toISOString()}`
+              : 'Pending task'
         };
       }
 
       const projectDueDate = entry.projectDetails?.dueDate ? toYmd(entry.projectDetails.dueDate) : undefined;
+      const projectDueAt = entry.projectDetails?.dueDate ?? undefined;
       const nextAction = entry.projectDetails?.nextAction?.trim();
-      const priority = this.computePriority(projectDueDate, startYmd, endYmd, 'projects');
+      const priority = this.computePriority(projectDueAt, startYmd, endYmd, 'projects');
       return {
         entryPath: `projects/${entry.slug}`,
         category: 'projects',
         sourceName: entry.title,
         title: nextAction || `Progress ${entry.title}`,
         dueDate: projectDueDate,
+        dueAt: projectDueAt,
         durationMinutes: 90,
         priority,
         reason: projectDueDate ? `Project due on ${projectDueDate}` : 'Active project momentum'
@@ -582,13 +594,68 @@ export class CalendarService {
     }
 
     const items: WeekPlanItem[] = [];
+    const fixedCandidates = candidates.filter((candidate) => Boolean(candidate.fixedAt));
+    const flexibleCandidates = candidates.filter((candidate) => !candidate.fixedAt);
 
-    for (const candidate of candidates) {
+    for (const candidate of fixedCandidates) {
+      const fixedAt = candidate.fixedAt as Date;
+      const dayIndex = Math.floor((Date.UTC(
+        fixedAt.getUTCFullYear(),
+        fixedAt.getUTCMonth(),
+        fixedAt.getUTCDate()
+      ) - start.getTime()) / (24 * 60 * 60 * 1000));
+
+      if (dayIndex < 0 || dayIndex >= days) {
+        warnings.push(`Skipped ${candidate.sourceName}: fixed appointment is outside planning window`);
+        continue;
+      }
+
+      const startMinute = fixedAt.getUTCHours() * 60 + fixedAt.getUTCMinutes();
+      const endMinute = startMinute + candidate.durationMinutes;
+      if (startMinute < WORKDAY_START_MINUTES || endMinute > WORKDAY_END_MINUTES) {
+        warnings.push(`Skipped ${candidate.sourceName}: fixed appointment is outside working hours`);
+        continue;
+      }
+
+      const blocked = dayIntervals[dayIndex].some((interval) =>
+        overlaps(startMinute, endMinute, interval.startMinute, interval.endMinute)
+      );
+      if (blocked) {
+        warnings.push(`Skipped ${candidate.sourceName}: fixed appointment conflicts with busy blocks`);
+        continue;
+      }
+
+      dayIntervals[dayIndex].push({ startMinute, endMinute });
+      dayIntervals[dayIndex].sort((a, b) => a.startMinute - b.startMinute);
+      dayLoads[dayIndex] += candidate.durationMinutes;
+
+      const ymd = toYmd(addDays(start, dayIndex));
+      const startTime = minutesToTime(startMinute);
+      const endTime = minutesToTime(endMinute);
+      items.push({
+        entryPath: candidate.entryPath,
+        category: candidate.category,
+        title: candidate.title,
+        sourceName: candidate.sourceName,
+        dueDate: candidate.dueDate,
+        start: toIsoDateTime(ymd, startTime.hour, startTime.minute),
+        end: toIsoDateTime(ymd, endTime.hour, endTime.minute),
+        durationMinutes: candidate.durationMinutes,
+        reason: candidate.reason
+      });
+    }
+
+    for (const candidate of flexibleCandidates) {
       const dayOrder = this.getCandidateDayOrder(candidate, startYmd, days, dayLoads);
       let scheduled = false;
 
       for (const dayIndex of dayOrder) {
-        const slotStart = this.findFirstAvailableSlot(dayIntervals[dayIndex], candidate.durationMinutes);
+        const latestEndMinute = this.getLatestEndMinuteForDay(candidate, start, dayIndex);
+        const slotStart = this.findFirstAvailableSlot(
+          dayIntervals[dayIndex],
+          candidate.durationMinutes,
+          latestEndMinute
+        );
         if (slotStart === null) continue;
 
         const slotEnd = slotStart + candidate.durationMinutes;
@@ -712,19 +779,28 @@ export class CalendarService {
   }
 
   private computePriority(
-    dueDate: string | undefined,
+    dueAt: Date | undefined,
     startYmd: string,
     endYmd: string,
     category: Category
   ): number {
     let score = isTaskCategory(category) ? 120 : 90;
-    if (!dueDate) return score;
+    if (!dueAt) return score;
+
+    const dueDate = toYmd(dueAt);
 
     if (dueDate < startYmd) return score + 80;
     if (dueDate <= endYmd) {
       const deltaDays =
         (parseYmdAsUtc(dueDate).getTime() - parseYmdAsUtc(startYmd).getTime()) / (24 * 60 * 60 * 1000);
-      return score + Math.max(10, 60 - Math.floor(deltaDays) * 8);
+      let boost = Math.max(10, 60 - Math.floor(deltaDays) * 8);
+      if (isTaskCategory(category) && deltaDays === 0) {
+        const dueMinutes = dueAt.getUTCHours() * 60 + dueAt.getUTCMinutes();
+        if (dueMinutes <= 12 * 60) {
+          boost += 8;
+        }
+      }
+      return score + boost;
     }
 
     return score + 5;
@@ -765,9 +841,10 @@ export class CalendarService {
   }
 
   private getCandidateDayOrder(candidate: Candidate, startYmd: string, days: number, dayLoads: number[]): number[] {
-    const dueIndex = candidate.dueDate
+    const dueAnchorDate = candidate.dueAt ? toYmd(candidate.dueAt) : candidate.dueDate;
+    const dueIndex = dueAnchorDate
       ? Math.floor(
-          (parseYmdAsUtc(candidate.dueDate).getTime() - parseYmdAsUtc(startYmd).getTime()) /
+          (parseYmdAsUtc(dueAnchorDate).getTime() - parseYmdAsUtc(startYmd).getTime()) /
             (24 * 60 * 60 * 1000)
         )
       : null;
@@ -787,11 +864,12 @@ export class CalendarService {
 
   private findFirstAvailableSlot(
     intervals: Array<{ startMinute: number; endMinute: number }>,
-    durationMinutes: number
+    durationMinutes: number,
+    latestEndMinute = WORKDAY_END_MINUTES
   ): number | null {
     for (
       let cursor = WORKDAY_START_MINUTES;
-      cursor + durationMinutes <= WORKDAY_END_MINUTES;
+      cursor + durationMinutes <= latestEndMinute;
       cursor += SLOT_GRANULARITY_MINUTES
     ) {
       const slotEnd = cursor + durationMinutes;
@@ -801,6 +879,24 @@ export class CalendarService {
       }
     }
     return null;
+  }
+
+  private getLatestEndMinuteForDay(candidate: Candidate, windowStart: Date, dayIndex: number): number {
+    if (!candidate.dueAt) {
+      return WORKDAY_END_MINUTES;
+    }
+    const dueAt = candidate.dueAt;
+    const dueAtMinute = dueAt.getUTCHours() * 60 + dueAt.getUTCMinutes();
+    // Date-only due dates are stored at midnight; do not treat them as same-day hard time cutoffs.
+    if (dueAtMinute === 0) {
+      return WORKDAY_END_MINUTES;
+    }
+    const dueYmd = toYmd(dueAt);
+    const candidateDay = toYmd(addDays(windowStart, dayIndex));
+    if (candidateDay !== dueYmd) {
+      return WORKDAY_END_MINUTES;
+    }
+    return Math.min(WORKDAY_END_MINUTES, dueAtMinute);
   }
 }
 

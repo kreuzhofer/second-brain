@@ -81,6 +81,44 @@ function getCurrentDate(): string {
   return new Date().toISOString().split('T')[0];
 }
 
+function parseOptionalDateTime(value: unknown, fieldName: string): Date | null {
+  if (value === undefined) return null;
+  if (value === null || value === '') return null;
+  if (typeof value !== 'string') {
+    throw new InvalidEntryDataError(`${fieldName} must be a valid ISO datetime string`);
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new InvalidEntryDataError(`${fieldName} must be a valid ISO datetime string`);
+  }
+  return parsed;
+}
+
+function parseOptionalDate(value: unknown, fieldName: string): Date | null {
+  if (value === undefined) return null;
+  if (value === null || value === '') return null;
+  if (typeof value !== 'string') {
+    throw new InvalidEntryDataError(`${fieldName} must be a YYYY-MM-DD string`);
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new InvalidEntryDataError(`${fieldName} must be a YYYY-MM-DD string`);
+  }
+  return parsed;
+}
+
+function parseTaskDurationMinutes(value: unknown, fallback = 30): number {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new InvalidEntryDataError('duration_minutes must be a positive integer');
+  }
+  const rounded = Math.floor(value);
+  if (rounded < 5 || rounded > 720) {
+    throw new InvalidEntryDataError('duration_minutes must be between 5 and 720');
+  }
+  return rounded;
+}
+
 function parseEntryPath(path: string): { category: Category; slug: string } {
   const [rawCategory, rawSlug] = path.split('/');
   if (!rawCategory || !rawSlug) {
@@ -217,11 +255,16 @@ export class EntryService {
 
       if (isTaskCategory(storageCategory)) {
         const payload = data as any;
+        const dueDate =
+          parseOptionalDateTime(payload.due_at, 'due_at') ??
+          parseOptionalDate(payload.due_date, 'due_date');
         await tx.adminTaskDetails.create({
           data: {
             entryId: entry.id,
             status: payload.status || 'pending',
-            dueDate: payload.due_date ? new Date(payload.due_date) : null
+            dueDate,
+            durationMinutes: parseTaskDurationMinutes(payload.duration_minutes, 30),
+            fixedAt: parseOptionalDateTime(payload.fixed_at, 'fixed_at')
           }
         });
       }
@@ -378,6 +421,13 @@ export class EntryService {
           summary.due_date = entry.adminDetails.dueDate
             ? entry.adminDetails.dueDate.toISOString().split('T')[0]
             : undefined;
+          summary.due_at = entry.adminDetails.dueDate
+            ? entry.adminDetails.dueDate.toISOString()
+            : undefined;
+          summary.duration_minutes = entry.adminDetails.durationMinutes;
+          summary.fixed_at = entry.adminDetails.fixedAt
+            ? entry.adminDetails.fixedAt.toISOString()
+            : undefined;
         }
 
         if (entry.category === 'ideas' && entry.ideaDetails) {
@@ -489,13 +539,38 @@ export class EntryService {
       }
 
       if (isTaskCategory(existing.category)) {
+        const hasDueAt = Object.prototype.hasOwnProperty.call(updates as any, 'due_at');
+        const hasDueDate = Object.prototype.hasOwnProperty.call(updates as any, 'due_date');
+        const hasDurationMinutes = Object.prototype.hasOwnProperty.call(updates as any, 'duration_minutes');
+        const hasFixedAt = Object.prototype.hasOwnProperty.call(updates as any, 'fixed_at');
+
+        let dueDateData: Date | null | undefined;
+        if (hasDueAt) {
+          dueDateData = parseOptionalDateTime((updates as any).due_at, 'due_at');
+        } else if (hasDueDate) {
+          dueDateData = parseOptionalDate((updates as any).due_date, 'due_date');
+        }
+
+        let durationMinutesData: number | undefined;
+        if (hasDurationMinutes) {
+          durationMinutesData = parseTaskDurationMinutes(
+            (updates as any).duration_minutes,
+            existing.adminDetails?.durationMinutes ?? 30
+          );
+        }
+
+        let fixedAtData: Date | null | undefined;
+        if (hasFixedAt) {
+          fixedAtData = parseOptionalDateTime((updates as any).fixed_at, 'fixed_at');
+        }
+
         await tx.adminTaskDetails.update({
           where: { entryId: existing.id },
           data: {
             status: (updates as any).status ?? existing.adminDetails?.status,
-            dueDate: (updates as any).due_date
-              ? new Date((updates as any).due_date)
-              : existing.adminDetails?.dueDate
+            dueDate: dueDateData,
+            durationMinutes: durationMinutesData,
+            fixedAt: fixedAtData
           }
         });
       }
@@ -665,11 +740,16 @@ export class EntryService {
 
       if (isTaskCategory(storageTargetCategory)) {
         const entry = transformed.entry as AdminEntry;
+        const dueDate =
+          parseOptionalDateTime(entry.due_at, 'due_at') ??
+          parseOptionalDate(entry.due_date, 'due_date');
         await tx.adminTaskDetails.create({
           data: {
             entryId: entryRecord.id,
             status: entry.status || 'pending',
-            dueDate: entry.due_date ? new Date(entry.due_date) : null
+            dueDate,
+            durationMinutes: parseTaskDurationMinutes(entry.duration_minutes, 30),
+            fixedAt: parseOptionalDateTime(entry.fixed_at, 'fixed_at')
           }
         });
       }
@@ -863,6 +943,13 @@ export class EntryService {
           status: entry.adminDetails?.status || 'pending',
           due_date: entry.adminDetails?.dueDate
             ? entry.adminDetails.dueDate.toISOString().split('T')[0]
+            : undefined,
+          due_at: entry.adminDetails?.dueDate
+            ? entry.adminDetails.dueDate.toISOString()
+            : undefined,
+          duration_minutes: entry.adminDetails?.durationMinutes ?? 30,
+          fixed_at: entry.adminDetails?.fixedAt
+            ? entry.adminDetails.fixedAt.toISOString()
             : undefined
         } as AdminEntry;
       case 'inbox':
@@ -945,7 +1032,8 @@ export class EntryService {
       case 'admin':
         transformed = {
           ...base,
-          status: 'pending'
+          status: 'pending',
+          duration_minutes: 30
         } as AdminEntry;
         break;
       case 'inbox':

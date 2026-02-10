@@ -80,6 +80,9 @@ export interface EntrySummary {
   next_action?: string;
   one_liner?: string;
   due_date?: string;
+  due_at?: string;
+  duration_minutes?: number;
+  fixed_at?: string;
   context?: string;
   last_touched?: string;
   original_text?: string;

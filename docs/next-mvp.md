@@ -81,7 +81,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 ## Next-Level Backlog (Unified)
 
 ### Priority Next
-- Task model rework phase 1: add task duration, optional fixed appointment time, and deadline-aware autoscheduling.
+- Task model rework phase 2: add priority-aware auto-rescheduling loops with configurable granularity/buffer windows and multi-calendar blocker support.
 - Entity graph analytics phase 3: graph-level filters and richer link inspection views in modal/panel surfaces.
 - Relationship insights phase 2: add project-centric insights, trend windows, and actionable follow-up suggestions.
 
@@ -150,6 +150,12 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Structured analytics dashboard for usage metrics.
 
 ## Progress Log
+- 2026-02-10: Completed Task model rework phase 1.
+- 2026-02-10: Added task scheduling fields end-to-end: `duration_minutes` (default 30), `due_at` (datetime), and `fixed_at` (optional fixed appointment) with additive Prisma migration `20260210085809_task_schedule_fields_phase1`.
+- 2026-02-10: Updated capture/update pipelines to parse and persist scheduling fields from chat/tool inputs; added support for clearing date/time fields on update.
+- 2026-02-10: Updated week planner scheduling logic to honor custom task duration, reserve fixed appointments first, and treat date-only due dates without midnight false-cutoff behavior.
+- 2026-02-10: Added task scheduling controls in entry modal (`duration`, `deadline`, `fixed time`) with save/clear support.
+- 2026-02-10: Verification complete: targeted backend integration tests (`32/32`), full workspace tests (`75/75` backend suites, `900` backend tests, `5/5` frontend test files), frontend production build, and Docker rebuild/redeploy (`docker compose up -d --build`) all passed.
 - 2026-02-09: Completed Admin -> Task migration phases 1-3 in one pass.
 - 2026-02-09: Phase 1 shipped: added `task` enum category and backfilled `Entry.category`, `DigestPreference.focusCategories[]`, and `InboxDetails.suggestedCategory` from `admin` to `task` via Prisma migrations.
 - 2026-02-09: Phase 2 shipped: API/tool compatibility now accepts both `admin` and `task` inputs while canonicalizing storage/output/path behavior to `task`, including legacy `admin/<slug>` read/update/delete fallback resolution.

@@ -34,6 +34,11 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
   const [linkDraft, setLinkDraft] = useState('');
   const [isLinkBusy, setIsLinkBusy] = useState(false);
   const [linkBusyKey, setLinkBusyKey] = useState<string | null>(null);
+  const [taskDurationDraft, setTaskDurationDraft] = useState<string>('');
+  const [taskDueAtDraft, setTaskDueAtDraft] = useState<string>('');
+  const [taskFixedAtDraft, setTaskFixedAtDraft] = useState<string>('');
+  const [isSavingTaskSchedule, setIsSavingTaskSchedule] = useState(false);
+  const [taskScheduleError, setTaskScheduleError] = useState<string | null>(null);
   const notesRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -57,6 +62,22 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
     if (!entry || isEditingNotes) return;
     setNotesDraft(entry.content ?? '');
   }, [entry?.path, entry?.content, entry, isEditingNotes]);
+
+  useEffect(() => {
+    if (!entry || !isTaskCategory(entry.category)) {
+      setTaskDurationDraft('');
+      setTaskDueAtDraft('');
+      setTaskFixedAtDraft('');
+      return;
+    }
+    const duration = (entry.entry as any).duration_minutes;
+    const dueAt = (entry.entry as any).due_at;
+    const fixedAt = (entry.entry as any).fixed_at;
+    setTaskDurationDraft(duration ? String(duration) : '30');
+    setTaskDueAtDraft(toDateTimeLocalValue(dueAt));
+    setTaskFixedAtDraft(toDateTimeLocalValue(fixedAt));
+    setTaskScheduleError(null);
+  }, [entry]);
 
   useEffect(() => {
     if (!isEditingNotes) return;
@@ -195,6 +216,30 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
     }
   };
 
+  const saveTaskSchedule = async () => {
+    if (!entry || !isTaskCategory(entry.category)) return;
+    const parsedDuration = Number(taskDurationDraft || '30');
+    if (!Number.isFinite(parsedDuration) || parsedDuration < 5 || parsedDuration > 720) {
+      setTaskScheduleError('Duration must be between 5 and 720 minutes.');
+      return;
+    }
+
+    setIsSavingTaskSchedule(true);
+    setTaskScheduleError(null);
+    try {
+      const updated = await api.entries.update(entry.path, {
+        duration_minutes: Math.floor(parsedDuration),
+        due_at: taskDueAtDraft ? fromDateTimeLocalValue(taskDueAtDraft) : null,
+        fixed_at: taskFixedAtDraft ? fromDateTimeLocalValue(taskFixedAtDraft) : null
+      });
+      setEntry(updated);
+    } catch (err) {
+      setTaskScheduleError(err instanceof Error ? err.message : 'Failed to update task schedule');
+    } finally {
+      setIsSavingTaskSchedule(false);
+    }
+  };
+
   if (!entryPath) return null;
 
   const isTaskCategory = (category: string): boolean => category === 'task' || category === 'admin';
@@ -325,6 +370,72 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
                     ))}
                 </dl>
               </div>
+
+              {isTaskCategory(entry.category) && (
+                <div className="space-y-3 rounded-md border border-border p-3">
+                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                    Task schedule
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <label className="space-y-1">
+                      <span className="text-xs text-muted-foreground">Duration (minutes)</span>
+                      <input
+                        type="number"
+                        min={5}
+                        max={720}
+                        step={5}
+                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+                        value={taskDurationDraft}
+                        onChange={(event) => setTaskDurationDraft(event.target.value)}
+                        disabled={isSavingTaskSchedule}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-muted-foreground">Deadline (optional)</span>
+                      <input
+                        type="datetime-local"
+                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+                        value={taskDueAtDraft}
+                        onChange={(event) => setTaskDueAtDraft(event.target.value)}
+                        disabled={isSavingTaskSchedule}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-muted-foreground">Fixed time (optional)</span>
+                      <input
+                        type="datetime-local"
+                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+                        value={taskFixedAtDraft}
+                        onChange={(event) => setTaskFixedAtDraft(event.target.value)}
+                        disabled={isSavingTaskSchedule}
+                      />
+                    </label>
+                  </div>
+                  {taskScheduleError && (
+                    <p className="text-sm text-destructive">{taskScheduleError}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={saveTaskSchedule}
+                      disabled={isSavingTaskSchedule}
+                    >
+                      {isSavingTaskSchedule ? 'Saving...' : 'Save schedule'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSavingTaskSchedule}
+                      onClick={() => {
+                        setTaskDueAtDraft('');
+                        setTaskFixedAtDraft('');
+                      }}
+                    >
+                      Clear dates
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Links section */}
               <div className="space-y-4">
@@ -590,4 +701,24 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
   );
 
   return createPortal(modalContent, document.body);
+}
+
+function toDateTimeLocalValue(value: unknown): string {
+  if (typeof value !== 'string' || !value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  const hour = String(parsed.getHours()).padStart(2, '0');
+  const minute = String(parsed.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function fromDateTimeLocalValue(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toISOString();
 }
