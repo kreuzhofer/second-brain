@@ -145,12 +145,33 @@ export interface WeekPlanResponse {
   endDate: string;
   items: WeekPlanItem[];
   totalMinutes: number;
+  warnings?: string[];
 }
 
 export interface CalendarPublishResponse {
   httpsUrl: string;
   webcalUrl: string;
   expiresAt: string;
+}
+
+export interface CalendarSource {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  color?: string | null;
+  etag?: string | null;
+  lastSyncAt?: string | null;
+  fetchStatus: string;
+  fetchError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CalendarSyncResponse {
+  source: CalendarSource;
+  importedBlocks: number;
+  totalBlocks: number;
 }
 
 export interface RelationshipInsightsResponse {
@@ -559,6 +580,35 @@ class ApiClient {
     },
     publish: async (): Promise<CalendarPublishResponse> => {
       return this.request<CalendarPublishResponse>('/calendar/publish');
+    },
+    listSources: async (): Promise<CalendarSource[]> => {
+      const response = await this.request<{ sources: CalendarSource[] }>('/calendar/sources');
+      return response.sources;
+    },
+    createSource: async (payload: { name: string; url: string; color?: string }): Promise<CalendarSource> => {
+      return this.request<CalendarSource>('/calendar/sources', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    },
+    updateSource: async (
+      sourceId: string,
+      payload: { name?: string; enabled?: boolean; color?: string | null }
+    ): Promise<CalendarSource> => {
+      return this.request<CalendarSource>(`/calendar/sources/${sourceId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+    },
+    deleteSource: async (sourceId: string): Promise<void> => {
+      await this.request<void>(`/calendar/sources/${sourceId}`, {
+        method: 'DELETE'
+      });
+    },
+    syncSource: async (sourceId: string): Promise<CalendarSyncResponse> => {
+      return this.request<CalendarSyncResponse>(`/calendar/sources/${sourceId}/sync`, {
+        method: 'POST'
+      });
     }
   };
 

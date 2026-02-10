@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import jwt, { Secret, SignOptions, JwtPayload } from 'jsonwebtoken';
 import { getPrismaClient } from '../lib/prisma';
 import { getConfig } from '../config/env';
@@ -26,6 +27,39 @@ export interface WeekPlan {
   endDate: string;
   items: WeekPlanItem[];
   totalMinutes: number;
+  warnings: string[];
+}
+
+export interface CalendarSourceInput {
+  name: string;
+  url: string;
+  color?: string;
+}
+
+export interface CalendarSourceUpdateInput {
+  name?: string;
+  enabled?: boolean;
+  color?: string | null;
+}
+
+export interface CalendarSourceRecord {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  color: string | null;
+  etag: string | null;
+  lastSyncAt: string | null;
+  fetchStatus: string;
+  fetchError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CalendarSyncResult {
+  source: CalendarSourceRecord;
+  importedBlocks: number;
+  totalBlocks: number;
 }
 
 interface Candidate {
@@ -38,6 +72,25 @@ interface Candidate {
   priority: number;
   reason: string;
 }
+
+interface BusyInterval {
+  dayIndex: number;
+  startMinute: number;
+  endMinute: number;
+}
+
+interface ParsedBusyEvent {
+  blockKey: string;
+  externalId?: string;
+  title?: string;
+  startAt: Date;
+  endAt: Date;
+  isAllDay: boolean;
+}
+
+const WORKDAY_START_MINUTES = 9 * 60;
+const WORKDAY_END_MINUTES = 17 * 60;
+const SLOT_GRANULARITY_MINUTES = 15;
 
 function isValidYmd(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -108,14 +161,342 @@ function escapeIcsText(value: string): string {
     .replace(/;/g, '\\;');
 }
 
+function serializeSource(record: {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  color: string | null;
+  etag: string | null;
+  lastSyncAt: Date | null;
+  fetchStatus: string;
+  fetchError: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): CalendarSourceRecord {
+  return {
+    id: record.id,
+    name: record.name,
+    url: record.url,
+    enabled: record.enabled,
+    color: record.color,
+    etag: record.etag,
+    lastSyncAt: record.lastSyncAt?.toISOString() || null,
+    fetchStatus: record.fetchStatus,
+    fetchError: record.fetchError,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString()
+  };
+}
+
+function normalizeIcsLineContinuations(content: string): string[] {
+  const rawLines = content.split(/\r?\n/);
+  const lines: string[] = [];
+
+  for (const line of rawLines) {
+    if (!line) continue;
+    if ((line.startsWith(' ') || line.startsWith('\t')) && lines.length > 0) {
+      lines[lines.length - 1] += line.slice(1);
+    } else {
+      lines.push(line);
+    }
+  }
+
+  return lines;
+}
+
+function parseIcsDate(valueWithParams: string): { date: Date | null; isAllDay: boolean } {
+  const [rawKey, rawValue = ''] = valueWithParams.split(':');
+  const value = rawValue.trim();
+  const key = rawKey.toUpperCase();
+  const isDateOnly = key.includes('VALUE=DATE') || /^\d{8}$/.test(value);
+
+  if (isDateOnly) {
+    if (!/^\d{8}$/.test(value)) return { date: null, isAllDay: true };
+    const year = Number(value.slice(0, 4));
+    const month = Number(value.slice(4, 6)) - 1;
+    const day = Number(value.slice(6, 8));
+    return { date: new Date(Date.UTC(year, month, day, 0, 0, 0)), isAllDay: true };
+  }
+
+  const cleaned = value.endsWith('Z') ? value.slice(0, -1) : value;
+  if (!/^\d{8}T\d{6}$/.test(cleaned)) {
+    return { date: null, isAllDay: false };
+  }
+
+  const year = Number(cleaned.slice(0, 4));
+  const month = Number(cleaned.slice(4, 6)) - 1;
+  const day = Number(cleaned.slice(6, 8));
+  const hour = Number(cleaned.slice(9, 11));
+  const minute = Number(cleaned.slice(11, 13));
+  const second = Number(cleaned.slice(13, 15));
+
+  return {
+    date: new Date(Date.UTC(year, month, day, hour, minute, second)),
+    isAllDay: false
+  };
+}
+
+function parseBusyEventsFromIcs(content: string): ParsedBusyEvent[] {
+  const lines = normalizeIcsLineContinuations(content);
+  const events: ParsedBusyEvent[] = [];
+
+  let inEvent = false;
+  let currentUid: string | undefined;
+  let currentSummary: string | undefined;
+  let dtStartLine: string | undefined;
+  let dtEndLine: string | undefined;
+
+  const flush = () => {
+    if (!dtStartLine) return;
+    const parsedStart = parseIcsDate(dtStartLine);
+    if (!parsedStart.date) return;
+
+    let parsedEnd = dtEndLine ? parseIcsDate(dtEndLine) : { date: null, isAllDay: parsedStart.isAllDay };
+    if (!parsedEnd.date) {
+      const defaultMinutes = parsedStart.isAllDay ? 24 * 60 : 60;
+      parsedEnd = {
+        date: new Date(parsedStart.date.getTime() + defaultMinutes * 60 * 1000),
+        isAllDay: parsedStart.isAllDay
+      };
+    }
+    const endDate = parsedEnd.date;
+    if (!endDate) return;
+
+    if (endDate <= parsedStart.date) return;
+
+    const keySource = `${currentUid || ''}|${parsedStart.date.toISOString()}|${endDate.toISOString()}|${currentSummary || ''}`;
+    const blockKey = crypto.createHash('sha1').update(keySource).digest('hex');
+
+    events.push({
+      blockKey,
+      externalId: currentUid,
+      title: currentSummary,
+      startAt: parsedStart.date,
+      endAt: endDate,
+      isAllDay: parsedStart.isAllDay
+    });
+  };
+
+  for (const line of lines) {
+    const upper = line.toUpperCase();
+
+    if (upper === 'BEGIN:VEVENT') {
+      inEvent = true;
+      currentUid = undefined;
+      currentSummary = undefined;
+      dtStartLine = undefined;
+      dtEndLine = undefined;
+      continue;
+    }
+
+    if (upper === 'END:VEVENT') {
+      flush();
+      inEvent = false;
+      continue;
+    }
+
+    if (!inEvent) continue;
+
+    if (upper.startsWith('UID:')) {
+      currentUid = line.slice(line.indexOf(':') + 1).trim();
+      continue;
+    }
+
+    if (upper.startsWith('SUMMARY:')) {
+      currentSummary = line.slice(line.indexOf(':') + 1).trim();
+      continue;
+    }
+
+    if (upper.startsWith('DTSTART')) {
+      dtStartLine = line;
+      continue;
+    }
+
+    if (upper.startsWith('DTEND')) {
+      dtEndLine = line;
+    }
+  }
+
+  return events;
+}
+
+function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return aStart < bEnd && bStart < aEnd;
+}
+
 export class CalendarService {
   private prisma = getPrismaClient();
   private config = getConfig();
+
+  async listSourcesForUser(userId: string): Promise<CalendarSourceRecord[]> {
+    const sources = await this.prisma.calendarSource.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' }
+    });
+    return sources.map(serializeSource);
+  }
+
+  async createSourceForUser(userId: string, input: CalendarSourceInput): Promise<CalendarSourceRecord> {
+    const name = input.name?.trim();
+    const url = input.url?.trim();
+    const color = input.color?.trim() || null;
+
+    if (!name) {
+      throw new Error('Source name is required');
+    }
+    this.validateSourceUrl(url);
+
+    const created = await this.prisma.calendarSource.create({
+      data: {
+        userId,
+        name,
+        url,
+        color
+      }
+    });
+
+    return serializeSource(created);
+  }
+
+  async updateSourceForUser(userId: string, sourceId: string, input: CalendarSourceUpdateInput): Promise<CalendarSourceRecord> {
+    const existing = await this.prisma.calendarSource.findFirst({ where: { id: sourceId, userId } });
+    if (!existing) {
+      throw new Error('Calendar source not found');
+    }
+
+    const updated = await this.prisma.calendarSource.update({
+      where: { id: sourceId },
+      data: {
+        name: input.name?.trim(),
+        enabled: input.enabled,
+        color: input.color === undefined ? undefined : (input.color?.trim() || null)
+      }
+    });
+
+    return serializeSource(updated);
+  }
+
+  async deleteSourceForUser(userId: string, sourceId: string): Promise<void> {
+    const existing = await this.prisma.calendarSource.findFirst({ where: { id: sourceId, userId } });
+    if (!existing) {
+      throw new Error('Calendar source not found');
+    }
+
+    await this.prisma.calendarSource.delete({ where: { id: sourceId } });
+  }
+
+  async syncSourceForUser(userId: string, sourceId: string): Promise<CalendarSyncResult> {
+    const source = await this.prisma.calendarSource.findFirst({ where: { id: sourceId, userId } });
+    if (!source) {
+      throw new Error('Calendar source not found');
+    }
+
+    this.validateSourceUrl(source.url);
+
+    const headers: Record<string, string> = {};
+    if (source.etag) {
+      headers['If-None-Match'] = source.etag;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(source.url, { headers });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch calendar source';
+      await this.prisma.calendarSource.update({
+        where: { id: source.id },
+        data: {
+          lastSyncAt: new Date(),
+          fetchStatus: 'fetch_failed',
+          fetchError: message
+        }
+      });
+      throw new Error(`Failed to fetch calendar source: ${message}`);
+    }
+
+    if (response.status === 304) {
+      const unchanged = await this.prisma.calendarSource.update({
+        where: { id: source.id },
+        data: {
+          lastSyncAt: new Date(),
+          fetchStatus: 'synced',
+          fetchError: null
+        },
+        include: {
+          busyBlocks: true
+        }
+      });
+
+      return {
+        source: serializeSource(unchanged),
+        importedBlocks: 0,
+        totalBlocks: unchanged.busyBlocks.length
+      };
+    }
+
+    if (!response.ok) {
+      const message = `Source returned HTTP ${response.status}`;
+      await this.prisma.calendarSource.update({
+        where: { id: source.id },
+        data: {
+          lastSyncAt: new Date(),
+          fetchStatus: 'fetch_failed',
+          fetchError: message
+        }
+      });
+      throw new Error(message);
+    }
+
+    const body = await response.text();
+    const parsedEvents = parseBusyEventsFromIcs(body);
+
+    const etag = response.headers.get('etag');
+
+    const synced = await this.prisma.$transaction(async (tx) => {
+      await tx.calendarBusyBlock.deleteMany({ where: { sourceId: source.id } });
+
+      if (parsedEvents.length > 0) {
+        await tx.calendarBusyBlock.createMany({
+          data: parsedEvents.map((event) => ({
+            userId,
+            sourceId: source.id,
+            blockKey: event.blockKey,
+            externalId: event.externalId,
+            title: event.title,
+            startAt: event.startAt,
+            endAt: event.endAt,
+            isAllDay: event.isAllDay
+          }))
+        });
+      }
+
+      return tx.calendarSource.update({
+        where: { id: source.id },
+        data: {
+          etag,
+          lastSyncAt: new Date(),
+          fetchStatus: 'synced',
+          fetchError: null
+        },
+        include: {
+          busyBlocks: true
+        }
+      });
+    });
+
+    return {
+      source: serializeSource(synced),
+      importedBlocks: parsedEvents.length,
+      totalBlocks: synced.busyBlocks.length
+    };
+  }
 
   async buildWeekPlanForUser(userId: string, options?: WeekPlanOptions): Promise<WeekPlan> {
     const start = parseStartDate(options?.startDate);
     const days = parseDays(options?.days);
     const end = addDays(start, days - 1);
+    const windowEndExclusive = addDays(end, 1);
     const startYmd = toYmd(start);
     const endYmd = toYmd(end);
 
@@ -172,31 +553,72 @@ export class CalendarService {
 
     candidates.sort((a, b) => b.priority - a.priority);
 
-    const dailyCapacity = 4 * 60;
+    const busyBlocks = await this.prisma.calendarBusyBlock.findMany({
+      where: {
+        userId,
+        source: { enabled: true },
+        startAt: { lt: windowEndExclusive },
+        endAt: { gt: start }
+      },
+      orderBy: { startAt: 'asc' }
+    });
+
     const dayLoads = Array<number>(days).fill(0);
+    const dayIntervals = Array.from({ length: days }, () => [] as Array<{ startMinute: number; endMinute: number }>);
+    const warnings: string[] = [];
+
+    for (const block of busyBlocks) {
+      const intervals = this.toBusyIntervalsForWindow(block.startAt, block.endAt, start, days);
+      for (const interval of intervals) {
+        dayIntervals[interval.dayIndex].push({
+          startMinute: interval.startMinute,
+          endMinute: interval.endMinute
+        });
+      }
+    }
+
+    for (const intervals of dayIntervals) {
+      intervals.sort((a, b) => a.startMinute - b.startMinute);
+    }
+
     const items: WeekPlanItem[] = [];
 
     for (const candidate of candidates) {
-      const dayIndex = this.pickDayIndex(candidate, startYmd, dayLoads, dailyCapacity, days);
-      const ymd = toYmd(addDays(start, dayIndex));
-      const startMinutes = 9 * 60 + dayLoads[dayIndex];
-      const endMinutes = startMinutes + candidate.durationMinutes;
-      const startTime = minutesToTime(startMinutes);
-      const endTime = minutesToTime(endMinutes);
+      const dayOrder = this.getCandidateDayOrder(candidate, startYmd, days, dayLoads);
+      let scheduled = false;
 
-      items.push({
-        entryPath: candidate.entryPath,
-        category: candidate.category,
-        title: candidate.title,
-        sourceName: candidate.sourceName,
-        dueDate: candidate.dueDate,
-        start: toIsoDateTime(ymd, startTime.hour, startTime.minute),
-        end: toIsoDateTime(ymd, endTime.hour, endTime.minute),
-        durationMinutes: candidate.durationMinutes,
-        reason: candidate.reason
-      });
+      for (const dayIndex of dayOrder) {
+        const slotStart = this.findFirstAvailableSlot(dayIntervals[dayIndex], candidate.durationMinutes);
+        if (slotStart === null) continue;
 
-      dayLoads[dayIndex] += candidate.durationMinutes;
+        const slotEnd = slotStart + candidate.durationMinutes;
+        dayIntervals[dayIndex].push({ startMinute: slotStart, endMinute: slotEnd });
+        dayIntervals[dayIndex].sort((a, b) => a.startMinute - b.startMinute);
+        dayLoads[dayIndex] += candidate.durationMinutes;
+
+        const ymd = toYmd(addDays(start, dayIndex));
+        const startTime = minutesToTime(slotStart);
+        const endTime = minutesToTime(slotEnd);
+
+        items.push({
+          entryPath: candidate.entryPath,
+          category: candidate.category,
+          title: candidate.title,
+          sourceName: candidate.sourceName,
+          dueDate: candidate.dueDate,
+          start: toIsoDateTime(ymd, startTime.hour, startTime.minute),
+          end: toIsoDateTime(ymd, endTime.hour, endTime.minute),
+          durationMinutes: candidate.durationMinutes,
+          reason: candidate.reason
+        });
+
+        scheduled = true;
+        break;
+      }
+
+      if (!scheduled) {
+        warnings.push(`Skipped ${candidate.sourceName}: no free slot in planning window`);
+      }
     }
 
     items.sort((a, b) => a.start.localeCompare(b.start));
@@ -205,7 +627,8 @@ export class CalendarService {
       startDate: startYmd,
       endDate: endYmd,
       items,
-      totalMinutes: items.reduce((sum, item) => sum + item.durationMinutes, 0)
+      totalMinutes: items.reduce((sum, item) => sum + item.durationMinutes, 0),
+      warnings
     };
   }
 
@@ -273,6 +696,21 @@ export class CalendarService {
     return `${lines.join('\r\n')}\r\n`;
   }
 
+  private validateSourceUrl(url: string | undefined): asserts url is string {
+    if (!url) {
+      throw new Error('Source URL is required');
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error('Invalid source URL');
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error('Source URL must use http or https');
+    }
+  }
+
   private computePriority(
     dueDate: string | undefined,
     startYmd: string,
@@ -292,13 +730,41 @@ export class CalendarService {
     return score + 5;
   }
 
-  private pickDayIndex(
-    candidate: Candidate,
-    startYmd: string,
-    dayLoads: number[],
-    dailyCapacity: number,
-    days: number
-  ): number {
+  private toBusyIntervalsForWindow(startAt: Date, endAt: Date, windowStart: Date, days: number): BusyInterval[] {
+    const intervals: BusyInterval[] = [];
+
+    for (let dayIndex = 0; dayIndex < days; dayIndex += 1) {
+      const dayStart = addDays(windowStart, dayIndex);
+      const dayEnd = addDays(dayStart, 1);
+      if (!overlaps(startAt.getTime(), endAt.getTime(), dayStart.getTime(), dayEnd.getTime())) {
+        continue;
+      }
+
+      const clampedStart = Math.max(startAt.getTime(), dayStart.getTime());
+      const clampedEnd = Math.min(endAt.getTime(), dayEnd.getTime());
+
+      const startDate = new Date(clampedStart);
+      const endDate = new Date(clampedEnd);
+      const startMinute = startDate.getUTCHours() * 60 + startDate.getUTCMinutes();
+      const endMinute = endDate.getUTCHours() * 60 + endDate.getUTCMinutes();
+
+      const boundedStart = Math.max(WORKDAY_START_MINUTES, startMinute);
+      const boundedEnd = Math.min(WORKDAY_END_MINUTES, endMinute);
+      if (boundedEnd <= boundedStart) {
+        continue;
+      }
+
+      intervals.push({
+        dayIndex,
+        startMinute: boundedStart,
+        endMinute: boundedEnd
+      });
+    }
+
+    return intervals;
+  }
+
+  private getCandidateDayOrder(candidate: Candidate, startYmd: string, days: number, dayLoads: number[]): number[] {
     const dueIndex = candidate.dueDate
       ? Math.floor(
           (parseYmdAsUtc(candidate.dueDate).getTime() - parseYmdAsUtc(startYmd).getTime()) /
@@ -308,21 +774,33 @@ export class CalendarService {
 
     if (dueIndex !== null) {
       const boundedDue = Math.max(0, Math.min(days - 1, dueIndex));
-      for (let i = 0; i <= boundedDue; i += 1) {
-        if (dayLoads[i] + candidate.durationMinutes <= dailyCapacity) {
-          return i;
-        }
-      }
-      return boundedDue;
+      return Array.from({ length: boundedDue + 1 }, (_, i) => i);
     }
 
-    let bestIndex = 0;
-    for (let i = 1; i < dayLoads.length; i += 1) {
-      if (dayLoads[i] < dayLoads[bestIndex]) {
-        bestIndex = i;
+    return Array.from({ length: days }, (_, i) => i).sort((a, b) => {
+      if (dayLoads[a] === dayLoads[b]) {
+        return a - b;
+      }
+      return dayLoads[a] - dayLoads[b];
+    });
+  }
+
+  private findFirstAvailableSlot(
+    intervals: Array<{ startMinute: number; endMinute: number }>,
+    durationMinutes: number
+  ): number | null {
+    for (
+      let cursor = WORKDAY_START_MINUTES;
+      cursor + durationMinutes <= WORKDAY_END_MINUTES;
+      cursor += SLOT_GRANULARITY_MINUTES
+    ) {
+      const slotEnd = cursor + durationMinutes;
+      const blocked = intervals.some((interval) => overlaps(cursor, slotEnd, interval.startMinute, interval.endMinute));
+      if (!blocked) {
+        return cursor;
       }
     }
-    return bestIndex;
+    return null;
   }
 }
 

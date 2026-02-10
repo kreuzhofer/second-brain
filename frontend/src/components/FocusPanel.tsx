@@ -7,7 +7,8 @@ import {
   EntrySummary,
   RelationshipInsight,
   WeekPlanResponse,
-  CalendarPublishResponse
+  CalendarPublishResponse,
+  CalendarSource
 } from '@/services/api';
 import { useEntries } from '@/state/entries';
 import { getFocusRailButtonClass } from '@/components/layout-shell-helpers';
@@ -63,9 +64,14 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const [calendarPlan, setCalendarPlan] = useState<WeekPlanResponse | null>(null);
   const [calendarPlanDays, setCalendarPlanDays] = useState(7);
   const [calendarPublish, setCalendarPublish] = useState<CalendarPublishResponse | null>(null);
+  const [calendarSources, setCalendarSources] = useState<CalendarSource[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarSourcesLoading, setCalendarSourcesLoading] = useState(false);
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [calendarBlocksExpanded, setCalendarBlocksExpanded] = useState(false);
+  const [calendarSourceName, setCalendarSourceName] = useState('');
+  const [calendarSourceUrl, setCalendarSourceUrl] = useState('');
+  const [calendarSourceActionId, setCalendarSourceActionId] = useState<string | null>(null);
 
   const handleRefresh = async () => {
     await refresh();
@@ -83,7 +89,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       }
     }
     if (activeTab === 'calendar') {
-      await loadCalendarPlan();
+      await Promise.all([loadCalendarPlan(), loadCalendarSources()]);
     }
   };
 
@@ -107,6 +113,79 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       setCalendarPublish(published);
     } catch (err) {
       setCalendarError(err instanceof Error ? err.message : 'Failed to generate calendar links');
+    }
+  };
+
+  const loadCalendarSources = async () => {
+    setCalendarSourcesLoading(true);
+    setCalendarError(null);
+    try {
+      const sources = await api.calendar.listSources();
+      setCalendarSources(sources);
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to load calendar sources');
+    } finally {
+      setCalendarSourcesLoading(false);
+    }
+  };
+
+  const createCalendarSource = async () => {
+    const name = calendarSourceName.trim();
+    const url = calendarSourceUrl.trim();
+    if (!name || !url) {
+      setCalendarError('Source name and URL are required');
+      return;
+    }
+    setCalendarError(null);
+    setCalendarSourceActionId('create');
+    try {
+      await api.calendar.createSource({ name, url });
+      setCalendarSourceName('');
+      setCalendarSourceUrl('');
+      await Promise.all([loadCalendarSources(), loadCalendarPlan()]);
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to add calendar source');
+    } finally {
+      setCalendarSourceActionId(null);
+    }
+  };
+
+  const toggleCalendarSourceEnabled = async (source: CalendarSource) => {
+    setCalendarError(null);
+    setCalendarSourceActionId(source.id);
+    try {
+      await api.calendar.updateSource(source.id, { enabled: !source.enabled });
+      await Promise.all([loadCalendarSources(), loadCalendarPlan()]);
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to update source');
+    } finally {
+      setCalendarSourceActionId(null);
+    }
+  };
+
+  const syncCalendarSource = async (sourceId: string) => {
+    setCalendarError(null);
+    setCalendarSourceActionId(sourceId);
+    try {
+      await api.calendar.syncSource(sourceId);
+      await Promise.all([loadCalendarSources(), loadCalendarPlan()]);
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to sync source');
+    } finally {
+      setCalendarSourceActionId(null);
+    }
+  };
+
+  const deleteCalendarSource = async (sourceId: string) => {
+    setCalendarError(null);
+    setCalendarSourceActionId(sourceId);
+    try {
+      await api.calendar.deleteSource(sourceId);
+      await Promise.all([loadCalendarSources(), loadCalendarPlan()]);
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to delete source');
+    } finally {
+      setCalendarSourceActionId(null);
     }
   };
 
@@ -162,7 +241,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
 
   useEffect(() => {
     if (activeTab !== 'calendar') return;
-    loadCalendarPlan();
+    Promise.all([loadCalendarPlan(), loadCalendarSources()]);
   }, [activeTab, calendarPlanDays, entries.length]);
 
   const focusItems = useMemo<FocusItem[]>(() => {
@@ -498,8 +577,105 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 <div className="text-xs text-muted-foreground">
                   {calendarPlan.items.length} scheduled block(s)
                 </div>
+                {calendarPlan.warnings && calendarPlan.warnings.length > 0 && (
+                  <div className="text-xs text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-md px-2 py-1">
+                    {calendarPlan.warnings.length} item(s) could not be scheduled in this window.
+                  </div>
+                )}
               </div>
             )}
+
+            <div className="rounded-md border border-border p-2.5 space-y-2">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">External blocker calendars</div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+                <input
+                  className="h-11 rounded-md border border-input bg-background px-3 text-base sm:text-sm"
+                  placeholder="Calendar name"
+                  value={calendarSourceName}
+                  onChange={(event) => setCalendarSourceName(event.target.value)}
+                />
+                <input
+                  className="h-11 rounded-md border border-input bg-background px-3 text-base sm:text-sm"
+                  placeholder="https://.../calendar.ics"
+                  value={calendarSourceUrl}
+                  onChange={(event) => setCalendarSourceUrl(event.target.value)}
+                />
+                <Button
+                  size="sm"
+                  onClick={createCalendarSource}
+                  disabled={calendarSourceActionId === 'create'}
+                  className="h-11 sm:h-9"
+                >
+                  Add
+                </Button>
+              </div>
+              {calendarSourcesLoading && (
+                <p className="text-xs text-muted-foreground">Loading sources...</p>
+              )}
+              {!calendarSourcesLoading && calendarSources.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Add one or more ICS/WebCal sources to block busy times in autoscheduling.
+                </p>
+              )}
+              {!calendarSourcesLoading && calendarSources.length > 0 && (
+                <div className="space-y-2">
+                  {calendarSources.map((source) => (
+                    <div key={source.id} className="rounded-md border border-border p-2 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{source.name}</div>
+                          <div className="text-xs text-muted-foreground truncate">{source.url}</div>
+                        </div>
+                        <span
+                          className={`text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
+                            source.enabled
+                              ? 'border-green-500/40 text-green-700 bg-green-500/10'
+                              : 'border-border text-muted-foreground bg-muted'
+                          }`}
+                        >
+                          {source.enabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-9"
+                          disabled={calendarSourceActionId === source.id}
+                          onClick={() => toggleCalendarSourceEnabled(source)}
+                        >
+                          {source.enabled ? 'Disable' : 'Enable'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-9"
+                          disabled={calendarSourceActionId === source.id}
+                          onClick={() => syncCalendarSource(source.id)}
+                        >
+                          Sync
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-9"
+                          disabled={calendarSourceActionId === source.id}
+                          onClick={() => deleteCalendarSource(source.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Last sync: {source.lastSyncAt ? formatDate(source.lastSyncAt) : 'Never'} | Status: {source.fetchStatus}
+                      </div>
+                      {source.fetchError && (
+                        <div className="text-[11px] text-destructive">{source.fetchError}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div className="rounded-md border border-border p-2.5 space-y-2">
               <div className="flex items-center justify-between gap-2">

@@ -14,6 +14,10 @@ function parseDays(raw: unknown): number | undefined {
   return Math.floor(parsed);
 }
 
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
+}
+
 export const calendarPublicRouter = Router();
 export const calendarRouter = Router();
 
@@ -119,4 +123,111 @@ calendarRouter.get('/publish', async (req: Request, res: Response) => {
     webcalUrl,
     expiresAt
   });
+});
+
+calendarRouter.get('/sources', async (_req: Request, res: Response) => {
+  const calendarService = getCalendarService();
+  const userId = requireUserId();
+
+  const sources = await calendarService.listSourcesForUser(userId);
+  res.json({ sources });
+});
+
+calendarRouter.post('/sources', async (req: Request, res: Response) => {
+  const calendarService = getCalendarService();
+  const userId = requireUserId();
+  const { name, url, color } = req.body || {};
+
+  try {
+    const source = await calendarService.createSourceForUser(userId, {
+      name,
+      url,
+      color
+    });
+    res.status(201).json(source);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create source';
+    const isConflict = message.includes('Unique constraint');
+    res.status(isConflict ? 409 : 400).json({
+      error: {
+        code: isConflict ? 'CONFLICT' : 'VALIDATION_ERROR',
+        message
+      }
+    });
+  }
+});
+
+calendarRouter.patch('/sources/:sourceId', async (req: Request, res: Response) => {
+  const calendarService = getCalendarService();
+  const userId = requireUserId();
+  const sourceId = req.params.sourceId;
+  const { name, enabled, color } = req.body || {};
+
+  if (enabled !== undefined && !isBoolean(enabled)) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'enabled must be a boolean'
+      }
+    });
+    return;
+  }
+
+  try {
+    const source = await calendarService.updateSourceForUser(userId, sourceId, {
+      name,
+      enabled,
+      color
+    });
+    res.json(source);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update source';
+    const status = message.includes('not found') ? 404 : 400;
+    res.status(status).json({
+      error: {
+        code: status === 404 ? 'NOT_FOUND' : 'VALIDATION_ERROR',
+        message
+      }
+    });
+  }
+});
+
+calendarRouter.delete('/sources/:sourceId', async (req: Request, res: Response) => {
+  const calendarService = getCalendarService();
+  const userId = requireUserId();
+  const sourceId = req.params.sourceId;
+
+  try {
+    await calendarService.deleteSourceForUser(userId, sourceId);
+    res.status(204).send();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete source';
+    const status = message.includes('not found') ? 404 : 400;
+    res.status(status).json({
+      error: {
+        code: status === 404 ? 'NOT_FOUND' : 'VALIDATION_ERROR',
+        message
+      }
+    });
+  }
+});
+
+calendarRouter.post('/sources/:sourceId/sync', async (req: Request, res: Response) => {
+  const calendarService = getCalendarService();
+  const userId = requireUserId();
+  const sourceId = req.params.sourceId;
+
+  try {
+    const result = await calendarService.syncSourceForUser(userId, sourceId);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to sync source';
+    const status = message.includes('not found') ? 404 : 400;
+    res.status(status).json({
+      error: {
+        code: status === 404 ? 'NOT_FOUND' : 'VALIDATION_ERROR',
+        message
+      }
+    });
+  }
 });

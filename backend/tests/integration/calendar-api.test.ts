@@ -27,6 +27,7 @@ jest.mock('../../src/config/env', () => ({
 describe('Calendar API Integration Tests', () => {
   let app: express.Application;
   let authToken: string;
+  const originalFetch = global.fetch;
 
   beforeAll(async () => {
     await resetDatabase();
@@ -40,10 +41,12 @@ describe('Calendar API Integration Tests', () => {
     app.use('/api/calendar', authMiddleware, calendarRouter);
     app.use('/api/entries', authMiddleware, entriesRouter);
     authToken = createTestJwt();
+    global.fetch = originalFetch;
   });
 
   afterAll(async () => {
     await resetDatabase();
+    global.fetch = originalFetch;
   });
 
   it('returns a week plan from active tasks', async () => {
@@ -114,5 +117,113 @@ describe('Calendar API Integration Tests', () => {
     expect(feedResponse.headers['content-type']).toContain('text/calendar');
     expect(feedResponse.text).toContain('BEGIN:VCALENDAR');
     expect(feedResponse.text).toContain('SUMMARY:Finalize partner update');
+  });
+
+  it('creates, updates, lists, and deletes calendar sources', async () => {
+    const created = await request(app)
+      .post('/api/calendar/sources')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        name: 'Outlook Work',
+        url: 'https://example.com/work.ics',
+        color: '#1D4ED8'
+      })
+      .expect(201);
+
+    expect(created.body).toEqual(
+      expect.objectContaining({
+        id: expect.any(String),
+        name: 'Outlook Work',
+        url: 'https://example.com/work.ics',
+        enabled: true
+      })
+    );
+
+    const listed = await request(app)
+      .get('/api/calendar/sources')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(listed.body.sources).toHaveLength(1);
+    expect(listed.body.sources[0].name).toBe('Outlook Work');
+
+    const updated = await request(app)
+      .patch(`/api/calendar/sources/${created.body.id}`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ enabled: false })
+      .expect(200);
+
+    expect(updated.body.enabled).toBe(false);
+
+    await request(app)
+      .delete(`/api/calendar/sources/${created.body.id}`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(204);
+
+    const listedAfterDelete = await request(app)
+      .get('/api/calendar/sources')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(listedAfterDelete.body.sources).toHaveLength(0);
+  });
+
+  it('syncs busy blocks from ICS source and avoids conflicts when planning', async () => {
+    const source = await request(app)
+      .post('/api/calendar/sources')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        name: 'Outlook',
+        url: 'https://example.com/outlook.ics'
+      })
+      .expect(201);
+
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:busy-1',
+      'DTSTART:20260209T090000Z',
+      'DTEND:20260209T120000Z',
+      'SUMMARY:Busy block',
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ].join('\r\n');
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {
+        get: (name: string) => (name.toLowerCase() === 'etag' ? '"etag-1"' : null)
+      },
+      text: async () => ics
+    } as any);
+
+    await request(app)
+      .post(`/api/calendar/sources/${source.body.id}/sync`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Prepare launch checklist',
+        status: 'pending',
+        due_date: '2026-02-09',
+        source_channel: 'api',
+        confidence: 0.95
+      })
+      .expect(201);
+
+    const plan = await request(app)
+      .get('/api/calendar/plan-week?startDate=2026-02-09&days=1')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(plan.body.items).toHaveLength(1);
+    expect(plan.body.items[0].start).toContain('2026-02-09T12:00:00.000Z');
+    expect(plan.body.items[0].end).toContain('2026-02-09T12:45:00.000Z');
   });
 });

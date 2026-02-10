@@ -746,7 +746,7 @@ POST /api/entries/merge
 
 ### Plan Week
 
-Build a focused week plan from pending admin tasks and active projects.
+Build a focused week plan from pending tasks and active projects.
 
 ```
 GET /api/calendar/plan-week
@@ -759,10 +759,11 @@ GET /api/calendar/plan-week?startDate=2026-02-09&days=7
   "startDate": "2026-02-09",
   "endDate": "2026-02-15",
   "totalMinutes": 225,
+  "warnings": [],
   "items": [
     {
-      "entryPath": "admin/draft-retail-demo-one-pager",
-      "category": "admin",
+      "entryPath": "task/draft-retail-demo-one-pager",
+      "category": "task",
       "title": "Draft retail demo one pager",
       "sourceName": "Draft retail demo one pager",
       "dueDate": "2026-02-12",
@@ -772,6 +773,71 @@ GET /api/calendar/plan-week?startDate=2026-02-09&days=7
       "reason": "Due on 2026-02-12"
     }
   ]
+}
+```
+
+---
+
+### Calendar Sources
+
+Manage external ICS/WebCal calendars used as blocker inputs for autoscheduling.
+
+```
+GET /api/calendar/sources
+POST /api/calendar/sources
+PATCH /api/calendar/sources/:sourceId
+DELETE /api/calendar/sources/:sourceId
+POST /api/calendar/sources/:sourceId/sync
+```
+
+**Create Request Body**:
+```json
+{
+  "name": "Outlook Work",
+  "url": "https://example.com/work.ics",
+  "color": "#1D4ED8"
+}
+```
+
+**List Response** (200 OK):
+```json
+{
+  "sources": [
+    {
+      "id": "uuid",
+      "name": "Outlook Work",
+      "url": "https://example.com/work.ics",
+      "enabled": true,
+      "color": "#1D4ED8",
+      "etag": "\"etag-1\"",
+      "lastSyncAt": "2026-02-09T22:01:00.000Z",
+      "fetchStatus": "synced",
+      "fetchError": null,
+      "createdAt": "2026-02-09T22:00:00.000Z",
+      "updatedAt": "2026-02-09T22:01:00.000Z"
+    }
+  ]
+}
+```
+
+**Sync Response** (200 OK):
+```json
+{
+  "source": {
+    "id": "uuid",
+    "name": "Outlook Work",
+    "url": "https://example.com/work.ics",
+    "enabled": true,
+    "color": "#1D4ED8",
+    "etag": "\"etag-1\"",
+    "lastSyncAt": "2026-02-09T22:01:00.000Z",
+    "fetchStatus": "synced",
+    "fetchError": null,
+    "createdAt": "2026-02-09T22:00:00.000Z",
+    "updatedAt": "2026-02-09T22:01:00.000Z"
+  },
+  "importedBlocks": 14,
+  "totalBlocks": 14
 }
 ```
 

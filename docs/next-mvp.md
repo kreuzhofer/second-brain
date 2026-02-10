@@ -67,6 +67,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Adaptive mobile + desktop space optimization: Completed (phase 2 shell + touch-first compaction)
 - Duplicate capture failure UX (deterministic existing-entry response): Completed
 - Calendar MVP phase 1: Completed (week planner + ICS/WebCal publish)
+- Calendar blocker ingest phase 1: Completed (external ICS/WebCal sources + busy-block-aware autoscheduling)
 - Relationship insights phase 1: Completed (top people/project summaries from graph links)
 
 ## Notes
@@ -80,7 +81,6 @@ This is the canonical roadmap document for current MVP progress and next-level f
 ## Next-Level Backlog (Unified)
 
 ### Priority Next
-- Calendar blocker ingest phase 1: subscribe to external ICS/WebCal calendars (e.g., Outlook) and avoid busy blocks in autoscheduling.
 - Task model rework phase 1: add task duration, optional fixed appointment time, and deadline-aware autoscheduling.
 - Entity graph analytics phase 3: graph-level filters and richer link inspection views in modal/panel surfaces.
 - Relationship insights phase 2: add project-centric insights, trend windows, and actionable follow-up suggestions.
@@ -135,7 +135,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 ### Calendar MVP (Next-Level)
 - Plan-my-week assistant (build a schedule from tasks, priorities, and focus goals).
 - Calendar publish: generate a subscription link (ICS/WebCal) for planned tasks.
-- Calendar blocker ingest: import busy blocks from external ICS/WebCal calendars and route tasks around conflicts.
+- Calendar blocker ingest: import busy blocks from external ICS/WebCal calendars and route tasks around conflicts. (Completed phase 1)
 - Focus blocks: create protected calendar blocks and sync back to Second Brain.
 
 ### Reliability and Data Management
@@ -189,3 +189,6 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - 2026-02-09: Completed Calendar MVP phase 1 by adding week planning (`GET /api/calendar/plan-week`), publish links (`GET /api/calendar/publish`), and tokenized read-only ICS feed (`GET /api/calendar/feed.ics?token=...`) with integration tests.
 - 2026-02-09: Completed Relationship Insights phase 1 with `GET /api/insights/relationships` and People-panel summaries (score, relationship/project/mention counts, top related people/projects).
 - 2026-02-09: Added Calendar sharing UI in Focus panel: plan window summary, scheduled blocks list, and publish/copy/open controls for HTTPS ICS and WebCal links.
+- 2026-02-09: Completed Calendar blocker ingest phase 1 backend: added `CalendarSource`/`CalendarBusyBlock` models, source CRUD/sync routes (`/api/calendar/sources*`), ICS parsing, and planner conflict avoidance against enabled busy blocks.
+- 2026-02-09: Added Focus panel calendar source management UI (add/list/enable/sync/delete external ICS/WebCal sources) and warning surfacing for unscheduled items.
+- 2026-02-09: Verification complete: targeted calendar integration tests plus full backend suite passing (`75/75`, `897` tests), followed by Docker rebuild/redeploy (`docker compose up -d --build`).

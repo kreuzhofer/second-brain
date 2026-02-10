@@ -85,6 +85,8 @@ model User {
   dailyTipStates     DailyTipState[]
   offlineQueueItems  OfflineQueueItem[]
   entryLinks         EntryLink[]
+  calendarSources    CalendarSource[]
+  calendarBusyBlocks CalendarBusyBlock[]
 }
 
 model Conversation {
@@ -431,4 +433,45 @@ model OfflineQueueItem {
   status             String   @default("pending")
 
   @@index([userId, status, createdAt])
+}
+
+model CalendarSource {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  url        String
+  enabled    Boolean  @default(true)
+  color      String?
+  etag       String?
+  lastSyncAt DateTime?
+  fetchStatus String  @default("never_synced")
+  fetchError String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  busyBlocks CalendarBusyBlock[]
+
+  @@unique([userId, url])
+  @@index([userId, enabled])
+}
+
+model CalendarBusyBlock {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceId   String
+  source     CalendarSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  blockKey   String
+  externalId String?
+  title      String?
+  startAt    DateTime
+  endAt      DateTime
+  isAllDay   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([sourceId, blockKey])
+  @@index([userId, startAt, endAt])
+  @@index([sourceId, startAt])
 }
