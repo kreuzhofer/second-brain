@@ -8,6 +8,7 @@ const MIN_GRANULARITY_MINUTES = 5;
 const MAX_GRANULARITY_MINUTES = 60;
 const MIN_BUFFER_MINUTES = 0;
 const MAX_BUFFER_MINUTES = 120;
+const FEED_DEFAULT_DAYS = 14;
 
 function parseDays(raw: unknown): number | undefined {
   if (raw === undefined) return undefined;
@@ -106,10 +107,14 @@ calendarPublicRouter.get('/feed.ics', async (req: Request, res: Response) => {
   try {
     const ics = await calendarService.buildIcsFeedForUser(verified.userId, {
       startDate,
-      days: parsedDays,
+      days: parsedDays ?? FEED_DEFAULT_DAYS,
       granularityMinutes: parsedGranularity,
       bufferMinutes: parsedBuffer
     });
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Content-Disposition', 'inline; filename="second-brain-week-plan.ics"');
     res.send(ics);

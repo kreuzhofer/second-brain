@@ -813,6 +813,7 @@ export class CalendarService {
   async buildIcsFeedForUser(userId: string, options?: WeekPlanOptions): Promise<string> {
     const plan = await this.buildWeekPlanForUser(userId, options);
     const generatedAt = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+    const sequence = Math.floor(Date.now() / 1000);
     const lines = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
@@ -820,6 +821,8 @@ export class CalendarService {
       'CALSCALE:GREGORIAN',
       'METHOD:PUBLISH',
       'X-WR-CALNAME:Second Brain Week Plan',
+      'REFRESH-INTERVAL;VALUE=DURATION:PT5M',
+      'X-PUBLISHED-TTL:PT5M',
       ...plan.items.flatMap((item) => {
         const start = item.start.slice(0, 16);
         const end = item.end.slice(0, 16);
@@ -833,6 +836,8 @@ export class CalendarService {
           'BEGIN:VEVENT',
           `UID:${uid}`,
           `DTSTAMP:${generatedAt}`,
+          `LAST-MODIFIED:${generatedAt}`,
+          `SEQUENCE:${sequence}`,
           `DTSTART:${toIcsDateTime(dateYmd, startHour, startMinute)}`,
           `DTEND:${toIcsDateTime(dateYmd, endHour, endMinute)}`,
           `SUMMARY:${escapeIcsText(item.title)}`,

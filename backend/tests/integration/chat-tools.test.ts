@@ -858,6 +858,99 @@ describe('Chat Tools Integration', () => {
       expect(second.entry?.path).toBe('task/finish-q4-2025-tax-report');
     });
 
+    it('should execute task status update after explicit confirmation prompt and yes reply', async () => {
+      const confirmationPrompt =
+        'It seems I need explicit confirmation to mark the task as done. Could you please confirm that you want to mark the task "Create webinar series What I\\\'ve built with Kiro" as done?';
+
+      const mockOpenAI = {
+        chat: {
+          completions: {
+            create: jest.fn().mockResolvedValue({
+              choices: [{
+                message: {
+                  role: 'assistant',
+                  content: confirmationPrompt,
+                  tool_calls: undefined
+                },
+                finish_reason: 'stop'
+              }]
+            })
+          }
+        }
+      } as unknown as OpenAI;
+
+      const mockToolExecutor = {
+        execute: jest.fn().mockResolvedValue({
+          success: true,
+          data: {
+            path: 'task/create-webinar-series-what-ive-built-with-kiro',
+            category: 'task',
+            name: 'Create webinar series What I\'ve built with Kiro',
+            confidence: 0.95
+          }
+        })
+      } as unknown as ToolExecutor;
+
+      const mockEntryService = createMockEntryService() as any;
+      mockEntryService.list.mockResolvedValue([
+        {
+          id: 'task-1',
+          path: 'task/create-webinar-series-what-ive-built-with-kiro',
+          name: 'Create webinar series What I\'ve built with Kiro',
+          category: 'task',
+          updated_at: new Date().toISOString(),
+          status: 'pending'
+        }
+      ]);
+
+      const contextAssembler = {
+        assemble: jest.fn().mockImplementation(async (conversationId: string) => ({
+          systemPrompt: 'Test system prompt',
+          indexContent: '# Index\n\nTest index content',
+          summaries: [],
+          recentMessages: await conversationService.getMessages(conversationId)
+        }))
+      } as unknown as ContextAssembler;
+
+      const chatService = new ChatService(
+        conversationService,
+        contextAssembler,
+        createMockClassificationAgent() as any,
+        createMockSummarizationService(),
+        mockEntryService,
+        getToolRegistry(),
+        mockToolExecutor,
+        mockOpenAI
+      );
+
+      const first = await chatService.processMessageWithTools(
+        null,
+        'webinar series for kiro is created, mark done'
+      );
+      const second = await chatService.processMessageWithTools(
+        first.conversationId,
+        'yes'
+      );
+
+      expect(mockOpenAI.chat.completions.create).toHaveBeenCalledTimes(1);
+      expect(mockToolExecutor.execute).toHaveBeenCalledTimes(1);
+      expect(mockToolExecutor.execute).toHaveBeenCalledWith(
+        {
+          name: 'update_entry',
+          arguments: {
+            path: 'task/create-webinar-series-what-ive-built-with-kiro',
+            updates: { status: 'done' }
+          }
+        },
+        expect.objectContaining({
+          channel: 'chat'
+        })
+      );
+      expect(second.message.content).toContain('marked');
+      expect(second.message.content).toContain('as done');
+      expect(second.entry?.path).toBe('task/create-webinar-series-what-ive-built-with-kiro');
+    });
+
     it('should execute reopen when user selects numbered fallback option', async () => {
       const updateResult = {
         path: 'task/finish-q4-2025-tax-review',

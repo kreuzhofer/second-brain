@@ -63,6 +63,11 @@ const CATEGORY_ALIASES: Record<string, Category> = {
   'inbox': 'inbox',
 };
 
+interface ParsedTaskStatusConfirmation {
+  taskName: string;
+  targetStatus: string;
+}
+
 // ============================================
 // Custom Errors
 // ============================================
@@ -545,6 +550,16 @@ export class ChatService {
       return reopenConfirmResponse;
     }
 
+    const taskStatusConfirmationResponse = await this.tryHandleTaskStatusConfirmationFollowUp(
+      conversationId,
+      message,
+      channel,
+      context
+    );
+    if (taskStatusConfirmationResponse) {
+      return taskStatusConfirmationResponse;
+    }
+
     const sourceMessage = this.extractPendingCaptureSource(context.recentMessages);
     if (!sourceMessage) {
       return null;
@@ -802,6 +817,215 @@ export class ChatService {
     const entryPath = data.path || selectedPath;
     const entryName = data.name || options.find((o) => o.path === selectedPath)?.name || entryPath;
     const responseText = `Done. I set "${entryName}" back to pending. You can find it at ${entryPath}.`;
+
+    const assistantMessage = await this.conversationService.addMessage(
+      conversationId,
+      'assistant',
+      responseText,
+      entryPath,
+      typeof data.confidence === 'number' ? data.confidence : undefined
+    );
+    await this.summarizationService.checkAndSummarize(conversationId);
+
+    return {
+      conversationId,
+      message: {
+        id: assistantMessage.id,
+        role: 'assistant',
+        content: responseText,
+        filedEntryPath: entryPath,
+        filedConfidence: typeof data.confidence === 'number' ? data.confidence : undefined,
+        createdAt: assistantMessage.createdAt
+      },
+      entry: {
+        path: entryPath,
+        category: toCanonicalCategory((data.category || 'task') as string),
+        name: entryName,
+        confidence: typeof data.confidence === 'number' ? data.confidence : 1
+      },
+      clarificationNeeded: false,
+      toolsUsed: ['update_entry']
+    } as ChatResponse;
+  }
+
+  private parseTaskStatusConfirmationPrompt(content: string): ParsedTaskStatusConfirmation | null {
+    const text = content.trim();
+    if (!/\bconfirm\b/i.test(text) || !/\btask\b/i.test(text)) {
+      return null;
+    }
+
+    const statusMatch = text.match(
+      /\bas\s+(done|pending|active|waiting|blocked|someday|needs(?:[_\s]+review)?|in\s+progress|to\s*do|todo)\b/i
+    );
+    if (!statusMatch) {
+      return null;
+    }
+
+    const targetStatus = this.normalizeTaskStatusText(statusMatch[1]);
+    if (!targetStatus) {
+      return null;
+    }
+
+    const quotedNameMatch = text.match(/task\s+["“']([^"”']+)["”']\s+as\s+/i);
+    let taskName = quotedNameMatch?.[1]?.trim();
+
+    if (!taskName) {
+      const unquotedMatch = text.match(
+        /task\s+(.+?)\s+as\s+(?:done|pending|active|waiting|blocked|someday|needs(?:[_\s]+review)?|in\s+progress|to\s*do|todo)\b/i
+      );
+      taskName = unquotedMatch?.[1]?.trim();
+    }
+
+    if (!taskName) {
+      return null;
+    }
+
+    return {
+      taskName: taskName.replace(/[?.!,;:]+$/, '').trim(),
+      targetStatus
+    };
+  }
+
+  private normalizeTaskStatusText(raw: string): string | null {
+    const normalized = raw.trim().toLowerCase().replace(/\s+/g, '_');
+    switch (normalized) {
+      case 'done':
+      case 'pending':
+      case 'active':
+      case 'waiting':
+      case 'blocked':
+      case 'someday':
+      case 'needs_review':
+        return normalized;
+      case 'in_progress':
+      case 'todo':
+      case 'to_do':
+        return 'pending';
+      default:
+        return null;
+    }
+  }
+
+  private normalizeForNameMatch(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  private async resolveTaskPathByName(taskName: string): Promise<{ path: string; name: string } | null> {
+    const tasks = await this.entryService.list('task');
+    if (tasks.length === 0) {
+      return null;
+    }
+
+    const normalizedTarget = this.normalizeForNameMatch(taskName);
+    if (!normalizedTarget) {
+      return null;
+    }
+
+    const exact = tasks.find((entry) => this.normalizeForNameMatch(entry.name) === normalizedTarget);
+    if (exact) {
+      return { path: exact.path, name: exact.name };
+    }
+
+    const containmentMatches = tasks.filter((entry) => {
+      const normalizedName = this.normalizeForNameMatch(entry.name);
+      return normalizedName.includes(normalizedTarget) || normalizedTarget.includes(normalizedName);
+    });
+    if (containmentMatches.length === 1) {
+      return { path: containmentMatches[0].path, name: containmentMatches[0].name };
+    }
+
+    const scored = tasks
+      .map((entry) => ({
+        entry,
+        score: this.scoreEntryMatch(taskName, entry.name)
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    if (scored.length === 0) {
+      return null;
+    }
+
+    const top = scored[0];
+    const second = scored[1];
+    if (second && top.score === second.score) {
+      return null;
+    }
+
+    return { path: top.entry.path, name: top.entry.name };
+  }
+
+  private formatTaskStatusForUser(status: string): string {
+    return status.replace(/_/g, ' ');
+  }
+
+  private async tryHandleTaskStatusConfirmationFollowUp(
+    conversationId: string,
+    message: string,
+    channel: Channel,
+    context: ContextWindow
+  ): Promise<ChatResponse | null> {
+    const lastPrompt = this.findLatestAssistantPrompt(
+      context.recentMessages,
+      (content) => this.parseTaskStatusConfirmationPrompt(content) !== null
+    );
+    if (!lastPrompt) {
+      return null;
+    }
+
+    if (this.isCaptureDecline(message)) {
+      return this.buildSimpleAssistantResponse(
+        conversationId,
+        "Okay, I won't make that change."
+      );
+    }
+
+    if (!this.isCaptureConfirmation(message)) {
+      return null;
+    }
+
+    const parsed = this.parseTaskStatusConfirmationPrompt(lastPrompt.content);
+    if (!parsed) {
+      return null;
+    }
+
+    const resolved = await this.resolveTaskPathByName(parsed.taskName);
+    if (!resolved) {
+      return this.buildSimpleAssistantResponse(
+        conversationId,
+        `I couldn't identify the task \"${parsed.taskName}\" with high confidence. Please share the task path so I can update it.`
+      );
+    }
+
+    const result = await this.toolExecutor.execute(
+      {
+        name: 'update_entry',
+        arguments: {
+          path: resolved.path,
+          updates: { status: parsed.targetStatus }
+        }
+      },
+      { channel, context }
+    );
+
+    if (!result.success || !result.data) {
+      const errorText = result.error || 'Unknown error';
+      return this.buildSimpleAssistantResponse(
+        conversationId,
+        `I couldn't update that task: ${errorText}`
+      );
+    }
+
+    const data = result.data as {
+      path?: string;
+      category?: Category;
+      name?: string;
+      confidence?: number;
+    };
+    const entryPath = data.path || resolved.path;
+    const entryName = data.name || resolved.name;
+    const statusForUser = this.formatTaskStatusForUser(parsed.targetStatus);
+    const responseText = `Done. I marked \"${entryName}\" as ${statusForUser}. You can find it at ${entryPath}.`;
 
     const assistantMessage = await this.conversationService.addMessage(
       conversationId,

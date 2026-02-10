@@ -142,8 +142,44 @@ describe('Calendar API Integration Tests', () => {
       .expect(200);
 
     expect(feedResponse.headers['content-type']).toContain('text/calendar');
+    expect(feedResponse.headers['cache-control']).toContain('no-store');
     expect(feedResponse.text).toContain('BEGIN:VCALENDAR');
+    expect(feedResponse.text).toContain('REFRESH-INTERVAL;VALUE=DURATION:PT5M');
+    expect(feedResponse.text).toContain('X-PUBLISHED-TTL:PT5M');
+    expect(feedResponse.text).toContain('SEQUENCE:');
+    expect(feedResponse.text).toContain('LAST-MODIFIED:');
     expect(feedResponse.text).toContain('SUMMARY:Finalize partner update');
+  });
+
+  it('uses an extended default horizon for the public feed', async () => {
+    const dueDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    await request(app)
+      .post('/api/entries')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({
+        category: 'task',
+        name: 'Long horizon planning task',
+        status: 'pending',
+        due_date: dueDate,
+        source_channel: 'api',
+        confidence: 0.9
+      })
+      .expect(201);
+
+    const publishResponse = await request(app)
+      .get('/api/calendar/publish')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    const token = new URL(publishResponse.body.httpsUrl).searchParams.get('token');
+    expect(token).toBeTruthy();
+
+    const feedResponse = await request(app)
+      .get(`/api/calendar/feed.ics?token=${encodeURIComponent(token as string)}`)
+      .expect(200);
+
+    expect(feedResponse.text).toContain('SUMMARY:Long horizon planning task');
   });
 
   it('creates, updates, lists, and deletes calendar sources', async () => {
