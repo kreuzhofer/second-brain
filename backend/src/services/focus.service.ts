@@ -90,11 +90,11 @@ export class FocusService {
     minutes?: number;
   }): Promise<string> {
     const fallbackMessages = [
-      'Nice work finishing that. Momentum beats perfection—keep rolling.',
-      'That’s a real win. You just cleared an open loop—use that energy.',
-      'Well done. You showed up and finished; that’s how progress compounds.',
-      'Great job closing it out. One less thing weighing on your mind.',
-      'You did the hard part: you started and finished. Keep it going.'
+      'Well done, that is complete. Carry the momentum into one small first step on what is next.',
+      'Nice finish. Give yourself credit, then pick a 5-minute starter for your next priority.',
+      'Strong close. One tiny follow-up: choose the very first action for the next task.',
+      'Task closed. Take the win, then line up one quick next move.',
+      'Great work, finished means finished. Keep momentum with one simple next action.'
     ];
 
     const fallback = fallbackMessages[Math.floor(this.random() * fallbackMessages.length)];
@@ -116,9 +116,12 @@ export class FocusService {
 
     try {
       const prompt = [
-        `Task: ${resolvedName ?? 'an admin task'}`,
-        minutes ? `Focus minutes: ${minutes}` : '',
-        'Tone: short, motivating, practical. User struggles with procrastination.',
+        `Task completed: ${resolvedName ?? 'an admin task'}`,
+        minutes ? `Focus minutes spent: ${minutes}` : '',
+        'Tone: short, warm, practical, and grounded.',
+        'Acknowledge the task is already complete.',
+        'Offer only a tiny next-step suggestion for a different task.',
+        'Do not tell the user to resume, finish, or break down the completed task.',
         'Return 1-2 sentences. Avoid fluff or emojis.'
       ]
         .filter(Boolean)
@@ -129,7 +132,7 @@ export class FocusService {
         messages: [
           {
             role: 'system',
-            content: 'You are a concise, encouraging focus coach.'
+            content: 'You write concise post-completion messages after a task is done.'
           },
           { role: 'user', content: prompt }
         ],
