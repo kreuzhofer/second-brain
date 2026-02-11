@@ -8,7 +8,7 @@ export const APP_SHELL_CLASSES = {
   headerInner: 'w-full px-2 py-1.5 sm:px-3 sm:py-2 lg:px-4 lg:py-2.5',
   headerRow: 'flex items-center justify-between gap-2 min-w-0 flex-nowrap',
   brandWrap: 'flex items-center gap-2 min-w-0',
-  brandTitle: 'text-base sm:text-lg lg:text-xl font-bold leading-none whitespace-nowrap truncate',
+  brandTitle: 'text-base sm:text-lg lg:text-xl font-bold leading-none whitespace-nowrap',
   headerSearchWrap: 'flex items-center gap-2 w-full justify-end min-w-0',
   mobileSearchPanelWrap: 'mt-1.5 lg:hidden',
   main: 'w-full flex-1 min-h-0 px-2 py-2 sm:px-3 sm:py-3 lg:px-4 lg:py-4 pb-[calc(58px+env(safe-area-inset-bottom))] lg:pb-3',

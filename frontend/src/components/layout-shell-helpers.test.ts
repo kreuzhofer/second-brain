@@ -7,9 +7,9 @@ import {
 } from './layout-shell-helpers';
 
 describe('layout shell helpers', () => {
-  it('keeps header title on one line with truncation', () => {
+  it('keeps header title on one line without truncation', () => {
+    expect(APP_SHELL_CLASSES.brandTitle).not.toContain('truncate');
     expect(APP_SHELL_CLASSES.brandTitle).toContain('whitespace-nowrap');
-    expect(APP_SHELL_CLASSES.brandTitle).toContain('truncate');
   });
 
   it('enforces 44px minimum touch target for mobile nav buttons', () => {

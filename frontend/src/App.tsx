@@ -110,7 +110,7 @@ function App() {
       <header className={APP_SHELL_CLASSES.header}>
         <div className={APP_SHELL_CLASSES.headerInner}>
           <div className={APP_SHELL_CLASSES.headerRow}>
-            <div className={`${APP_SHELL_CLASSES.brandWrap} max-w-[60%] sm:max-w-none`}>
+            <div className={APP_SHELL_CLASSES.brandWrap}>
               <Brain className="h-6 w-6 sm:h-8 sm:w-8 text-primary shrink-0" />
               <h1 className={APP_SHELL_CLASSES.brandTitle}>
                 Second Brain
