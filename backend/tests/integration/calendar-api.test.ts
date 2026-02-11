@@ -770,4 +770,261 @@ describe('Calendar API Integration Tests', () => {
       })
     );
   });
+
+  describe('GET /calendar/busy-blocks', () => {
+    it('returns 401 without auth', async () => {
+      await request(app)
+        .get('/api/calendar/busy-blocks?startDate=2026-02-09&endDate=2026-02-15')
+        .expect(401);
+    });
+
+    it('returns 400 when startDate or endDate missing', async () => {
+      await request(app)
+        .get('/api/calendar/busy-blocks?startDate=2026-02-09')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(400);
+
+      await request(app)
+        .get('/api/calendar/busy-blocks?endDate=2026-02-15')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(400);
+
+      await request(app)
+        .get('/api/calendar/busy-blocks')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(400);
+    });
+
+    it('returns 400 for invalid date format', async () => {
+      const res = await request(app)
+        .get('/api/calendar/busy-blocks?startDate=not-a-date&endDate=2026-02-15')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(400);
+
+      expect(res.body.error.message).toContain('Invalid startDate');
+    });
+
+    it('returns empty blocks when no sources exist', async () => {
+      const res = await request(app)
+        .get('/api/calendar/busy-blocks?startDate=2026-02-09&endDate=2026-02-15')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(res.body.blocks).toEqual([]);
+    });
+
+    it('returns busy blocks within date range with source metadata', async () => {
+      const source = await request(app)
+        .post('/api/calendar/sources')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'Work Calendar',
+          url: 'https://example.com/work.ics',
+          color: '#3b82f6'
+        })
+        .expect(201);
+
+      const ics = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'BEGIN:VEVENT',
+        'UID:meeting-1',
+        'DTSTART:20260210T100000Z',
+        'DTEND:20260210T110000Z',
+        'SUMMARY:Team standup',
+        'END:VEVENT',
+        'BEGIN:VEVENT',
+        'UID:meeting-2',
+        'DTSTART:20260211T140000Z',
+        'DTEND:20260211T150000Z',
+        'SUMMARY:1:1 with manager',
+        'END:VEVENT',
+        'BEGIN:VEVENT',
+        'UID:meeting-outside',
+        'DTSTART:20260220T090000Z',
+        'DTEND:20260220T100000Z',
+        'SUMMARY:Outside range',
+        'END:VEVENT',
+        'END:VCALENDAR'
+      ].join('\r\n');
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: {
+          get: (name: string) => (name.toLowerCase() === 'etag' ? '"etag-bb"' : null)
+        },
+        text: async () => ics
+      } as any);
+
+      await request(app)
+        .post(`/api/calendar/sources/${source.body.id}/sync`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      const res = await request(app)
+        .get('/api/calendar/busy-blocks?startDate=2026-02-09&endDate=2026-02-15')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(res.body.blocks).toHaveLength(2);
+      expect(res.body.blocks[0]).toEqual(
+        expect.objectContaining({
+          sourceName: 'Work Calendar',
+          sourceColor: '#3b82f6',
+          title: 'Team standup',
+          isAllDay: false
+        })
+      );
+      expect(res.body.blocks[0].startAt).toContain('2026-02-10');
+      expect(res.body.blocks[1].title).toBe('1:1 with manager');
+    });
+
+    it('parses SUMMARY and LOCATION lines that include ICS parameters', async () => {
+      const source = await request(app)
+        .post('/api/calendar/sources')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'Param Calendar',
+          url: 'https://example.com/param.ics'
+        })
+        .expect(201);
+
+      const ics = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'BEGIN:VEVENT',
+        'UID:param-1',
+        'DTSTART:20260210T100000Z',
+        'DTEND:20260210T110000Z',
+        'SUMMARY;LANGUAGE=en-US:Quarterly planning',
+        'LOCATION;LANGUAGE=en-US:Room 42',
+        'END:VEVENT',
+        'END:VCALENDAR'
+      ].join('\r\n');
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () => ics
+      } as any);
+
+      await request(app)
+        .post(`/api/calendar/sources/${source.body.id}/sync`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      const res = await request(app)
+        .get('/api/calendar/busy-blocks?startDate=2026-02-09&endDate=2026-02-15')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(res.body.blocks).toHaveLength(1);
+      expect(res.body.blocks[0]).toEqual(
+        expect.objectContaining({
+          title: 'Quarterly planning',
+          location: 'Room 42'
+        })
+      );
+    });
+
+    it('unescapes ICS text sequences in title and location', async () => {
+      const source = await request(app)
+        .post('/api/calendar/sources')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'Escaped Text Calendar',
+          url: 'https://example.com/escaped.ics'
+        })
+        .expect(201);
+
+      const ics = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'BEGIN:VEVENT',
+        'UID:escaped-1',
+        'DTSTART:20260210T100000Z',
+        'DTEND:20260210T110000Z',
+        'SUMMARY:Project\\; Review\\\\Prep',
+        'LOCATION:Dr. Dillig\\, Friedberg',
+        'END:VEVENT',
+        'END:VCALENDAR'
+      ].join('\r\n');
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () => ics
+      } as any);
+
+      await request(app)
+        .post(`/api/calendar/sources/${source.body.id}/sync`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      const res = await request(app)
+        .get('/api/calendar/busy-blocks?startDate=2026-02-09&endDate=2026-02-15')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(res.body.blocks).toHaveLength(1);
+      expect(res.body.blocks[0]).toEqual(
+        expect.objectContaining({
+          title: 'Project; Review\\Prep',
+          location: 'Dr. Dillig, Friedberg'
+        })
+      );
+    });
+
+    it('excludes blocks from disabled sources', async () => {
+      const source = await request(app)
+        .post('/api/calendar/sources')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'Personal',
+          url: 'https://example.com/personal.ics'
+        })
+        .expect(201);
+
+      const ics = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'BEGIN:VEVENT',
+        'UID:personal-1',
+        'DTSTART:20260210T120000Z',
+        'DTEND:20260210T130000Z',
+        'SUMMARY:Lunch',
+        'END:VEVENT',
+        'END:VCALENDAR'
+      ].join('\r\n');
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () => ics
+      } as any);
+
+      await request(app)
+        .post(`/api/calendar/sources/${source.body.id}/sync`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      // Disable the source
+      await request(app)
+        .patch(`/api/calendar/sources/${source.body.id}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ enabled: false })
+        .expect(200);
+
+      const res = await request(app)
+        .get('/api/calendar/busy-blocks?startDate=2026-02-09&endDate=2026-02-15')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(res.body.blocks).toHaveLength(0);
+    });
+  });
 });

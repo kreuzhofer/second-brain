@@ -194,6 +194,18 @@ export interface CalendarSyncResponse {
   totalBlocks: number;
 }
 
+export interface CalendarBusyBlock {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  sourceColor: string | null;
+  title: string | null;
+  location: string | null;
+  startAt: string;
+  endAt: string;
+  isAllDay: boolean;
+}
+
 export interface CalendarSettings {
   workdayStartTime: string;
   workdayEndTime: string;
@@ -665,6 +677,12 @@ class ApiClient {
       return this.request<CalendarSyncResponse>(`/calendar/sources/${sourceId}/sync`, {
         method: 'POST'
       });
+    },
+    busyBlocks: async (startDate: string, endDate: string): Promise<CalendarBusyBlock[]> => {
+      const response = await this.request<{ blocks: CalendarBusyBlock[] }>(
+        `/calendar/busy-blocks?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`
+      );
+      return response.blocks;
     }
   };
 

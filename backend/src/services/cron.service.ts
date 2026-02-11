@@ -7,6 +7,7 @@
 import * as cron from 'node-cron';
 import { getConfig } from '../config/env';
 import { getPrismaClient } from '../lib/prisma';
+import { getCalendarService } from './calendar.service';
 import { DigestService, getDigestService } from './digest.service';
 import { ProactiveService, getProactiveService } from './proactive.service';
 
@@ -14,12 +15,13 @@ import { ProactiveService, getProactiveService } from './proactive.service';
 // Types
 // ============================================
 
-export type JobName = 
-  | 'daily_digest' 
-  | 'weekly_review' 
-  | 'stale_check' 
-  | 'followup_reminder' 
-  | 'inactivity_nudge';
+export type JobName =
+  | 'daily_digest'
+  | 'weekly_review'
+  | 'stale_check'
+  | 'followup_reminder'
+  | 'inactivity_nudge'
+  | 'calendar_sync';
 
 export interface CronJobResult {
   jobName: JobName;
@@ -166,7 +168,29 @@ export class CronService {
     });
     
     this.scheduledJobs.set('inactivity_nudge', inactivityNudgeJob);
-    
+
+    // Schedule hourly calendar source sync
+    console.log('Scheduling hourly calendar source sync (0 * * * *)');
+    const calendarSyncJob = cron.schedule('0 * * * *', async () => {
+      const calendarService = getCalendarService();
+      const sources = await calendarService.listAllEnabledSources();
+      let synced = 0;
+      let errors = 0;
+      for (const source of sources) {
+        try {
+          await calendarService.syncSourceForUser(source.userId, source.id);
+          synced++;
+        } catch (err) {
+          errors++;
+          console.error(`Calendar sync failed for source ${source.id}:`, err instanceof Error ? err.message : err);
+        }
+      }
+      console.log(`Calendar sync complete: ${synced} synced, ${errors} errors`);
+    }, {
+      timezone: this.config.TIMEZONE
+    });
+    this.scheduledJobs.set('calendar_sync', calendarSyncJob);
+
     console.log('Cron scheduler started successfully');
   }
 

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   api,
+  CalendarBusyBlock,
   Category,
   EntrySummary,
   RelationshipInsight,
@@ -11,6 +12,7 @@ import {
   CalendarSource,
   CalendarSettings
 } from '@/services/api';
+import CalendarBoardView from '@/components/CalendarBoardView';
 import { useEntries } from '@/state/entries';
 import { getFocusRailButtonClass } from '@/components/layout-shell-helpers';
 import { getVisibleItems, shouldShowExpandToggle } from '@/components/focus-panel-helpers';
@@ -22,6 +24,7 @@ import {
 } from '@/components/calendar-panel-helpers';
 import {
   RefreshCw,
+  Settings,
   Circle,
   CheckCircle2,
   Lightbulb,
@@ -32,6 +35,13 @@ import {
   ClipboardList,
   Target
 } from 'lucide-react';
+
+const CALENDAR_SOURCE_COLORS = [
+  '#f87171', '#fb923c', '#fbbf24', '#a3e635', '#34d399',
+  '#22d3ee', '#60a5fa', '#818cf8', '#a78bfa', '#c084fc',
+  '#e879f9', '#f472b6', '#fb7185', '#fca5a5', '#fdba74',
+  '#fde047', '#86efac', '#67e8f9', '#93c5fd', '#c4b5fd'
+];
 
 interface FocusPanelProps {
   onEntryClick: (path: string) => void;
@@ -79,6 +89,25 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const [calendarSourceActionId, setCalendarSourceActionId] = useState<string | null>(null);
   const [calendarSettings, setCalendarSettings] = useState<CalendarSettings | null>(null);
   const [calendarSettingsSaving, setCalendarSettingsSaving] = useState(false);
+  const [calendarViewMode, setCalendarViewMode] = useState<'list' | 'board'>('list');
+  const [calendarSettingsOpen, setCalendarSettingsOpen] = useState(false);
+  const [calendarBusyBlocks, setCalendarBusyBlocks] = useState<CalendarBusyBlock[]>([]);
+  const [calendarBoardDays, setCalendarBoardDays] = useState<number>(3);
+  const [calendarStartDayOffset, setCalendarStartDayOffset] = useState(0);
+  const [colorPickerSourceId, setColorPickerSourceId] = useState<string | null>(null);
+
+  // Detect mobile and default to 1-column board view
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const handler = () => {
+      if (mq.matches) {
+        setCalendarBoardDays((prev) => (prev === 3 ? 1 : prev));
+      }
+    };
+    handler(); // check on mount
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   const handleRefresh = async () => {
     await refresh();
@@ -96,11 +125,19 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       }
     }
     if (activeTab === 'calendar') {
-      await Promise.all([loadCalendarPlan(), loadCalendarSources(), loadCalendarSettings()]);
+      // Sync all enabled external sources in parallel with plan/settings reload
+      const syncExternal = async () => {
+        const enabledSources = calendarSources.filter((s) => s.enabled);
+        await Promise.allSettled(enabledSources.map((s) => api.calendar.syncSource(s.id)));
+      };
+      const [plan] = await Promise.all([loadCalendarPlan(), loadCalendarSources(), loadCalendarSettings(), syncExternal()]);
+      // Reload sources + busy blocks after sync completes
+      await loadCalendarSources();
+      if (calendarViewMode === 'board' && plan) await loadBusyBlocks(plan);
     }
   };
 
-  const loadCalendarPlan = async () => {
+  const loadCalendarPlan = async (): Promise<WeekPlanResponse | null> => {
     setCalendarLoading(true);
     setCalendarError(null);
     try {
@@ -109,8 +146,10 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
         bufferMinutes: calendarBufferMinutes
       });
       setCalendarPlan(plan);
+      return plan;
     } catch (err) {
       setCalendarError(err instanceof Error ? err.message : 'Failed to load week plan');
+      return null;
     } finally {
       setCalendarLoading(false);
     }
@@ -157,6 +196,26 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
     }
   };
 
+  const loadBusyBlocks = async (plan: WeekPlanResponse) => {
+    try {
+      const blocks = await api.calendar.busyBlocks(plan.startDate, plan.endDate);
+      setCalendarBusyBlocks(blocks);
+    } catch {
+      // Non-critical: board still works without busy blocks
+      setCalendarBusyBlocks([]);
+    }
+  };
+
+  const handleBoardMarkDone = async (entryPath: string) => {
+    try {
+      await api.entries.update(entryPath, { status: 'done' });
+      await refresh();
+      await loadCalendarPlan();
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to mark task done');
+    }
+  };
+
   const handlePublishLinks = async () => {
     setCalendarError(null);
     try {
@@ -190,7 +249,9 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
     setCalendarError(null);
     setCalendarSourceActionId('create');
     try {
-      await api.calendar.createSource({ name, url });
+      const usedColors = new Set(calendarSources.map((s) => s.color).filter(Boolean));
+      const color = CALENDAR_SOURCE_COLORS.find((c) => !usedColors.has(c)) || CALENDAR_SOURCE_COLORS[calendarSources.length % CALENDAR_SOURCE_COLORS.length];
+      await api.calendar.createSource({ name, url, color });
       setCalendarSourceName('');
       setCalendarSourceUrl('');
       await Promise.all([loadCalendarSources(), loadCalendarPlan()]);
@@ -292,8 +353,14 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
 
   useEffect(() => {
     if (activeTab !== 'calendar') return;
-    Promise.all([loadCalendarPlan(), loadCalendarSources(), loadCalendarSettings()]);
-  }, [activeTab, calendarPlanDays, calendarGranularityMinutes, calendarBufferMinutes, entries.length]);
+    Promise.all([
+      loadCalendarPlan().then((plan) => {
+        if (calendarViewMode === 'board' && plan) loadBusyBlocks(plan);
+      }),
+      loadCalendarSources(),
+      loadCalendarSettings()
+    ]);
+  }, [activeTab, calendarPlanDays, calendarGranularityMinutes, calendarBufferMinutes, calendarViewMode, entries.length]);
 
   const focusItems = useMemo<FocusItem[]>(() => {
     const items = entries
@@ -533,7 +600,43 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
               </div>
             )}
             {activeTab === 'calendar' && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center rounded-md border border-border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setCalendarViewMode('list')}
+                    className={`px-2 py-1 text-[10px] sm:text-[11px] uppercase tracking-wide ${
+                      calendarViewMode === 'list' ? 'bg-foreground text-background' : 'text-muted-foreground'
+                    }`}
+                  >
+                    List
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCalendarViewMode('board')}
+                    className={`px-2 py-1 text-[10px] sm:text-[11px] uppercase tracking-wide ${
+                      calendarViewMode === 'board' ? 'bg-foreground text-background' : 'text-muted-foreground'
+                    }`}
+                  >
+                    Board
+                  </button>
+                </div>
+                {calendarViewMode === 'board' && (
+                  <>
+                    <label className="text-xs text-muted-foreground">Cols</label>
+                    <select
+                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      value={calendarBoardDays}
+                      onChange={(event) => setCalendarBoardDays(Number(event.target.value))}
+                    >
+                      {[1, 3, 5, 7].map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
                 <label className="text-xs text-muted-foreground">Days</label>
                 <select
                   className="h-8 rounded-md border border-input bg-background px-2 text-xs"
@@ -580,6 +683,16 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                   Replan now
                 </Button>
               </div>
+            )}
+            {activeTab === 'calendar' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setCalendarSettingsOpen((prev) => !prev)}
+                title="Calendar settings"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
             )}
             <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isLoading}>
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -676,6 +789,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
               </div>
             )}
 
+            {calendarSettingsOpen && (
+            <>
             <div className="rounded-md border border-border p-2.5 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">Working hours</div>
@@ -812,6 +927,32 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                           {source.enabled ? 'Enabled' : 'Disabled'}
                         </span>
                       </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          className="w-5 h-5 rounded-full border border-border shrink-0"
+                          style={{ backgroundColor: source.color || '#94a3b8' }}
+                          onClick={() => setColorPickerSourceId(colorPickerSourceId === source.id ? null : source.id)}
+                          title="Change color"
+                        />
+                        {colorPickerSourceId === source.id && (
+                          <div className="flex flex-wrap gap-1">
+                            {CALENDAR_SOURCE_COLORS.map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                className={`w-4 h-4 rounded-full border ${source.color === c ? 'ring-2 ring-foreground ring-offset-1' : 'border-border'}`}
+                                style={{ backgroundColor: c }}
+                                onClick={async () => {
+                                  setColorPickerSourceId(null);
+                                  await api.calendar.updateSource(source.id, { color: c });
+                                  await loadCalendarSources();
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         <Button
                           size="sm"
@@ -908,11 +1049,30 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 </div>
               )}
             </div>
+            </>
+            )}
 
             {calendarLoading && (
               <p className="text-sm text-muted-foreground">Loading calendar blocks...</p>
             )}
-            {!calendarLoading && calendarPlan && calendarPlan.items.length > 0 && (
+
+            {/* Board view */}
+            {!calendarLoading && calendarViewMode === 'board' && calendarPlan && calendarSettings && (
+              <CalendarBoardView
+                plan={calendarPlan}
+                busyBlocks={calendarBusyBlocks}
+                calendarSources={calendarSources}
+                settings={calendarSettings}
+                visibleDays={calendarBoardDays}
+                startDayOffset={calendarStartDayOffset}
+                onNavigate={setCalendarStartDayOffset}
+                onEntryClick={onEntryClick}
+                onMarkDone={handleBoardMarkDone}
+              />
+            )}
+
+            {/* List view */}
+            {!calendarLoading && calendarViewMode === 'list' && calendarPlan && calendarPlan.items.length > 0 && (
               <div className="space-y-2">
                 {(calendarBlocksExpanded ? calendarPlan.items : calendarPlan.items.slice(0, Math.max(maxItems, 6))).map((item) => (
                   <button
@@ -941,7 +1101,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 )}
               </div>
             )}
-            {!calendarLoading && calendarPlan && calendarPlan.unscheduled.length > 0 && (
+            {!calendarLoading && calendarViewMode === 'list' && calendarPlan && calendarPlan.unscheduled.length > 0 && (
               <div className="space-y-2">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">Unscheduled</div>
                 {calendarPlan.unscheduled.map((item) => (
@@ -960,7 +1120,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 ))}
               </div>
             )}
-            {!calendarLoading && calendarPlan && calendarPlan.items.length === 0 && (
+            {!calendarLoading && calendarViewMode === 'list' && calendarPlan && calendarPlan.items.length === 0 && (
               <p className="text-sm text-muted-foreground">{emptyMessage}</p>
             )}
           </div>

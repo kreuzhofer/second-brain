@@ -75,6 +75,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Task list consistency after modal mutations: Completed (save/mark-done/notes edits trigger shared entries refresh)
 - Focus list expansion control: Completed (default top 5 + Show all/Show less for pending focus items)
 - Task model rework phase 3: Completed (task priority editor, working-hours settings, manual replan endpoint, structured unscheduled reasons, feed freshness metadata)
+- Calendar board view (Outlook-style): Completed (multi-day grid with configurable columns, busy-block overlay with source colors, task check-off from board, list/board view toggle)
 
 ## Notes
 - Prioritize backend-first slices where possible.
@@ -143,6 +144,12 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Calendar publish: generate a subscription link (ICS/WebCal) for planned tasks.
 - Calendar blocker ingest: import busy blocks from external ICS/WebCal calendars and route tasks around conflicts. (Completed phase 1)
 - Focus blocks: create protected calendar blocks and sync back to Second Brain.
+- Calendar board view (Outlook-style):
+  - Configurable visible days (for example 1, 3, 5, 7) with days as columns and time as vertical axis.
+  - Show scheduled task blocks in the same board as imported calendar blockers/events.
+  - Use different, configurable colors per imported calendar source to distinguish external events.
+  - Include a small circled checkbox on task blocks to mark task `done` directly from the board.
+  - Keep list view as an alternative view; board and list share the same underlying plan data.
 
 ### Reliability and Data Management
 - Offline queue when LLM is unavailable with replay and dedupe.
@@ -156,6 +163,13 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Structured analytics dashboard for usage metrics.
 
 ## Progress Log
+- 2026-02-11: Added calendar board day/week navigation (prev/next/today buttons) and mobile-responsive 1-column default with peek-at-next-day effect; calendar settings moved behind gear icon toggle.
+- 2026-02-11: Completed Calendar board view (Outlook-style) end-to-end.
+- 2026-02-11: Added `GET /api/calendar/busy-blocks` endpoint to expose external calendar busy blocks with source name/color metadata for board view overlay rendering.
+- 2026-02-11: Added `CalendarBoardView` component with configurable multi-day grid (1/3/5/7 columns), time-axis gutter, category-colored task blocks, source-colored busy block overlays, all-day event banners, current time indicator, and inline mark-done checkbox.
+- 2026-02-11: Added List/Board view toggle and board-specific column selector to FocusPanel calendar tab header controls; board and list views share the same underlying plan data.
+- 2026-02-11: Added `calendar-board-helpers.ts` with pure helper functions for time positioning, day indexing, workday clamping, and time label generation (20 unit tests).
+- 2026-02-11: Verification complete: frontend tests passing (`8/8` files, `56` tests), backend tests passing (`75/75` suites, `916` tests), workspace build pass.
 - 2026-02-10: Completed Task model rework phase 3 end-to-end.
 - 2026-02-10: Added task-level `priority` (1-5) persistence in `AdminTaskDetails`, API create/update/list/read payloads, tool capture normalization, and entry-modal schedule editor controls.
 - 2026-02-10: Added per-user calendar scheduler settings (`workdayStartTime`, `workdayEndTime`, `workingDays`) with new calendar settings API (`GET/PATCH /api/calendar/settings`) and planner enforcement of non-working days/hours.
@@ -221,3 +235,10 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - 2026-02-09: Completed Calendar blocker ingest phase 1 backend: added `CalendarSource`/`CalendarBusyBlock` models, source CRUD/sync routes (`/api/calendar/sources*`), ICS parsing, and planner conflict avoidance against enabled busy blocks.
 - 2026-02-09: Added Focus panel calendar source management UI (add/list/enable/sync/delete external ICS/WebCal sources) and warning surfacing for unscheduled items.
 - 2026-02-09: Verification complete: targeted calendar integration tests plus full backend suite passing (`75/75`, `897` tests), followed by Docker rebuild/redeploy (`docker compose up -d --build`).
+- 2026-02-11: Calendar board view: added mobile-responsive layout (1+peek column on small screens) and prev/next/today day/week navigation.
+- 2026-02-11: Calendar source colors: added 20-color pastel palette with auto-assignment on source create (no white/gray/black), inline color picker in settings panel.
+- 2026-02-11: Calendar board view rewritten for full 24h display (00:00–24:00) with working-hours white background and non-working-hours light gray shading; auto-scrolls to workday start on mount.
+- 2026-02-11: Added `location` field to `CalendarBusyBlock` model (DB migration), ICS LOCATION parsing in calendar service, and location display on busy blocks in board view.
+- 2026-02-11: Added hourly calendar source auto-sync via cron job (`0 * * * *`) that syncs all enabled external sources.
+- 2026-02-11: Refresh button now triggers parallel external source sync + plan reload with spinner.
+- 2026-02-11: Verification complete: TypeScript clean, frontend tests (`8/8` files, `56` tests), backend tests (`75/75` suites, `916` tests), production build, and Docker rebuild/redeploy succeeded.

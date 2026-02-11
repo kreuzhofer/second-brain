@@ -480,6 +480,7 @@ model CalendarBusyBlock {
   blockKey   String
   externalId String?
   title      String?
+  location   String?
   startAt    DateTime
   endAt      DateTime
   isAllDay   Boolean  @default(false)

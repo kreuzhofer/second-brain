@@ -86,6 +86,18 @@ export interface CalendarSyncResult {
   totalBlocks: number;
 }
 
+export interface BusyBlockResponse {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  sourceColor: string | null;
+  title: string | null;
+  location: string | null;
+  startAt: string;
+  endAt: string;
+  isAllDay: boolean;
+}
+
 export interface CalendarSettingsRecord {
   workdayStartTime: string;
   workdayEndTime: string;
@@ -116,6 +128,7 @@ interface ParsedBusyEvent {
   blockKey: string;
   externalId?: string;
   title?: string;
+  location?: string;
   startAt: Date;
   endAt: Date;
   isAllDay: boolean;
@@ -305,8 +318,23 @@ function normalizeIcsLineContinuations(content: string): string[] {
   return lines;
 }
 
+function unescapeIcsText(value: string): string {
+  return value.replace(/\\([nN,;\\])/g, (_match, escaped: string) => {
+    if (escaped === 'n' || escaped === 'N') return '\n';
+    if (escaped === ',') return ',';
+    if (escaped === ';') return ';';
+    if (escaped === '\\') return '\\';
+    return escaped;
+  });
+}
+
 function parseIcsDate(valueWithParams: string): { date: Date | null; isAllDay: boolean } {
-  const [rawKey, rawValue = ''] = valueWithParams.split(':');
+  const separatorIndex = valueWithParams.indexOf(':');
+  if (separatorIndex === -1) {
+    return { date: null, isAllDay: false };
+  }
+  const rawKey = valueWithParams.slice(0, separatorIndex);
+  const rawValue = valueWithParams.slice(separatorIndex + 1);
   const value = rawValue.trim();
   const key = rawKey.toUpperCase();
   const isDateOnly = key.includes('VALUE=DATE') || /^\d{8}$/.test(value);
@@ -344,6 +372,7 @@ function parseBusyEventsFromIcs(content: string): ParsedBusyEvent[] {
   let inEvent = false;
   let currentUid: string | undefined;
   let currentSummary: string | undefined;
+  let currentLocation: string | undefined;
   let dtStartLine: string | undefined;
   let dtEndLine: string | undefined;
 
@@ -372,6 +401,7 @@ function parseBusyEventsFromIcs(content: string): ParsedBusyEvent[] {
       blockKey,
       externalId: currentUid,
       title: currentSummary,
+      location: currentLocation,
       startAt: parsedStart.date,
       endAt: endDate,
       isAllDay: parsedStart.isAllDay
@@ -385,6 +415,7 @@ function parseBusyEventsFromIcs(content: string): ParsedBusyEvent[] {
       inEvent = true;
       currentUid = undefined;
       currentSummary = undefined;
+      currentLocation = undefined;
       dtStartLine = undefined;
       dtEndLine = undefined;
       continue;
@@ -398,22 +429,32 @@ function parseBusyEventsFromIcs(content: string): ParsedBusyEvent[] {
 
     if (!inEvent) continue;
 
-    if (upper.startsWith('UID:')) {
-      currentUid = line.slice(line.indexOf(':') + 1).trim();
+    const separatorIndex = line.indexOf(':');
+    if (separatorIndex === -1) continue;
+    const propertyName = upper.slice(0, separatorIndex).split(';')[0];
+    const propertyValue = line.slice(separatorIndex + 1).trim();
+
+    if (propertyName === 'UID') {
+      currentUid = propertyValue;
       continue;
     }
 
-    if (upper.startsWith('SUMMARY:')) {
-      currentSummary = line.slice(line.indexOf(':') + 1).trim();
+    if (propertyName === 'SUMMARY') {
+      currentSummary = unescapeIcsText(propertyValue);
       continue;
     }
 
-    if (upper.startsWith('DTSTART')) {
+    if (propertyName === 'LOCATION') {
+      currentLocation = unescapeIcsText(propertyValue);
+      continue;
+    }
+
+    if (propertyName === 'DTSTART') {
       dtStartLine = line;
       continue;
     }
 
-    if (upper.startsWith('DTEND')) {
+    if (propertyName === 'DTEND') {
       dtEndLine = line;
     }
   }
@@ -599,6 +640,7 @@ export class CalendarService {
             blockKey: event.blockKey,
             externalId: event.externalId,
             title: event.title,
+            location: event.location,
             startAt: event.startAt,
             endAt: event.endAt,
             isAllDay: event.isAllDay
@@ -625,6 +667,54 @@ export class CalendarService {
       importedBlocks: parsedEvents.length,
       totalBlocks: synced.busyBlocks.length
     };
+  }
+
+  async listBusyBlocksForUser(
+    userId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<BusyBlockResponse[]> {
+    if (!isValidYmd(startDate)) {
+      throw new Error('Invalid startDate. Use YYYY-MM-DD');
+    }
+    if (!isValidYmd(endDate)) {
+      throw new Error('Invalid endDate. Use YYYY-MM-DD');
+    }
+    const start = parseYmdAsUtc(startDate);
+    const end = addDays(parseYmdAsUtc(endDate), 1); // exclusive end
+
+    const blocks = await this.prisma.calendarBusyBlock.findMany({
+      where: {
+        userId,
+        source: { enabled: true },
+        startAt: { lt: end },
+        endAt: { gt: start }
+      },
+      include: {
+        source: { select: { name: true, color: true } }
+      },
+      orderBy: { startAt: 'asc' }
+    });
+
+    return blocks.map((block) => ({
+      id: block.id,
+      sourceId: block.sourceId,
+      sourceName: block.source.name,
+      sourceColor: block.source.color,
+      title: block.title ? unescapeIcsText(block.title) : block.title,
+      location: block.location ? unescapeIcsText(block.location) : block.location,
+      startAt: block.startAt.toISOString(),
+      endAt: block.endAt.toISOString(),
+      isAllDay: block.isAllDay
+    }));
+  }
+
+  async listAllEnabledSources(): Promise<Array<{ id: string; userId: string }>> {
+    const sources = await this.prisma.calendarSource.findMany({
+      where: { enabled: true, userId: { not: null } },
+      select: { id: true, userId: true }
+    });
+    return sources as Array<{ id: string; userId: string }>;
   }
 
   async buildWeekPlanForUser(userId: string, options?: WeekPlanOptions): Promise<WeekPlan> {

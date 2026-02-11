@@ -211,6 +211,37 @@ calendarRouter.patch('/settings', async (req: Request, res: Response) => {
   }
 });
 
+calendarRouter.get('/busy-blocks', async (req: Request, res: Response) => {
+  const calendarService = getCalendarService();
+  const userId = requireUserId();
+
+  const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
+  const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
+
+  if (!startDate || !endDate) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Both startDate and endDate query parameters are required (YYYY-MM-DD)'
+      }
+    });
+    return;
+  }
+
+  try {
+    const blocks = await calendarService.listBusyBlocksForUser(userId, startDate, endDate);
+    res.json({ blocks });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to list busy blocks';
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message
+      }
+    });
+  }
+});
+
 calendarRouter.get('/plan-week', async (req: Request, res: Response) => {
   const calendarService = getCalendarService();
   const userId = requireUserId();
