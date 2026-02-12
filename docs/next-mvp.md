@@ -85,6 +85,9 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Auth: JWT + password login/registration with default user via env.
 - Storage: Fully DB-backed entries with revisions + embeddings (no filesystem memory store).
 
+## Security
+See [`.local.security-report.md`](.local.security-report.md) for a comprehensive security analysis covering vulnerabilities, outdated libraries, and recommendations for improvement.
+
 ## Next-Level Backlog (Unified)
 
 ### Priority Next (Execution Momentum, Procrastination-First)
