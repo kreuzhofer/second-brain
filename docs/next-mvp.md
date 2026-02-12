@@ -87,10 +87,53 @@ This is the canonical roadmap document for current MVP progress and next-level f
 
 ## Next-Level Backlog (Unified)
 
-### Priority Next
-- Entity graph analytics phase 3: graph-level filters and richer link inspection views in modal/panel surfaces.
-- Relationship insights phase 2: add project-centric insights, trend windows, and actionable follow-up suggestions.
-- Task scheduling automation phase 4: proactive replan trigger orchestration (on task mutations/blocker sync), schedule explanation UX, and configurable planning policy presets.
+### Priority Next (Execution Momentum, Procrastination-First)
+1. Quick capture tray + global keyboard shortcut (desktop) and one-tap capture entry point (mobile).
+2. Post-capture "Start 5 minutes now" CTA for tasks to bridge capture to immediate action.
+3. Voice capture (Whisper) as follow-up after text quick-capture flow is stable.
+
+### AI Handoff: Next Thing To Implement
+This section is the execution contract for any coding agent.
+
+Implement this next: **Quick Capture Tray + Shortcut (Phase 1)**.
+
+Problem to solve:
+- Capture friction is still too high for users who procrastinate.
+- The app has `POST /api/capture` already, but no dedicated low-friction capture UI path.
+- Chat works, but opening chat and framing messages adds activation cost.
+
+In scope:
+1. Frontend API client:
+- Add `api.capture.create({ text, hints? })` that calls `POST /api/capture`.
+2. Quick capture UI:
+- Add a lightweight capture tray/modal with a single text input and submit button.
+- Add global shortcut: `Cmd+K` on macOS, `Ctrl+K` on Windows/Linux to open/focus tray.
+- Add a visible mobile capture trigger (for example a compact button/FAB) that opens the same tray.
+3. Submission behavior:
+- On submit, call capture API, clear input, close tray, and refresh entries.
+- Show deterministic feedback using backend response message (`Filed as ...` or `Captured to inbox ...`).
+4. Inbox clarification visibility:
+- If `clarificationNeeded === true`, show explicit inline notice that item was routed to inbox for review.
+
+Out of scope (Phase 1):
+- Voice capture.
+- Browser extension.
+- Background/offline-first mobile capture redesign.
+- New backend classification logic changes.
+
+Implementation references:
+- Existing backend endpoint: `backend/src/routes/capture.ts` (`POST /api/capture`).
+- Route wiring: `backend/src/index.ts` (`app.use('/api/capture', authMiddleware, captureRouter)`).
+- Frontend auth/token client: `frontend/src/services/api.ts`.
+- Entries refresh hook already used in chat flow: `frontend/src/components/chat/ChatUI.tsx`.
+
+Acceptance criteria:
+1. User can open quick capture from keyboard shortcut and from mobile-visible trigger.
+2. User can capture with one short sentence and no required category selection.
+3. Successful capture updates Focus/Inbox lists without manual refresh.
+4. Inbox-routed captures clearly indicate they need review.
+5. Existing chat capture behavior remains unchanged.
+6. Frontend tests cover shortcut open/close, submit success path, and clarification notice rendering.
 
 ### Admin -> Task Migration Plan (Phases 1-3)
 1. Phase 1 (DB migration, additive + backfill):
@@ -128,10 +171,10 @@ This is the canonical roadmap document for current MVP progress and next-level f
 ### Capture and Interfaces
 - Inbox triage UI for batch reclassify/merge/resolve.
 - Full mobile UI optimization for the current feature set (responsive layout, touch-first navigation).
+- Keyboard shortcuts and quick capture tray. (Top priority, see AI Handoff section above)
 - Voice capture (Whisper) with background sync.
 - Mobile PWA with offline-first capture queue.
 - Browser extension for one-click capture with URL metadata.
-- Keyboard shortcuts and quick capture tray.
 
 ### Proactive and Scheduling
 - Calendar integration (pre-meeting context surfacing).
