@@ -91,52 +91,49 @@ See [`.local.security-report.md`](.local.security-report.md) for a comprehensive
 ## Next-Level Backlog (Unified)
 
 ### Priority Next (Execution Momentum, Procrastination-First)
-1. Quick capture tray + global keyboard shortcut (desktop) and one-tap capture entry point (mobile).
-2. Post-capture "Start 5 minutes now" CTA for tasks to bridge capture to immediate action.
-3. Voice capture (Whisper) as follow-up after text quick-capture flow is stable.
+1. Post-capture "Start 5 minutes now" CTA for tasks to bridge capture to immediate action.
+2. Voice capture (Whisper) with push-to-talk and background sync.
+3. Browser extension for one-click capture with URL metadata.
 
 ### AI Handoff: Next Thing To Implement
 This section is the execution contract for any coding agent.
 
-Implement this next: **Quick Capture Tray + Shortcut (Phase 1)**.
+Implement this next: **Post-Capture "Start 5 Minutes Now" CTA (Phase 1)**.
 
 Problem to solve:
-- Capture friction is still too high for users who procrastinate.
-- The app has `POST /api/capture` already, but no dedicated low-friction capture UI path.
-- Chat works, but opening chat and framing messages adds activation cost.
+- Capturing tasks works, but users still stall before starting execution.
+- Procrastination risk is highest in the gap between "task captured" and "task started."
+- The app needs an immediate, explicit action bridge after successful task capture.
 
 In scope:
-1. Frontend API client:
-- Add `api.capture.create({ text, hints? })` that calls `POST /api/capture`.
-2. Quick capture UI:
-- Add a lightweight capture tray/modal with a single text input and submit button.
-- Add global shortcut: `Cmd+K` on macOS, `Ctrl+K` on Windows/Linux to open/focus tray.
-- Add a visible mobile capture trigger (for example a compact button/FAB) that opens the same tray.
-3. Submission behavior:
-- On submit, call capture API, clear input, close tray, and refresh entries.
-- Show deterministic feedback using backend response message (`Filed as ...` or `Captured to inbox ...`).
-4. Inbox clarification visibility:
-- If `clarificationNeeded === true`, show explicit inline notice that item was routed to inbox for review.
+1. Trigger conditions:
+- Show CTA only when a newly captured entry resolves to category `task` (not inbox/idea/project/people).
+2. CTA behavior:
+- Label: `Start 5 minutes now`.
+- Clicking opens Deep Focus for that captured task and preloads a 5-minute session.
+3. Placement:
+- Show in post-capture success surfaces (chat response card/action row and any future direct-capture success toast/modal).
+4. Guardrails:
+- If task cannot be resolved/read, fail visibly with actionable message and do not silently ignore.
 
 Out of scope (Phase 1):
 - Voice capture.
 - Browser extension.
-- Background/offline-first mobile capture redesign.
 - New backend classification logic changes.
 
 Implementation references:
-- Existing backend endpoint: `backend/src/routes/capture.ts` (`POST /api/capture`).
-- Route wiring: `backend/src/index.ts` (`app.use('/api/capture', authMiddleware, captureRouter)`).
-- Frontend auth/token client: `frontend/src/services/api.ts`.
-- Entries refresh hook already used in chat flow: `frontend/src/components/chat/ChatUI.tsx`.
+- Capture tool response flow and messaging: `backend/src/services/chat.service.ts`.
+- Deep Focus launch path and mark-done flow: `frontend/src/components/DeepFocusView.tsx`.
+- Chat render + quick-reply/action handling: `frontend/src/components/chat/ChatUI.tsx`, `frontend/src/components/chat/MessageList.tsx`.
+- Entry refresh hooks: `frontend/src/state/entries.tsx`.
 
 Acceptance criteria:
-1. User can open quick capture from keyboard shortcut and from mobile-visible trigger.
-2. User can capture with one short sentence and no required category selection.
-3. Successful capture updates Focus/Inbox lists without manual refresh.
-4. Inbox-routed captures clearly indicate they need review.
-5. Existing chat capture behavior remains unchanged.
-6. Frontend tests cover shortcut open/close, submit success path, and clarification notice rendering.
+1. After capturing a task, user sees `Start 5 minutes now` without extra navigation.
+2. Clicking CTA opens focus mode bound to the captured task with 5-minute duration.
+3. Non-task captures do not show this CTA.
+4. Failures are explicit and user-visible (no silent fallback).
+5. Existing capture and chat behavior remain unchanged when CTA is not used.
+6. Frontend tests cover CTA visibility gating, click behavior, and error state rendering.
 
 ### Admin -> Task Migration Plan (Phases 1-3)
 1. Phase 1 (DB migration, additive + backfill):
@@ -174,7 +171,6 @@ Acceptance criteria:
 ### Capture and Interfaces
 - Inbox triage UI for batch reclassify/merge/resolve.
 - Full mobile UI optimization for the current feature set (responsive layout, touch-first navigation).
-- Keyboard shortcuts and quick capture tray. (Top priority, see AI Handoff section above)
 - Voice capture (Whisper) with background sync.
 - Mobile PWA with offline-first capture queue.
 - Browser extension for one-click capture with URL metadata.
