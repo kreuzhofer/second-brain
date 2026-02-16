@@ -88,6 +88,34 @@ chatRouter.post('/', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/chat/conversations
+ * Create a new empty chat conversation.
+ */
+chatRouter.post('/conversations', async (_req: Request, res: Response) => {
+  try {
+    const conversationService = getConversationService();
+    const conversation = await conversationService.create('chat');
+    const messageCount = await conversationService.getMessageCount(conversation.id);
+
+    res.status(201).json({
+      id: conversation.id,
+      channel: conversation.channel,
+      createdAt: conversation.createdAt.toISOString(),
+      updatedAt: conversation.updatedAt.toISOString(),
+      messageCount
+    });
+  } catch (error) {
+    console.error('Error creating conversation:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to create conversation'
+      }
+    });
+  }
+});
+
+/**
  * GET /api/conversations
  * Return list of conversations with message counts.
  * 

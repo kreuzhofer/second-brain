@@ -141,6 +141,21 @@ describe('Chat API Integration Tests', () => {
     });
   });
 
+  describe('POST /api/chat/conversations', () => {
+    it('creates a new empty chat conversation', async () => {
+      const response = await request(app)
+        .post('/api/chat/conversations')
+        .send({});
+
+      expect(response.status).toBe(201);
+      expect(response.body.channel).toBe('chat');
+      expect(response.body.messageCount).toBe(0);
+      expect(typeof response.body.id).toBe('string');
+      expect(typeof response.body.createdAt).toBe('string');
+      expect(typeof response.body.updatedAt).toBe('string');
+    });
+  });
+
   describe('GET /api/chat/conversations/:id/messages', () => {
     it('returns 404 for non-existent conversation', async () => {
       const response = await request(app)

@@ -544,6 +544,16 @@ class ApiClient {
     getConversation: async (conversationId: string): Promise<Conversation> => {
       return this.request<Conversation>(`/chat/conversations/${conversationId}`);
     },
+
+    /**
+     * Create a new empty chat conversation
+     */
+    createConversation: async (): Promise<Conversation> => {
+      return this.request<Conversation>('/chat/conversations', {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
+    },
   };
 
   /**

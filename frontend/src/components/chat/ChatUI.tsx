@@ -25,6 +25,7 @@ export function ChatUI({ onEntryClick, onStartFocus, className }: ChatUIProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isResettingConversation, setIsResettingConversation] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { refresh } = useEntries();
 
@@ -94,11 +95,22 @@ export function ChatUI({ onEntryClick, onStartFocus, className }: ChatUIProps) {
     }
   }, [conversationId, refresh]);
 
-  const handleNewConversation = useCallback(() => {
-    setMessages([]);
-    setConversationId(null);
+  const handleNewConversation = useCallback(async () => {
+    if (isLoading || isResettingConversation) return;
+
+    setIsResettingConversation(true);
     setError(null);
-  }, []);
+    setMessages([]);
+    try {
+      const conversation = await api.chat.createConversation();
+      setConversationId(conversation.id);
+    } catch (err) {
+      setConversationId(null);
+      setError(err instanceof Error ? err.message : 'Failed to create new conversation');
+    } finally {
+      setIsResettingConversation(false);
+    }
+  }, [isLoading, isResettingConversation]);
 
   const handleCaptureAction = useCallback(async (action: NonNullable<ChatMessage['captureAction']>) => {
     if (!onStartFocus) return;
@@ -120,6 +132,7 @@ export function ChatUI({ onEntryClick, onStartFocus, className }: ChatUIProps) {
           </div>
           <button
             onClick={handleNewConversation}
+            disabled={isLoading || isResettingConversation}
             className="min-h-[44px] px-2 text-sm text-muted-foreground hover:text-foreground flex items-center"
           >
             New conversation
@@ -141,7 +154,7 @@ export function ChatUI({ onEntryClick, onStartFocus, className }: ChatUIProps) {
         )}
         <InputBar 
           onSend={handleSendMessage} 
-          disabled={isLoading} 
+          disabled={isLoading || isResettingConversation} 
         />
       </CardContent>
     </Card>
