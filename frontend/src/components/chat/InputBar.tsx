@@ -10,7 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send, Loader2, Mic } from 'lucide-react';
 import { api } from '@/services/api';
-import { getVoiceButtonUiState, hasAudioCaptureSupport, toBase64Payload } from './chat-capture-helpers';
+import {
+  getSupportedAudioMimeType,
+  getVoiceButtonUiState,
+  hasAudioCaptureSupport,
+  toBase64Payload
+} from './chat-capture-helpers';
 
 interface InputBarProps {
   onSend: (message: string) => void;
@@ -113,11 +118,12 @@ export function InputBar({ onSend, disabled }: InputBarProps) {
     }
 
     try {
+      setVoiceError('Allow microphone access in the browser prompt to start recording.');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const preferredMimeType = typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : 'audio/webm';
-      const recorder = new MediaRecorder(stream, { mimeType: preferredMimeType });
+      const preferredMimeType = getSupportedAudioMimeType(MediaRecorder);
+      const recorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
 
       chunksRef.current = [];
       recorder.ondataavailable = (event: BlobEvent) => {
@@ -126,7 +132,7 @@ export function InputBar({ onSend, disabled }: InputBarProps) {
         }
       };
       recorder.onstop = () => {
-        void handleVoiceStop(recorder.mimeType || 'audio/webm');
+        void handleVoiceStop(recorder.mimeType || preferredMimeType || 'audio/webm');
       };
 
       recorderRef.current = recorder;
@@ -137,6 +143,10 @@ export function InputBar({ onSend, disabled }: InputBarProps) {
     } catch (err) {
       releaseStream();
       setIsRecording(false);
+      if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+        setVoiceError('Microphone permission was blocked. Enable microphone access for this site in Safari settings and try again.');
+        return;
+      }
       setVoiceError(err instanceof Error ? err.message : 'Microphone access failed.');
     }
   };
@@ -184,21 +194,12 @@ export function InputBar({ onSend, disabled }: InputBarProps) {
           aria-label={voiceButtonUi.label}
           title={voiceButtonUi.label}
           aria-pressed={isRecording}
-          onPointerDown={(e) => {
-            e.preventDefault();
+          onClick={() => {
+            if (isRecording) {
+              stopVoiceCapture();
+              return;
+            }
             void startVoiceCapture();
-          }}
-          onPointerUp={(e) => {
-            e.preventDefault();
-            stopVoiceCapture();
-          }}
-          onPointerCancel={(e) => {
-            e.preventDefault();
-            stopVoiceCapture();
-          }}
-          onPointerLeave={(e) => {
-            e.preventDefault();
-            stopVoiceCapture();
           }}
         >
           {isTranscribing ? (

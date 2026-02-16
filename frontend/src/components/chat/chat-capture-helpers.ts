@@ -43,6 +43,24 @@ export function toBase64Payload(audioData: string): string {
   return audioData.slice(commaIndex + 1);
 }
 
+export function getSupportedAudioMimeType(
+  mediaRecorderCtor: Pick<typeof MediaRecorder, 'isTypeSupported'> | undefined
+): string | undefined {
+  const preferredTypes = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
+    'audio/aac'
+  ];
+
+  if (!mediaRecorderCtor || typeof mediaRecorderCtor.isTypeSupported !== 'function') {
+    return undefined;
+  }
+
+  return preferredTypes.find((type) => mediaRecorderCtor.isTypeSupported(type));
+}
+
 export interface VoiceButtonUiStateInput {
   isRecording: boolean;
   isTranscribing: boolean;
@@ -57,8 +75,8 @@ export function getVoiceButtonUiState(input: VoiceButtonUiStateInput): VoiceButt
   const label = input.isTranscribing
     ? 'Transcribing voice input'
     : input.isRecording
-      ? 'Release to transcribe'
-      : 'Hold to talk';
+      ? 'Stop recording'
+      : 'Start voice input';
 
   const baseClassName = 'h-11 w-11 sm:h-10 sm:w-10 shrink-0 touch-none';
   if (input.isRecording) {
