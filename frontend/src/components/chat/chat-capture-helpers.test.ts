@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildTaskCaptureAction,
+  getSupportedAudioMimeType,
   getVoiceButtonUiState,
   hasAudioCaptureSupport,
   toBase64Payload
@@ -64,6 +65,24 @@ describe('toBase64Payload', () => {
   });
 });
 
+describe('getSupportedAudioMimeType', () => {
+  it('selects the first supported mime type', () => {
+    const mimeType = getSupportedAudioMimeType({
+      isTypeSupported: (type: string) => type === 'audio/mp4'
+    });
+
+    expect(mimeType).toBe('audio/mp4');
+  });
+
+  it('returns undefined when no mime type is supported', () => {
+    const mimeType = getSupportedAudioMimeType({
+      isTypeSupported: () => false
+    });
+
+    expect(mimeType).toBeUndefined();
+  });
+});
+
 describe('getVoiceButtonUiState', () => {
   it('uses fixed-size classes in idle and recording states', () => {
     const idle = getVoiceButtonUiState({ isRecording: false, isTranscribing: false });
@@ -80,8 +99,8 @@ describe('getVoiceButtonUiState', () => {
   });
 
   it('returns clear labels per voice state', () => {
-    expect(getVoiceButtonUiState({ isRecording: false, isTranscribing: false }).label).toBe('Hold to talk');
-    expect(getVoiceButtonUiState({ isRecording: true, isTranscribing: false }).label).toBe('Release to transcribe');
+    expect(getVoiceButtonUiState({ isRecording: false, isTranscribing: false }).label).toBe('Start voice input');
+    expect(getVoiceButtonUiState({ isRecording: true, isTranscribing: false }).label).toBe('Stop recording');
     expect(getVoiceButtonUiState({ isRecording: false, isTranscribing: true }).label).toBe('Transcribing voice input');
   });
 
