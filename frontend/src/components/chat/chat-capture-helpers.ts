@@ -64,7 +64,7 @@ export function getVoiceButtonUiState(input: VoiceButtonUiStateInput): VoiceButt
   if (input.isRecording) {
     return {
       label,
-      className: `${baseClassName} bg-primary text-primary-foreground hover:bg-primary/90`
+      className: `${baseClassName} border-primary bg-primary text-primary-foreground hover:bg-primary/90 [&_svg]:text-primary-foreground`
     };
   }
   return {

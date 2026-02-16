@@ -84,4 +84,13 @@ describe('getVoiceButtonUiState', () => {
     expect(getVoiceButtonUiState({ isRecording: true, isTranscribing: false }).label).toBe('Release to transcribe');
     expect(getVoiceButtonUiState({ isRecording: false, isTranscribing: true }).label).toBe('Transcribing voice input');
   });
+
+  it('uses inverted icon styling while recording', () => {
+    const recording = getVoiceButtonUiState({ isRecording: true, isTranscribing: false });
+
+    expect(recording.className).toContain('border-primary');
+    expect(recording.className).toContain('bg-primary');
+    expect(recording.className).toContain('text-primary-foreground');
+    expect(recording.className).toContain('[&_svg]:text-primary-foreground');
+  });
 });
