@@ -76,6 +76,8 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Focus list expansion control: Completed (default top 5 + Show all/Show less for pending focus items)
 - Task model rework phase 3: Completed (task priority editor, working-hours settings, manual replan endpoint, structured unscheduled reasons, feed freshness metadata)
 - Calendar board view (Outlook-style): Completed (multi-day grid with configurable columns, busy-block overlay with source colors, task check-off from board, list/board view toggle)
+- Post-capture task-start CTA phase 1: Completed (task-only `Start 5 minutes now` action from capture responses, Deep Focus preloaded to 5 minutes)
+- Voice capture phase 1: Completed (chat push-to-talk + Whisper transcription endpoint)
 
 ## Notes
 - Prioritize backend-first slices where possible.
@@ -91,49 +93,49 @@ See [`.local.security-report.md`](.local.security-report.md) for a comprehensive
 ## Next-Level Backlog (Unified)
 
 ### Priority Next (Execution Momentum, Procrastination-First)
-1. Post-capture "Start 5 minutes now" CTA for tasks to bridge capture to immediate action.
-2. Voice capture (Whisper) with push-to-talk and background sync.
-3. Browser extension for one-click capture with URL metadata.
+1. Browser extension for one-click capture with URL metadata.
+2. Mobile PWA with offline-first capture queue.
+3. Smart nudges based on deadlines, inactivity, and priority decay.
 
 ### AI Handoff: Next Thing To Implement
 This section is the execution contract for any coding agent.
 
-Implement this next: **Post-Capture "Start 5 Minutes Now" CTA (Phase 1)**.
+Implement this next: **Browser Extension Capture (Phase 1)**.
 
 Problem to solve:
-- Capturing tasks works, but users still stall before starting execution.
-- Procrastination risk is highest in the gap between "task captured" and "task started."
-- The app needs an immediate, explicit action bridge after successful task capture.
+- During web work, capture friction is still high: users must switch tabs and manually paste context.
+- Valuable context (URL + page title + selected text) is often lost before capture.
+- A one-click browser capture path should make inbox/task capture near-zero effort.
 
 In scope:
-1. Trigger conditions:
-- Show CTA only when a newly captured entry resolves to category `task` (not inbox/idea/project/people).
-2. CTA behavior:
-- Label: `Start 5 minutes now`.
-- Clicking opens Deep Focus for that captured task and preloads a 5-minute session.
-3. Placement:
-- Show in post-capture success surfaces (chat response card/action row and any future direct-capture success toast/modal).
+1. Extension shell:
+- Build a minimal browser extension (manifest v3) with popup UI: single text field + optional category hint selector.
+2. Context autofill:
+- Autofill capture payload with page title, URL, and selected text when available.
+3. Submission path:
+- Send capture requests to existing authenticated API endpoint `POST /api/capture`.
+- Show deterministic success/failure result in popup.
 4. Guardrails:
-- If task cannot be resolved/read, fail visibly with actionable message and do not silently ignore.
+- Fail visibly on auth/network errors.
+- Never silently drop capture payloads.
 
 Out of scope (Phase 1):
-- Voice capture.
-- Browser extension.
+- Rich extension settings UI.
+- Full bidirectional sync/offline queue in extension.
+- Voice capture changes.
 - New backend classification logic changes.
 
 Implementation references:
-- Capture tool response flow and messaging: `backend/src/services/chat.service.ts`.
-- Deep Focus launch path and mark-done flow: `frontend/src/components/DeepFocusView.tsx`.
-- Chat render + quick-reply/action handling: `frontend/src/components/chat/ChatUI.tsx`, `frontend/src/components/chat/MessageList.tsx`.
-- Entry refresh hooks: `frontend/src/state/entries.tsx`.
+- Existing capture endpoint and validation: `backend/src/routes/capture.ts`.
+- API auth model and token handling: `frontend/src/services/api.ts`.
+- Current chat capture wording/behavior to mirror response UX: `frontend/src/components/chat/ChatUI.tsx`.
 
 Acceptance criteria:
-1. After capturing a task, user sees `Start 5 minutes now` without extra navigation.
-2. Clicking CTA opens focus mode bound to the captured task with 5-minute duration.
-3. Non-task captures do not show this CTA.
-4. Failures are explicit and user-visible (no silent fallback).
-5. Existing capture and chat behavior remain unchanged when CTA is not used.
-6. Frontend tests cover CTA visibility gating, click behavior, and error state rendering.
+1. User can capture current page context from extension popup in one submit action.
+2. Payload includes URL/title and selected text when present.
+3. Capture success/failure is explicit and visible in extension UI.
+4. Existing app capture/chat behavior remains unchanged.
+5. Extension tests cover payload construction and error surfacing.
 
 ### Admin -> Task Migration Plan (Phases 1-3)
 1. Phase 1 (DB migration, additive + backfill):
@@ -171,9 +173,9 @@ Acceptance criteria:
 ### Capture and Interfaces
 - Inbox triage UI for batch reclassify/merge/resolve.
 - Full mobile UI optimization for the current feature set (responsive layout, touch-first navigation).
-- Voice capture (Whisper) with background sync.
+- Voice capture (Whisper) with push-to-talk in chat input. (Completed phase 1)
 - Mobile PWA with offline-first capture queue.
-- Browser extension for one-click capture with URL metadata.
+- Browser extension for one-click capture with URL metadata. (Priority next)
 
 ### Proactive and Scheduling
 - Calendar integration (pre-meeting context surfacing).
@@ -205,6 +207,12 @@ Acceptance criteria:
 - Structured analytics dashboard for usage metrics.
 
 ## Progress Log
+- 2026-02-16: Completed post-capture task-start CTA phase 1 end-to-end.
+- 2026-02-16: Added task-only `captureAction` metadata to chat responses (`start_focus_5m`) and rendered `Start 5 minutes now` action chip in chat assistant messages.
+- 2026-02-16: Wired CTA click to open Deep Focus for the captured task and preload 5-minute sessions.
+- 2026-02-16: Completed voice capture phase 1 with hold-to-talk in chat input and backend transcription endpoint `POST /api/capture/transcribe`.
+- 2026-02-16: Added backend transcription service with input validation (mime/base64/size) and explicit 400/503/500 error paths.
+- 2026-02-16: Verification complete: backend integration tests passing (`capture-api`, `chat-tools`), frontend tests passing (`9/9`, `66` tests), backend/frontend TypeScript builds passing, frontend production build passing.
 - 2026-02-11: Added calendar board day/week navigation (prev/next/today buttons) and mobile-responsive 1-column default with peek-at-next-day effect; calendar settings moved behind gear icon toggle.
 - 2026-02-11: Completed Calendar board view (Outlook-style) end-to-end.
 - 2026-02-11: Added `GET /api/calendar/busy-blocks` endpoint to expose external calendar busy blocks with source name/color metadata for board view overlay rendering.

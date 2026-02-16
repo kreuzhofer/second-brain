@@ -13,10 +13,17 @@ interface MessageProps {
   message: ChatMessage;
   onEntryClick: (path: string) => void;
   onQuickReply?: (message: string) => void;
+  onCaptureAction?: (action: NonNullable<ChatMessage['captureAction']>) => void;
   disableQuickReplies?: boolean;
 }
 
-export function Message({ message, onEntryClick, onQuickReply, disableQuickReplies }: MessageProps) {
+export function Message({
+  message,
+  onEntryClick,
+  onQuickReply,
+  onCaptureAction,
+  disableQuickReplies
+}: MessageProps) {
   const isUser = message.role === 'user';
   const displayPath = message.filedEntryPath?.replace(/\.md$/, '');
 
@@ -108,6 +115,23 @@ export function Message({ message, onEntryClick, onQuickReply, disableQuickRepli
                 {reply.label}
               </button>
             ))}
+          </div>
+        )}
+
+        {message.captureAction && message.role === 'assistant' && onCaptureAction && (
+          <div className="mt-2">
+            <button
+              type="button"
+              disabled={disableQuickReplies}
+              onClick={() => onCaptureAction(message.captureAction!)}
+              className={cn(
+                'min-h-[44px] rounded-full border px-3 text-xs transition-colors',
+                'border-border bg-background hover:bg-muted',
+                disableQuickReplies ? 'opacity-60 cursor-not-allowed' : ''
+              )}
+            >
+              {message.captureAction.label}
+            </button>
           </div>
         )}
       </div>

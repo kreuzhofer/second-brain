@@ -118,6 +118,14 @@ export interface QuickReplyOption {
   message: string;
 }
 
+export interface CaptureAction {
+  type: 'start_focus_5m';
+  entryPath: string;
+  entryName: string;
+  durationMinutes: number;
+  label: string;
+}
+
 /**
  * Context window assembled for LLM calls
  */
@@ -151,6 +159,7 @@ export interface AssistantMessage {
   filedEntryPath?: string;
   filedConfidence?: number;
   quickReplies?: QuickReplyOption[];
+  captureAction?: CaptureAction;
   createdAt: Date;
 }
 
@@ -223,6 +232,7 @@ export interface ChatApiResponse {
     filedEntryPath?: string;
     filedConfidence?: number;
     quickReplies?: QuickReplyOption[];
+    captureAction?: CaptureAction;
     createdAt: string;
   };
   entry?: {

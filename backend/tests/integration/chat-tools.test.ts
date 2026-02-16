@@ -227,6 +227,7 @@ describe('Chat Tools Integration', () => {
       // Verify toolsUsed is populated
       expect(response.toolsUsed).toContain('classify_and_capture');
       expect(response.message.quickReplies).toBeUndefined();
+      expect(response.message.captureAction).toBeUndefined();
 
       // Verify message metadata is stored
       const messages = await conversationService.getMessages(response.conversationId);
@@ -578,6 +579,13 @@ describe('Chat Tools Integration', () => {
       expect(second.entry?.path).toBe(expectedPath);
       expect(second.message.content).toContain(expectedName);
       expect(second.message.quickReplies).toBeUndefined();
+      expect(second.message.captureAction).toEqual({
+        type: 'start_focus_5m',
+        entryPath: expectedPath,
+        entryName: expectedName,
+        durationMinutes: 5,
+        label: 'Start 5 minutes now'
+      });
     });
 
     it('should not force capture when follow-up turn declines confirmation', async () => {

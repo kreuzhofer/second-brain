@@ -16,6 +16,7 @@ import {
   ClassificationResult,
   ContextWindow,
   QuickReplyOption,
+  CaptureAction,
 } from '../types/chat.types';
 import { Category, Channel } from '../types/entry.types';
 import { ConversationService, getConversationService } from './conversation.service';
@@ -347,6 +348,7 @@ export class ChatService {
 
     // 11. Store assistant message with entry metadata if applicable
     const quickReplies = this.buildQuickReplies(assistantMessageContent);
+    const captureAction = this.buildCaptureAction(entryInfo);
     const assistantMessage = await this.conversationService.addMessage(
       conversation.id,
       'assistant',
@@ -368,6 +370,7 @@ export class ChatService {
         filedEntryPath: entryInfo?.path,
         filedConfidence: entryInfo?.confidence,
         quickReplies,
+        captureAction,
         createdAt: assistantMessage.createdAt,
       },
       entry: entryInfo,
@@ -405,6 +408,22 @@ export class ChatService {
     }
 
     return parts.join('\n');
+  }
+
+  private buildCaptureAction(
+    entryInfo?: { path: string; category: Category; name: string; confidence: number }
+  ): CaptureAction | undefined {
+    if (!entryInfo || !isTaskCategory(entryInfo.category)) {
+      return undefined;
+    }
+
+    return {
+      type: 'start_focus_5m',
+      entryPath: entryInfo.path,
+      entryName: entryInfo.name,
+      durationMinutes: 5,
+      label: 'Start 5 minutes now'
+    };
   }
 
   private shouldAttemptReopenFallback(
@@ -615,6 +634,7 @@ export class ChatService {
         };
 
     const responseText = this.buildFollowUpCaptureResponse(captureResult);
+    const captureAction = this.buildCaptureAction(entryInfo);
     const assistantMessage = await this.conversationService.addMessage(
       conversationId,
       'assistant',
@@ -633,6 +653,7 @@ export class ChatService {
         content: responseText,
         filedEntryPath: entryInfo?.path,
         filedConfidence: entryInfo?.confidence,
+        captureAction,
         createdAt: assistantMessage.createdAt
       },
       entry: entryInfo,

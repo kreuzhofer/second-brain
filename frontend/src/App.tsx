@@ -25,6 +25,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [selectedEntryPath, setSelectedEntryPath] = useState<string | null>(null);
   const [focusEntry, setFocusEntry] = useState<EntryWithPath | null>(null);
+  const [focusInitialMinutes, setFocusInitialMinutes] = useState<number | undefined>(undefined);
   const [mobilePanel, setMobilePanel] = useState<'focus' | 'chat'>('focus');
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
@@ -97,11 +98,19 @@ function App() {
         Notification.requestPermission().catch(() => undefined);
       }
     }
+    setFocusInitialMinutes(undefined);
+    setFocusEntry(entry);
+  };
+
+  const handleStartFocusFromPath = async (entryPath: string, durationMinutes: number) => {
+    const entry = await api.entries.get(entryPath);
+    setFocusInitialMinutes(durationMinutes);
     setFocusEntry(entry);
   };
 
   const handleCloseFocus = () => {
     setFocusEntry(null);
+    setFocusInitialMinutes(undefined);
   };
 
   return (
@@ -224,7 +233,11 @@ function App() {
           <EntriesProvider enabled={isAuthenticated}>
             <div className={APP_SHELL_CLASSES.contentGrid}>
               <div className="hidden lg:flex flex-col min-h-0">
-                <ChatUI onEntryClick={handleEntryClick} className="h-full" />
+                <ChatUI
+                  onEntryClick={handleEntryClick}
+                  onStartFocus={handleStartFocusFromPath}
+                  className="h-full"
+                />
               </div>
 
               <div className={APP_SHELL_CLASSES.desktopFocusColumn}>
@@ -233,7 +246,11 @@ function App() {
 
               <div className="flex lg:hidden flex-col min-h-0">
                 {mobilePanel === 'chat' ? (
-                  <ChatUI onEntryClick={handleEntryClick} className="h-full" />
+                  <ChatUI
+                    onEntryClick={handleEntryClick}
+                    onStartFocus={handleStartFocusFromPath}
+                    className="h-full"
+                  />
                 ) : (
                   <FocusPanel onEntryClick={handleEntryClick} />
                 )}
@@ -247,7 +264,7 @@ function App() {
               onStartFocus={handleStartFocus}
               onEntryClick={handleEntryClick}
             />
-            <DeepFocusView entry={focusEntry} onClose={handleCloseFocus} />
+            <DeepFocusView entry={focusEntry} onClose={handleCloseFocus} initialMinutes={focusInitialMinutes} />
           </EntriesProvider>
         )}
       </main>

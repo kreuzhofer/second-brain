@@ -14,10 +14,17 @@ interface MessageListProps {
   messages: ChatMessage[];
   onEntryClick: (path: string) => void;
   onQuickReply?: (message: string) => void;
+  onCaptureAction?: (action: NonNullable<ChatMessage['captureAction']>) => void;
   isLoading?: boolean;
 }
 
-export function MessageList({ messages, onEntryClick, onQuickReply, isLoading }: MessageListProps) {
+export function MessageList({
+  messages,
+  onEntryClick,
+  onQuickReply,
+  onCaptureAction,
+  isLoading
+}: MessageListProps) {
   const listRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to newest message
@@ -48,6 +55,7 @@ export function MessageList({ messages, onEntryClick, onQuickReply, isLoading }:
           message={message} 
           onEntryClick={onEntryClick}
           onQuickReply={onQuickReply}
+          onCaptureAction={onCaptureAction}
           disableQuickReplies={Boolean(isLoading)}
         />
       ))}

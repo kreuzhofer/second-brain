@@ -23,6 +23,7 @@ const PRESET_MINUTES = [5, 10, 15, 20, 30, 45, 60];
 interface DeepFocusViewProps {
   entry: EntryWithPath | null;
   onClose: () => void;
+  initialMinutes?: number;
 }
 
 declare global {
@@ -32,7 +33,7 @@ declare global {
   }
 }
 
-export function DeepFocusView({ entry, onClose }: DeepFocusViewProps) {
+export function DeepFocusView({ entry, onClose, initialMinutes }: DeepFocusViewProps) {
   const { refresh } = useEntries();
   const [selectedMinutes, setSelectedMinutes] = useState(25);
   const [remainingSeconds, setRemainingSeconds] = useState(25 * 60);
@@ -66,8 +67,9 @@ export function DeepFocusView({ entry, onClose }: DeepFocusViewProps) {
   useEffect(() => {
     if (entry) {
       setTitleDraft(String((entry.entry as any)?.name || ''));
-      setSelectedMinutes(25);
-      setRemainingSeconds(25 * 60);
+      const nextMinutes = Math.max(1, initialMinutes ?? 25);
+      setSelectedMinutes(nextMinutes);
+      setRemainingSeconds(nextMinutes * 60);
       setSessionComplete(false);
       setSessionError(null);
       setStatusMessage(null);
@@ -77,7 +79,7 @@ export function DeepFocusView({ entry, onClose }: DeepFocusViewProps) {
       completedRef.current = false;
       loadTrack('auto');
     }
-  }, [entry]);
+  }, [entry, initialMinutes]);
 
   useEffect(() => {
     if (!entry) {

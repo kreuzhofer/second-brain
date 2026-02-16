@@ -253,6 +253,13 @@ export interface ChatMessage {
   content: string;
   filedEntryPath?: string;
   filedConfidence?: number;
+  captureAction?: {
+    type: 'start_focus_5m';
+    entryPath: string;
+    entryName: string;
+    durationMinutes: number;
+    label: string;
+  };
   quickReplies?: Array<{
     id: string;
     label: string;
@@ -270,6 +277,12 @@ export interface ChatResponse {
     name: string;
     confidence: number;
   };
+  clarificationNeeded: boolean;
+}
+
+export interface CaptureResponse {
+  entry: EntryWithPath;
+  message: string;
   clarificationNeeded: boolean;
 }
 
@@ -531,6 +544,24 @@ class ApiClient {
     getConversation: async (conversationId: string): Promise<Conversation> => {
       return this.request<Conversation>(`/chat/conversations/${conversationId}`);
     },
+  };
+
+  /**
+   * Capture operations
+   */
+  capture = {
+    create: async (payload: { text: string; hints?: string }): Promise<CaptureResponse> => {
+      return this.request<CaptureResponse>('/capture', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    },
+    transcribe: async (payload: { audioBase64: string; mimeType?: string }): Promise<{ text: string }> => {
+      return this.request<{ text: string }>('/capture/transcribe', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
   };
 
   /**

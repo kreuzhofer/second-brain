@@ -13,13 +13,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEntries } from '@/state/entries';
+import { buildTaskCaptureAction } from './chat-capture-helpers';
 
 interface ChatUIProps {
   onEntryClick: (path: string) => void;
+  onStartFocus?: (entryPath: string, durationMinutes: number) => Promise<void>;
   className?: string;
 }
 
-export function ChatUI({ onEntryClick, className }: ChatUIProps) {
+export function ChatUI({ onEntryClick, onStartFocus, className }: ChatUIProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,6 +65,10 @@ export function ChatUI({ onEntryClick, className }: ChatUIProps) {
 
     try {
       const response: ChatResponse = await api.chat.send(text, conversationId || undefined);
+      const assistantMessage: ChatMessage = {
+        ...response.message,
+        captureAction: buildTaskCaptureAction(response.entry)
+      };
       
       // Update conversation ID if this is a new conversation
       if (!conversationId) {
@@ -75,7 +81,7 @@ export function ChatUI({ onEntryClick, className }: ChatUIProps) {
         return [
           ...withoutTemp,
           { ...userMessage, id: `user-${Date.now()}` },
-          response.message,
+          assistantMessage,
         ];
       });
       void refresh();
@@ -93,6 +99,16 @@ export function ChatUI({ onEntryClick, className }: ChatUIProps) {
     setConversationId(null);
     setError(null);
   }, []);
+
+  const handleCaptureAction = useCallback(async (action: NonNullable<ChatMessage['captureAction']>) => {
+    if (!onStartFocus) return;
+    try {
+      setError(null);
+      await onStartFocus(action.entryPath, action.durationMinutes);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start focus session');
+    }
+  }, [onStartFocus]);
 
   return (
     <Card className={cn('flex flex-col h-full min-h-0', className)}>
@@ -115,6 +131,7 @@ export function ChatUI({ onEntryClick, className }: ChatUIProps) {
           messages={messages} 
           onEntryClick={onEntryClick}
           onQuickReply={handleSendMessage}
+          onCaptureAction={handleCaptureAction}
           isLoading={isLoading}
         />
         {error && (

@@ -5,6 +5,7 @@
 import request from 'supertest';
 import express from 'express';
 import { captureRouter } from '../../src/routes/capture';
+import { JSON_BODY_LIMIT } from '../../src/config/http';
 
 jest.mock('../../src/services/tool-executor', () => ({
   getToolExecutor: jest.fn()
@@ -14,12 +15,17 @@ jest.mock('../../src/services/entry.service', () => ({
   getEntryService: jest.fn()
 }));
 
+jest.mock('../../src/services/transcription.service', () => ({
+  getTranscriptionService: jest.fn()
+}));
+
 import { getToolExecutor } from '../../src/services/tool-executor';
 import { getEntryService } from '../../src/services/entry.service';
+import { getTranscriptionService } from '../../src/services/transcription.service';
 
 const createTestApp = () => {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
   app.use('/api/capture', (req, res, next) => next(), captureRouter);
   return app;
 };
@@ -81,5 +87,45 @@ describe('Capture API Integration Tests', () => {
     expect(response.body.entry.path).toBe('projects/test-project');
     expect(response.body.message).toContain('Filed as project');
     expect(response.body.clarificationNeeded).toBe(false);
+  });
+
+  it('returns 400 for missing audio in transcribe endpoint', async () => {
+    const response = await request(app)
+      .post('/api/capture/transcribe')
+      .send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns 200 with transcribed text', async () => {
+    const mockTranscribe = jest.fn().mockResolvedValue('buy milk and send invoice');
+    (getTranscriptionService as jest.Mock).mockReturnValue({
+      transcribeBase64Audio: mockTranscribe
+    });
+
+    const response = await request(app)
+      .post('/api/capture/transcribe')
+      .send({ audioBase64: 'aGVsbG8=', mimeType: 'audio/webm' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ text: 'buy milk and send invoice' });
+    expect(mockTranscribe).toHaveBeenCalledWith('aGVsbG8=', 'audio/webm');
+  });
+
+  it('accepts transcribe payloads larger than the default 100kb JSON parser limit', async () => {
+    const mockTranscribe = jest.fn().mockResolvedValue('long audio transcription');
+    (getTranscriptionService as jest.Mock).mockReturnValue({
+      transcribeBase64Audio: mockTranscribe
+    });
+    const largeAudioPayload = Buffer.alloc(120 * 1024, 1).toString('base64');
+
+    const response = await request(app)
+      .post('/api/capture/transcribe')
+      .send({ audioBase64: largeAudioPayload, mimeType: 'audio/webm;codecs=opus' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ text: 'long audio transcription' });
+    expect(mockTranscribe).toHaveBeenCalledWith(largeAudioPayload, 'audio/webm;codecs=opus');
   });
 });

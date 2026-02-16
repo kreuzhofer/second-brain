@@ -53,6 +53,7 @@ chatRouter.post('/', async (req: Request, res: Response) => {
         filedEntryPath: response.message.filedEntryPath,
         filedConfidence: response.message.filedConfidence,
         quickReplies: response.message.quickReplies,
+        captureAction: response.message.captureAction,
         createdAt: response.message.createdAt.toISOString(),
       },
       entry: response.entry ? {

@@ -22,6 +22,7 @@ import { getOfflineQueueService } from './services/offline-queue.service';
 import { getToolExecutor } from './services/tool-executor';
 import { getEmbeddingBackfillService } from './services/embedding-backfill.service';
 import { getUserService } from './services/user.service';
+import { JSON_BODY_LIMIT } from './config/http';
 
 // Validate environment variables before starting
 validateRequiredEnvVars();
@@ -30,7 +31,7 @@ const config = loadEnvConfig();
 const app = express();
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
 // Public routes (no auth required)
 app.use('/api/health', healthRouter);
@@ -67,6 +68,15 @@ if (process.env.NODE_ENV === 'production') {
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if ((err as Error & { type?: string }).type === 'entity.too.large') {
+    res.status(413).json({
+      error: {
+        code: 'PAYLOAD_TOO_LARGE',
+        message: `Request payload exceeds ${JSON_BODY_LIMIT} JSON body limit`
+      }
+    });
+    return;
+  }
   console.error('Unhandled error:', err);
   res.status(500).json({
     error: {

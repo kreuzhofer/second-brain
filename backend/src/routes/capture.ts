@@ -8,8 +8,85 @@
 import { Router, Request, Response } from 'express';
 import { getToolExecutor } from '../services/tool-executor';
 import { getEntryService } from '../services/entry.service';
+import {
+  getTranscriptionService,
+  TranscriptionUnavailableError,
+  TranscriptionValidationError
+} from '../services/transcription.service';
 
 export const captureRouter = Router();
+
+/**
+ * POST /api/capture/transcribe
+ * Transcribe base64 audio payload into text using Whisper.
+ */
+captureRouter.post('/transcribe', async (req: Request, res: Response) => {
+  try {
+    const { audioBase64, mimeType } = req.body as {
+      audioBase64?: string;
+      mimeType?: string;
+    };
+
+    if (!audioBase64 || typeof audioBase64 !== 'string' || audioBase64.trim().length === 0) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'audioBase64 is required and must be a non-empty string'
+        }
+      });
+      return;
+    }
+
+    const normalizedBase64 = audioBase64.includes(',')
+      ? audioBase64.split(',', 2)[1]
+      : audioBase64;
+    if (!normalizedBase64 || normalizedBase64.trim().length === 0) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'audioBase64 payload is invalid'
+        }
+      });
+      return;
+    }
+
+    const transcriptionService = getTranscriptionService();
+    const text = await transcriptionService.transcribeBase64Audio(
+      normalizedBase64.trim(),
+      typeof mimeType === 'string' ? mimeType : undefined
+    );
+
+    res.status(200).json({ text });
+  } catch (error) {
+    if (error instanceof TranscriptionValidationError) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.message
+        }
+      });
+      return;
+    }
+
+    if (error instanceof TranscriptionUnavailableError) {
+      res.status(503).json({
+        error: {
+          code: 'SERVICE_UNAVAILABLE',
+          message: error.message
+        }
+      });
+      return;
+    }
+
+    console.error('Error transcribing audio:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to transcribe audio'
+      }
+    });
+  }
+});
 
 /**
  * POST /api/capture
