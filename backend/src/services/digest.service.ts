@@ -11,6 +11,7 @@ import { ConversationService, getConversationService } from './conversation.serv
 import { DigestMailer, getDigestMailer } from './digest-mailer';
 import { DailyTipService, getDailyTipService } from './daily-tip.service';
 import { getPrismaClient } from '../lib/prisma';
+import { PrismaClient } from '@prisma/client';
 import { EntrySummary, Category } from '../types/entry.types';
 import { DigestPreferences, DigestPreferencesService, getDigestPreferencesService } from './digest-preferences.service';
 import { requireUserId } from '../context/user-context';
@@ -56,6 +57,16 @@ export interface Suggestion {
   reason: string;
 }
 
+export interface DigestNudge {
+  entryId: string;
+  path: string;
+  name: string;
+  reason: string;
+  score: number;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 // ============================================
 // Digest Service Class
 // ============================================
@@ -67,7 +78,7 @@ export class DigestService {
   private digestMailer: DigestMailer | null;
   private preferencesService: DigestPreferencesService;
   private dailyTipService: DailyTipService;
-  private prisma = getPrismaClient();
+  private prisma: PrismaClient;
 
   constructor(
     entryService?: EntryService | null,
@@ -75,7 +86,8 @@ export class DigestService {
     conversationService?: ConversationService | null,
     digestMailer?: DigestMailer | null,
     preferencesService?: DigestPreferencesService,
-    dailyTipService?: DailyTipService
+    dailyTipService?: DailyTipService,
+    prisma?: PrismaClient
   ) {
     // Allow null services for testing formatting methods
     this.entryService = entryService === null ? null : (entryService || getEntryService());
@@ -84,6 +96,7 @@ export class DigestService {
     this.digestMailer = digestMailer === null ? null : (digestMailer || getDigestMailer());
     this.preferencesService = preferencesService || getDigestPreferencesService();
     this.dailyTipService = dailyTipService || getDailyTipService();
+    this.prisma = prisma || getPrismaClient();
   }
 
   /**
@@ -107,6 +120,11 @@ export class DigestService {
       ? await this.getSmallWins()
       : { completedCount: 0 };
     
+    // Smart nudges
+    const nudges = prefs.includeNudges
+      ? await this.getSmartNudges(prefs)
+      : [];
+
     // Daily momentum tip
     let tipResult: { tip: string; source: 'ai' | 'fallback' } | undefined;
     try {
@@ -118,7 +136,7 @@ export class DigestService {
 
     // Format the digest
     const tipLabel = tipResult?.source === 'fallback' ? 'Daily Momentum Tip (fallback)' : 'Daily Momentum Tip';
-    let digest = this.formatDailyDigest(topItems, staleItems, smallWins, tipResult?.tip, tipLabel);
+    let digest = this.formatDailyDigest(topItems, staleItems, smallWins, nudges, tipResult?.tip, tipLabel);
     if (prefs.maxWords) {
       digest = this.applyWordLimit(digest, prefs.maxWords);
     }
@@ -342,6 +360,218 @@ export class DigestService {
   }
 
   /**
+   * Get smart nudges based on deadlines, inactivity, and priority decay
+   */
+  async getSmartNudges(preferences: DigestPreferences): Promise<DigestNudge[]> {
+    if (!this.entryService) {
+      throw new Error('EntryService not available');
+    }
+
+    if (preferences.includeNudges === false) {
+      return [];
+    }
+
+    const maxNudges = preferences.maxNudgesPerDay ?? 3;
+    if (maxNudges <= 0) {
+      return [];
+    }
+
+    const now = new Date();
+    const candidates: DigestNudge[] = [];
+
+    if (this.isCategoryFocused(preferences, 'task')) {
+      const tasks = await this.entryService.list('task', { status: 'pending' });
+      for (const task of tasks) {
+        const candidate = this.buildNudgeCandidate(task, now, { usePriority: true });
+        if (candidate) {
+          candidates.push(candidate);
+        }
+      }
+    }
+
+    if (this.isCategoryFocused(preferences, 'projects')) {
+      const projects = await this.entryService.list('projects', { status: 'active' });
+      for (const project of projects) {
+        const candidate = this.buildNudgeCandidate(project, now, { usePriority: false });
+        if (candidate) {
+          candidates.push(candidate);
+        }
+      }
+    }
+
+    if (candidates.length === 0) {
+      return [];
+    }
+
+    const userId = requireUserId();
+    const cooldownDays = preferences.nudgeCooldownDays ?? 3;
+    const cutoff = new Date(now.getTime() - cooldownDays * DAY_MS);
+    const candidateIds = candidates.map((candidate) => candidate.entryId);
+    const recent = await this.prisma.entryNudge.findMany({
+      where: {
+        userId,
+        entryId: { in: candidateIds }
+      },
+      select: {
+        entryId: true,
+        lastNudgedAt: true
+      }
+    });
+
+    const suppressed = new Set(
+      recent
+        .filter((record) => record.lastNudgedAt >= cutoff)
+        .map((record) => record.entryId)
+    );
+
+    const available = candidates.filter((candidate) => !suppressed.has(candidate.entryId));
+    available.sort((a, b) => b.score - a.score);
+    const selected = available.slice(0, maxNudges);
+
+    if (selected.length === 0) {
+      return [];
+    }
+
+    await Promise.all(
+      selected.map((nudge) =>
+        this.prisma.entryNudge.upsert({
+          where: {
+            userId_entryId: {
+              userId,
+              entryId: nudge.entryId
+            }
+          },
+          create: {
+            userId,
+            entryId: nudge.entryId,
+            lastNudgedAt: now,
+            lastReason: nudge.reason
+          },
+          update: {
+            lastNudgedAt: now,
+            lastReason: nudge.reason
+          }
+        })
+      )
+    );
+
+    return selected;
+  }
+
+  private buildNudgeCandidate(
+    entry: EntrySummary,
+    now: Date,
+    options: { usePriority: boolean }
+  ): DigestNudge | null {
+    const reasons: Array<{ score: number; text: string }> = [];
+
+    const dueInfo = this.getDueDateForEntry(entry);
+    if (dueInfo) {
+      const anchor = dueInfo.source === 'date' ? this.getStartOfTodayUtc(now) : now;
+      const daysUntilDue = Math.floor((dueInfo.date.getTime() - anchor.getTime()) / DAY_MS);
+
+      if (daysUntilDue < 0) {
+        const daysOverdue = Math.abs(daysUntilDue);
+        reasons.push({
+          score: 110 + Math.min(daysOverdue, 7),
+          text: `Overdue by ${daysOverdue} ${this.formatDays(daysOverdue)}`
+        });
+      } else if (daysUntilDue === 0) {
+        reasons.push({ score: 100, text: 'Due today' });
+      } else if (daysUntilDue === 1) {
+        reasons.push({ score: 95, text: 'Due tomorrow' });
+      } else if (daysUntilDue <= 3) {
+        reasons.push({
+          score: 85,
+          text: `Due in ${daysUntilDue} ${this.formatDays(daysUntilDue)}`
+        });
+      } else if (daysUntilDue <= 7) {
+        reasons.push({
+          score: 70,
+          text: `Due in ${daysUntilDue} ${this.formatDays(daysUntilDue)}`
+        });
+      }
+    }
+
+    const updatedAt = new Date(entry.updated_at);
+    if (!isNaN(updatedAt.getTime())) {
+      const daysSinceUpdate = Math.floor((now.getTime() - updatedAt.getTime()) / DAY_MS);
+      if (daysSinceUpdate >= 7) {
+        reasons.push({
+          score: 55 + Math.min(daysSinceUpdate - 7, 10),
+          text: `No update in ${daysSinceUpdate} ${this.formatDays(daysSinceUpdate)}`
+        });
+      }
+
+      if (options.usePriority) {
+        const priority = entry.priority ?? 3;
+        if (priority >= 4 && daysSinceUpdate >= 5) {
+          reasons.push({
+            score: 45 + (priority - 3) * 10 + Math.min(daysSinceUpdate - 5, 5),
+            text: `High priority, last touched ${daysSinceUpdate} ${this.formatDays(daysSinceUpdate)} ago`
+          });
+        }
+      }
+    }
+
+    if (reasons.length === 0) {
+      return null;
+    }
+
+    const best = reasons.sort((a, b) => b.score - a.score)[0];
+    return {
+      entryId: entry.id,
+      path: entry.path,
+      name: entry.name,
+      reason: best.text,
+      score: best.score
+    };
+  }
+
+  private getDueDateForEntry(entry: EntrySummary): { date: Date; source: 'date' | 'datetime' } | null {
+    if (entry.due_at) {
+      const dueAt = new Date(entry.due_at);
+      if (!isNaN(dueAt.getTime())) {
+        return { date: dueAt, source: 'datetime' };
+      }
+    }
+
+    if (entry.due_date) {
+      const parsed = this.parseYmdAsUtc(entry.due_date);
+      if (parsed) {
+        return { date: parsed, source: 'date' };
+      }
+    }
+
+    return null;
+  }
+
+  private parseYmdAsUtc(value: string): Date | null {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month - 1 ||
+      date.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    return date;
+  }
+
+  private getStartOfTodayUtc(now: Date): Date {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  }
+
+  private formatDays(days: number): string {
+    return days === 1 ? 'day' : 'days';
+  }
+
+  /**
    * Get open loops (waiting/blocked projects and stale inbox items)
    */
   async getOpenLoops(preferences?: DigestPreferences): Promise<OpenLoop[]> {
@@ -510,6 +740,7 @@ export class DigestService {
     topItems: TopItem[],
     staleItems: StaleInboxItem[],
     smallWins: { completedCount: number; nextTask?: string },
+    nudges: DigestNudge[] = [],
     dailyTip?: string,
     dailyTipLabel: string = 'Daily Momentum Tip'
   ): string {
@@ -545,6 +776,14 @@ export class DigestService {
       lines.push('**Small Win:**');
       const nextPart = smallWins.nextTask ? ` ${smallWins.nextTask} is next.` : '';
       lines.push(`- You completed ${smallWins.completedCount} task${smallWins.completedCount > 1 ? 's' : ''} this week.${nextPart}`);
+    }
+
+    if (nudges.length > 0) {
+      lines.push('');
+      lines.push('**Smart Nudges:**');
+      nudges.forEach((nudge, index) => {
+        lines.push(`${index + 1}. ${nudge.name} — ${nudge.reason}`);
+      });
     }
 
     if (dailyTip) {

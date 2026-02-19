@@ -1043,6 +1043,9 @@ GET /api/digest?type=weekly
 |-----------|------|-------------|
 | `type` | string | `daily` or `weekly` |
 | `send` | string | `true` to also send via email (optional) |
+| `include_nudges` | string | `true` or `false` to include smart nudges (optional) |
+| `max_nudges` | string | Max nudges to include (optional) |
+| `nudge_cooldown_days` | string | Suppress repeat nudges within this many days (optional) |
 
 **Response** (200 OK):
 ```json
@@ -1067,6 +1070,9 @@ PUT /api/digest/preferences
   "focusCategories": ["projects", "admin"],
   "maxItems": 2,
   "maxWords": 140,
+  "includeNudges": true,
+  "maxNudgesPerDay": 3,
+  "nudgeCooldownDays": 3,
   "includeStaleInbox": false
 }
 ```

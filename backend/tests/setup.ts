@@ -68,6 +68,7 @@ export async function resetDatabase(): Promise<void> {
     prisma.entrySection.deleteMany(),
     prisma.entryTag.deleteMany(),
     prisma.entryAuditLog.deleteMany(),
+    prisma.entryNudge.deleteMany(),
     prisma.dailyTipState.deleteMany(),
     prisma.offlineQueueItem.deleteMany(),
     prisma.message.deleteMany(),

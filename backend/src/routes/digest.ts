@@ -33,6 +33,8 @@ function parsePreferences(query: Record<string, unknown>): DigestPreferences {
   const maxWords = query.max_words ? parseInt(query.max_words as string, 10) : undefined;
   const maxOpenLoops = query.max_open_loops ? parseInt(query.max_open_loops as string, 10) : undefined;
   const maxSuggestions = query.max_suggestions ? parseInt(query.max_suggestions as string, 10) : undefined;
+  const maxNudgesPerDay = query.max_nudges ? parseInt(query.max_nudges as string, 10) : undefined;
+  const nudgeCooldownDays = query.nudge_cooldown_days ? parseInt(query.nudge_cooldown_days as string, 10) : undefined;
 
   return {
     focusCategories: focusCategories.length > 0 ? focusCategories : undefined,
@@ -40,11 +42,14 @@ function parsePreferences(query: Record<string, unknown>): DigestPreferences {
     maxWords: isNaN(Number(maxWords)) ? undefined : maxWords,
     maxOpenLoops: isNaN(Number(maxOpenLoops)) ? undefined : maxOpenLoops,
     maxSuggestions: isNaN(Number(maxSuggestions)) ? undefined : maxSuggestions,
+    maxNudgesPerDay: isNaN(Number(maxNudgesPerDay)) ? undefined : maxNudgesPerDay,
+    nudgeCooldownDays: isNaN(Number(nudgeCooldownDays)) ? undefined : nudgeCooldownDays,
     includeStaleInbox: parseBool(query.include_stale_inbox),
     includeSmallWins: parseBool(query.include_small_wins),
     includeOpenLoops: parseBool(query.include_open_loops),
     includeSuggestions: parseBool(query.include_suggestions),
-    includeTheme: parseBool(query.include_theme)
+    includeTheme: parseBool(query.include_theme),
+    includeNudges: parseBool(query.include_nudges)
   };
 }
 

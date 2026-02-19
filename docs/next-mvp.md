@@ -93,49 +93,47 @@ See [`.local.security-report.md`](.local.security-report.md) for a comprehensive
 ## Next-Level Backlog (Unified)
 
 ### Priority Next (Execution Momentum, Procrastination-First)
-1. Browser extension for one-click capture with URL metadata.
-2. Mobile PWA with offline-first capture queue.
-3. Smart nudges based on deadlines, inactivity, and priority decay.
+1. Smart nudges based on deadlines, inactivity, and priority decay.
+2. Browser extension for one-click capture with URL metadata.
+3. Mobile PWA with offline-first capture queue.
 
 ### AI Handoff: Next Thing To Implement
 This section is the execution contract for any coding agent.
 
-Implement this next: **Browser Extension Capture (Phase 1)**.
+Implement this next: **Smart Nudges (Phase 1)**.
 
 Problem to solve:
-- During web work, capture friction is still high: users must switch tabs and manually paste context.
-- Valuable context (URL + page title + selected text) is often lost before capture.
-- A one-click browser capture path should make inbox/task capture near-zero effort.
+- Users lose momentum when tasks linger without reminders or decay.
+- Manual review is inconsistent; nudges should surface timely prompts.
+- Nudges should prioritize deadlines, inactivity, and priority decay without becoming noisy.
 
 In scope:
-1. Extension shell:
-- Build a minimal browser extension (manifest v3) with popup UI: single text field + optional category hint selector.
-2. Context autofill:
-- Autofill capture payload with page title, URL, and selected text when available.
-3. Submission path:
-- Send capture requests to existing authenticated API endpoint `POST /api/capture`.
-- Show deterministic success/failure result in popup.
+1. Nudge rules:
+- Identify candidates based on deadline proximity, inactivity, and priority decay.
+- Define simple score/thresholds for surfacing.
+2. Delivery path:
+- Include nudges in daily digest and optionally in app UI (non-blocking).
+3. Preferences:
+- Allow opt-in/out and cap per day.
 4. Guardrails:
-- Fail visibly on auth/network errors.
-- Never silently drop capture payloads.
+- Avoid repeated nudges for the same item within a short window.
 
 Out of scope (Phase 1):
-- Rich extension settings UI.
-- Full bidirectional sync/offline queue in extension.
-- Voice capture changes.
-- New backend classification logic changes.
+- Complex ML ranking.
+- Push notification infrastructure.
+- New capture flows.
 
 Implementation references:
-- Existing capture endpoint and validation: `backend/src/routes/capture.ts`.
-- API auth model and token handling: `frontend/src/services/api.ts`.
-- Current chat capture wording/behavior to mirror response UX: `frontend/src/components/chat/ChatUI.tsx`.
+- Digest pipeline and formatting: `backend/src/services/digest.service.ts`.
+- Preferences API: `backend/src/routes/preferences.route.ts`.
+- Focus/task data sources: `backend/src/services/entry.service.ts`.
 
 Acceptance criteria:
-1. User can capture current page context from extension popup in one submit action.
-2. Payload includes URL/title and selected text when present.
-3. Capture success/failure is explicit and visible in extension UI.
-4. Existing app capture/chat behavior remains unchanged.
-5. Extension tests cover payload construction and error surfacing.
+1. Nudges appear in daily digest with clear, concise prompts.
+2. Nudge selection respects deadline proximity, inactivity, and priority decay.
+3. Preferences allow disabling or capping nudges.
+4. No duplicate nudges for the same item within the cooldown window.
+5. Tests cover candidate selection and suppression logic.
 
 ### Admin -> Task Migration Plan (Phases 1-3)
 1. Phase 1 (DB migration, additive + backfill):

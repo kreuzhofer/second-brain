@@ -85,6 +85,7 @@ model User {
   dailyTipStates     DailyTipState[]
   offlineQueueItems  OfflineQueueItem[]
   entryLinks         EntryLink[]
+  entryNudges        EntryNudge[]
   calendarSources    CalendarSource[]
   calendarBusyBlocks CalendarBusyBlock[]
   calendarSettings   CalendarSettings?
@@ -255,6 +256,7 @@ model Entry {
   focusSessions     FocusSession[]
   outgoingLinks     EntryLink[] @relation("EntryLinkSource")
   incomingLinks     EntryLink[] @relation("EntryLinkTarget")
+  nudges            EntryNudge[]
 
   @@unique([userId, category, slug])
   @@index([userId, category])
@@ -409,6 +411,9 @@ model DigestPreference {
   maxOpenLoops       Int
   maxSuggestions     Int
   maxWords           Int?
+  includeNudges      Boolean        @default(true)
+  maxNudgesPerDay    Int            @default(3)
+  nudgeCooldownDays  Int            @default(3)
   includeStaleInbox  Boolean        @default(true)
   includeSmallWins   Boolean        @default(true)
   includeOpenLoops   Boolean        @default(true)
@@ -418,6 +423,21 @@ model DigestPreference {
   updatedAt          DateTime       @updatedAt
 
   @@unique([userId])
+}
+
+model EntryNudge {
+  id            String   @id @default(uuid())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entryId       String
+  entry         Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  lastNudgedAt  DateTime
+  lastReason    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, entryId])
+  @@index([userId, lastNudgedAt])
 }
 
 model DailyTipState {

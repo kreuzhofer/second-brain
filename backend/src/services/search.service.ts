@@ -75,7 +75,8 @@ export class SearchService {
     this.entryService = entryService || getEntryService();
     const env = getConfig();
     const semanticEnabled = config?.enableSemantic ?? (process.env.SEMANTIC_SEARCH_ENABLED !== 'false');
-    this.enableSemantic = semanticEnabled && !!env.OPENAI_API_KEY;
+    const hasCustomEmbeddingService = !!embeddingService;
+    this.enableSemantic = semanticEnabled && (hasCustomEmbeddingService || !!env.OPENAI_API_KEY);
     const semanticThreshold = parseFloat(process.env.SEMANTIC_SEARCH_THRESHOLD || '0.75');
     const keywordWeight = parseFloat(process.env.KEYWORD_SEARCH_WEIGHT || '0.4');
     const semanticWeight = parseFloat(process.env.SEMANTIC_SEARCH_WEIGHT || '0.6');

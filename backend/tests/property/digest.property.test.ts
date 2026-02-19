@@ -65,6 +65,14 @@ const smallWinsArbitrary = fc.record({
   nextTask: fc.option(fc.string({ minLength: 1, maxLength: 50 }), { nil: undefined })
 });
 
+const nudgeArbitrary = fc.record({
+  entryId: fc.uuid(),
+  path: fc.string({ minLength: 1, maxLength: 80 }),
+  name: fc.string({ minLength: 1, maxLength: 80 }),
+  reason: fc.string({ minLength: 1, maxLength: 120 }),
+  score: fc.integer({ min: 1, max: 200 })
+});
+
 // ============================================
 // Create a testable DigestService that doesn't need real services
 // ============================================
@@ -254,7 +262,7 @@ describe('DigestService - Daily Digest Properties', () => {
    */
   describe('Property 4: Daily Tip Inclusion', () => {
     it('should include the daily tip section when a tip is provided', () => {
-      const digest = digestService.formatDailyDigest([], [], { completedCount: 0 }, 'Test tip');
+      const digest = digestService.formatDailyDigest([], [], { completedCount: 0 }, [], 'Test tip');
       expect(digest).toContain('**Daily Momentum Tip:**');
       expect(digest).toContain('Test tip');
     });
@@ -262,6 +270,37 @@ describe('DigestService - Daily Digest Properties', () => {
     it('should omit the daily tip section when no tip is provided', () => {
       const digest = digestService.formatDailyDigest([], [], { completedCount: 0 });
       expect(digest).not.toContain('**Daily Momentum Tip:**');
+    });
+  });
+
+  /**
+   * Property 4: Smart Nudges Inclusion
+   * Validates: Smart nudges appear when provided.
+   */
+  describe('Property 4: Smart Nudges Inclusion', () => {
+    it('should include Smart Nudges section when nudges are provided', () => {
+      fc.assert(
+        fc.property(
+          fc.array(topItemArbitrary, { minLength: 0, maxLength: 3 }),
+          fc.array(staleInboxItemArbitrary, { minLength: 0, maxLength: 3 }),
+          smallWinsArbitrary,
+          fc.array(nudgeArbitrary, { minLength: 1, maxLength: 3 }),
+          (topItems, staleItems, smallWins, nudges) => {
+            const digest = digestService.formatDailyDigest(topItems, staleItems, smallWins, nudges);
+            expect(digest).toContain('**Smart Nudges:**');
+            for (const nudge of nudges) {
+              expect(digest).toContain(nudge.name);
+            }
+            return true;
+          }
+        ),
+        { numRuns: 10 }
+      );
+    });
+
+    it('should omit Smart Nudges section when no nudges are provided', () => {
+      const digest = digestService.formatDailyDigest([], [], { completedCount: 0 }, []);
+      expect(digest).not.toContain('**Smart Nudges:**');
     });
   });
 
@@ -276,8 +315,9 @@ describe('DigestService - Daily Digest Properties', () => {
           fc.array(topItemArbitrary, { minLength: 0, maxLength: 3 }),
           fc.array(staleInboxItemArbitrary, { minLength: 0, maxLength: 3 }),
           smallWinsArbitrary,
-          (topItems, staleItems, smallWins) => {
-            const digest = digestService.formatDailyDigest(topItems, staleItems, smallWins);
+          fc.array(nudgeArbitrary, { minLength: 0, maxLength: 3 }),
+          (topItems, staleItems, smallWins, nudges) => {
+            const digest = digestService.formatDailyDigest(topItems, staleItems, smallWins, nudges);
             
             // Must contain greeting
             expect(digest).toContain('Good morning');
@@ -308,6 +348,12 @@ describe('DigestService - Daily Digest Properties', () => {
               const winIndex = digest.indexOf('**Small Win:**');
               expect(winIndex).toBeGreaterThan(top3Index);
               expect(winIndex).toBeLessThan(footerIndex);
+            }
+
+            if (nudges.length > 0) {
+              const nudgeIndex = digest.indexOf('**Smart Nudges:**');
+              expect(nudgeIndex).toBeGreaterThan(top3Index);
+              expect(nudgeIndex).toBeLessThan(footerIndex);
             }
             
             return true;

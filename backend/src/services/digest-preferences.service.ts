@@ -13,6 +13,9 @@ export interface DigestPreferences {
   maxOpenLoops?: number;
   maxSuggestions?: number;
   maxWords?: number;
+  includeNudges?: boolean;
+  maxNudgesPerDay?: number;
+  nudgeCooldownDays?: number;
   includeStaleInbox?: boolean;
   includeSmallWins?: boolean;
   includeOpenLoops?: boolean;
@@ -24,6 +27,9 @@ const DEFAULT_PREFERENCES: DigestPreferences = {
   maxItems: 3,
   maxOpenLoops: 3,
   maxSuggestions: 3,
+  includeNudges: true,
+  maxNudgesPerDay: 3,
+  nudgeCooldownDays: 3,
   includeStaleInbox: true,
   includeSmallWins: true,
   includeOpenLoops: true,
@@ -48,6 +54,9 @@ export class DigestPreferencesService {
       maxOpenLoops: record.maxOpenLoops,
       maxSuggestions: record.maxSuggestions,
       maxWords: record.maxWords ?? undefined,
+      includeNudges: record.includeNudges,
+      maxNudgesPerDay: record.maxNudgesPerDay,
+      nudgeCooldownDays: record.nudgeCooldownDays,
       includeStaleInbox: record.includeStaleInbox,
       includeSmallWins: record.includeSmallWins,
       includeOpenLoops: record.includeOpenLoops,
@@ -68,6 +77,9 @@ export class DigestPreferencesService {
         maxOpenLoops: merged.maxOpenLoops || DEFAULT_PREFERENCES.maxOpenLoops!,
         maxSuggestions: merged.maxSuggestions || DEFAULT_PREFERENCES.maxSuggestions!,
         maxWords: merged.maxWords ?? null,
+        includeNudges: merged.includeNudges ?? DEFAULT_PREFERENCES.includeNudges!,
+        maxNudgesPerDay: merged.maxNudgesPerDay || DEFAULT_PREFERENCES.maxNudgesPerDay!,
+        nudgeCooldownDays: merged.nudgeCooldownDays || DEFAULT_PREFERENCES.nudgeCooldownDays!,
         includeStaleInbox: merged.includeStaleInbox ?? DEFAULT_PREFERENCES.includeStaleInbox!,
         includeSmallWins: merged.includeSmallWins ?? DEFAULT_PREFERENCES.includeSmallWins!,
         includeOpenLoops: merged.includeOpenLoops ?? DEFAULT_PREFERENCES.includeOpenLoops!,
@@ -80,6 +92,9 @@ export class DigestPreferencesService {
         maxOpenLoops: merged.maxOpenLoops || DEFAULT_PREFERENCES.maxOpenLoops!,
         maxSuggestions: merged.maxSuggestions || DEFAULT_PREFERENCES.maxSuggestions!,
         maxWords: merged.maxWords ?? null,
+        includeNudges: merged.includeNudges ?? DEFAULT_PREFERENCES.includeNudges!,
+        maxNudgesPerDay: merged.maxNudgesPerDay || DEFAULT_PREFERENCES.maxNudgesPerDay!,
+        nudgeCooldownDays: merged.nudgeCooldownDays || DEFAULT_PREFERENCES.nudgeCooldownDays!,
         includeStaleInbox: merged.includeStaleInbox ?? DEFAULT_PREFERENCES.includeStaleInbox!,
         includeSmallWins: merged.includeSmallWins ?? DEFAULT_PREFERENCES.includeSmallWins!,
         includeOpenLoops: merged.includeOpenLoops ?? DEFAULT_PREFERENCES.includeOpenLoops!,
