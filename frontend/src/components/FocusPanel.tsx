@@ -15,7 +15,16 @@ import {
 import CalendarBoardView from '@/components/CalendarBoardView';
 import { useEntries } from '@/state/entries';
 import { getFocusRailButtonClass } from '@/components/layout-shell-helpers';
-import { getVisibleItems, shouldShowExpandToggle } from '@/components/focus-panel-helpers';
+import {
+  CALENDAR_VIEW_MODE_STORAGE_KEY,
+  FOCUS_PANEL_TAB_STORAGE_KEY,
+  getVisibleItems,
+  parseCalendarViewMode,
+  parseFocusPanelTab,
+  shouldShowExpandToggle,
+  type CalendarViewMode,
+  type FocusPanelTab
+} from '@/components/focus-panel-helpers';
 import {
   formatBlockTime,
   formatExpiresAt,
@@ -62,7 +71,16 @@ const isTaskCategory = (category: string): boolean => category === 'task' || cat
 export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const { entries, isLoading, error: loadError, refresh } = useEntries();
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'focus' | 'ideas' | 'people' | 'inbox' | 'recent' | 'calendar'>('focus');
+  const [activeTab, setActiveTab] = useState<FocusPanelTab>(() => {
+    if (typeof window === 'undefined') {
+      return 'focus';
+    }
+    try {
+      return parseFocusPanelTab(window.sessionStorage.getItem(FOCUS_PANEL_TAB_STORAGE_KEY)) || 'focus';
+    } catch {
+      return 'focus';
+    }
+  });
   const [focusSort, setFocusSort] = useState<'overdue' | 'newest'>('overdue');
   const [focusExpanded, setFocusExpanded] = useState(false);
   const [inboxSelected, setInboxSelected] = useState<Set<string>>(new Set());
@@ -89,7 +107,16 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const [calendarSourceActionId, setCalendarSourceActionId] = useState<string | null>(null);
   const [calendarSettings, setCalendarSettings] = useState<CalendarSettings | null>(null);
   const [calendarSettingsSaving, setCalendarSettingsSaving] = useState(false);
-  const [calendarViewMode, setCalendarViewMode] = useState<'list' | 'board'>('list');
+  const [calendarViewMode, setCalendarViewMode] = useState<CalendarViewMode>(() => {
+    if (typeof window === 'undefined') {
+      return 'list';
+    }
+    try {
+      return parseCalendarViewMode(window.sessionStorage.getItem(CALENDAR_VIEW_MODE_STORAGE_KEY)) || 'list';
+    } catch {
+      return 'list';
+    }
+  });
   const [calendarSettingsOpen, setCalendarSettingsOpen] = useState(false);
   const [calendarBusyBlocks, setCalendarBusyBlocks] = useState<CalendarBusyBlock[]>([]);
   const [calendarBoardDays, setCalendarBoardDays] = useState<number>(3);
@@ -350,6 +377,28 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       cancelled = true;
     };
   }, [activeTab, entries.length]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(FOCUS_PANEL_TAB_STORAGE_KEY, activeTab);
+    } catch {
+      // Ignore storage errors in constrained browser contexts.
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(CALENDAR_VIEW_MODE_STORAGE_KEY, calendarViewMode);
+    } catch {
+      // Ignore storage errors in constrained browser contexts.
+    }
+  }, [calendarViewMode]);
 
   useEffect(() => {
     if (activeTab !== 'calendar') return;
