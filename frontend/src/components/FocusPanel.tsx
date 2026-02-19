@@ -152,6 +152,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       }
     }
     if (activeTab === 'calendar') {
+      // Always reset board anchor to today when manually refreshing calendar.
+      setCalendarStartDayOffset(0);
       // Sync all enabled external sources in parallel with plan/settings reload
       const syncExternal = async () => {
         const enabledSources = calendarSources.filter((s) => s.enabled);
@@ -347,6 +349,13 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       setCalendarError('Unable to copy link. Please copy manually.');
     }
   };
+
+  useEffect(() => {
+    if (activeTab === 'calendar') {
+      // Always open calendar anchored to today (offset 0 from plan start).
+      setCalendarStartDayOffset(0);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== 'people') {
