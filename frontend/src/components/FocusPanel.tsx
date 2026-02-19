@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -122,6 +122,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const [calendarBoardDays, setCalendarBoardDays] = useState<number>(3);
   const [calendarStartDayOffset, setCalendarStartDayOffset] = useState(0);
   const [colorPickerSourceId, setColorPickerSourceId] = useState<string | null>(null);
+  const previousTabRef = useRef<FocusPanelTab | null>(null);
+  const shouldAnchorCalendarToTodayRef = useRef(false);
 
   // Detect mobile and default to 1-column board view
   useEffect(() => {
@@ -152,21 +154,40 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
       }
     }
     if (activeTab === 'calendar') {
-      // Always reset board anchor to today when manually refreshing calendar.
-      setCalendarStartDayOffset(0);
+      // Manual refresh should bring calendar board back to today's date.
+      shouldAnchorCalendarToTodayRef.current = true;
       // Sync all enabled external sources in parallel with plan/settings reload
       const syncExternal = async () => {
         const enabledSources = calendarSources.filter((s) => s.enabled);
         await Promise.allSettled(enabledSources.map((s) => api.calendar.syncSource(s.id)));
       };
-      const [plan] = await Promise.all([loadCalendarPlan(), loadCalendarSources(), loadCalendarSettings(), syncExternal()]);
+      const [plan] = await Promise.all([
+        loadCalendarPlan({ anchorToday: true }),
+        loadCalendarSources(),
+        loadCalendarSettings(),
+        syncExternal()
+      ]);
       // Reload sources + busy blocks after sync completes
       await loadCalendarSources();
       if (calendarViewMode === 'board' && plan) await loadBusyBlocks(plan);
     }
   };
 
-  const loadCalendarPlan = async (): Promise<WeekPlanResponse | null> => {
+  const getTodayOffsetForPlan = (plan: WeekPlanResponse): number => {
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const startMs = new Date(`${plan.startDate}T00:00:00Z`).getTime();
+    const endMs = new Date(`${plan.endDate}T00:00:00Z`).getTime();
+    const todayYmd = new Date().toISOString().slice(0, 10);
+    const todayMs = new Date(`${todayYmd}T00:00:00Z`).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || !Number.isFinite(todayMs)) {
+      return 0;
+    }
+    const rawOffset = Math.floor((todayMs - startMs) / msPerDay);
+    const maxOffset = Math.max(0, Math.floor((endMs - startMs) / msPerDay));
+    return Math.max(0, Math.min(rawOffset, maxOffset));
+  };
+
+  const loadCalendarPlan = async (options?: { anchorToday?: boolean }): Promise<WeekPlanResponse | null> => {
     setCalendarLoading(true);
     setCalendarError(null);
     try {
@@ -175,6 +196,9 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
         bufferMinutes: calendarBufferMinutes
       });
       setCalendarPlan(plan);
+      if (options?.anchorToday) {
+        setCalendarStartDayOffset(getTodayOffsetForPlan(plan));
+      }
       return plan;
     } catch (err) {
       setCalendarError(err instanceof Error ? err.message : 'Failed to load week plan');
@@ -351,10 +375,11 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   };
 
   useEffect(() => {
-    if (activeTab === 'calendar') {
-      // Always open calendar anchored to today (offset 0 from plan start).
-      setCalendarStartDayOffset(0);
+    const enteringCalendar = activeTab === 'calendar' && previousTabRef.current !== 'calendar';
+    if (enteringCalendar) {
+      shouldAnchorCalendarToTodayRef.current = true;
     }
+    previousTabRef.current = activeTab;
   }, [activeTab]);
 
   useEffect(() => {
@@ -411,8 +436,10 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
 
   useEffect(() => {
     if (activeTab !== 'calendar') return;
+    const anchorToday = shouldAnchorCalendarToTodayRef.current;
+    shouldAnchorCalendarToTodayRef.current = false;
     Promise.all([
-      loadCalendarPlan().then((plan) => {
+      loadCalendarPlan({ anchorToday }).then((plan) => {
         if (calendarViewMode === 'board' && plan) loadBusyBlocks(plan);
       }),
       loadCalendarSources(),
