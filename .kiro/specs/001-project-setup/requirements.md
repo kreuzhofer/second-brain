@@ -2,11 +2,11 @@
 
 ## Introduction
 
-This document defines the requirements for the foundational setup of the Second Brain application - a self-hosted, AI-powered personal knowledge management system. This spec covers the project scaffolding, backend/frontend foundations, database schema, markdown entry system with YAML frontmatter, index generation, and git integration.
+This document defines the requirements for the foundational setup of the JustDo.so application - a self-hosted, AI-powered personal knowledge management system. This spec covers the project scaffolding, backend/frontend foundations, database schema, markdown entry system with YAML frontmatter, index generation, and git integration.
 
 ## Glossary
 
-- **Second_Brain_App**: The main application container running React frontend, Express.js backend, and scheduled jobs
+- **JustDo_App**: The main application container running React frontend, Express.js backend, and scheduled jobs
 - **Entry**: A markdown file with YAML frontmatter representing a piece of knowledge (person, project, idea, or admin task)
 - **Category**: One of five entry types: people, projects, ideas, admin, or inbox
 - **Frontmatter**: YAML metadata at the top of a markdown file between `---` delimiters
@@ -25,12 +25,12 @@ This document defines the requirements for the foundational setup of the Second 
 
 #### Acceptance Criteria
 
-1. THE Second_Brain_App SHALL use a monorepo structure with separate `/frontend` and `/backend` directories
-2. THE Second_Brain_App SHALL include a `docker-compose.yml` file defining app and PostgreSQL containers
-3. WHEN Docker Compose starts, THE Second_Brain_App SHALL expose port 3000 for the application
+1. THE JustDo_App SHALL use a monorepo structure with separate `/frontend` and `/backend` directories
+2. THE JustDo_App SHALL include a `docker-compose.yml` file defining app and PostgreSQL containers
+3. WHEN Docker Compose starts, THE JustDo_App SHALL expose port 3000 for the application
 4. WHEN Docker Compose starts, THE PostgreSQL container SHALL be healthy before the app container starts
-5. THE Second_Brain_App SHALL mount the external data directory (specified by `DATA_PATH` environment variable) as a volume at `/memory` inside the container
-6. THE Second_Brain_App SHALL include a root `package.json` with workspace configuration for the monorepo
+5. THE JustDo_App SHALL mount the external data directory (specified by `DATA_PATH` environment variable) as a volume at `/memory` inside the container
+6. THE JustDo_App SHALL include a root `package.json` with workspace configuration for the monorepo
 7. THE Data_Folder SHALL be located outside the project directory to maintain separate git repositories for code and data
 
 ### Requirement 2: Backend Foundation
@@ -52,9 +52,9 @@ This document defines the requirements for the foundational setup of the Second 
 
 #### Acceptance Criteria
 
-1. THE Second_Brain_App frontend SHALL be built with React 18, TypeScript, and Vite
-2. THE Second_Brain_App frontend SHALL use Tailwind CSS for styling
-3. THE Second_Brain_App frontend SHALL include shadcn/ui component library setup
+1. THE JustDo_App frontend SHALL be built with React 18, TypeScript, and Vite
+2. THE JustDo_App frontend SHALL use Tailwind CSS for styling
+3. THE JustDo_App frontend SHALL include shadcn/ui component library setup
 4. WHEN the frontend builds, THE Vite bundler SHALL output production assets to a dist folder
 5. THE API_Server SHALL serve the frontend static files in production mode
 
@@ -132,7 +132,7 @@ This document defines the requirements for the foundational setup of the Second 
 
 ### Requirement 10: Index Generation
 
-**User Story:** As a user, I want an auto-generated index.md file summarizing all entries, so that I can quickly see what's in my second brain.
+**User Story:** As a user, I want an auto-generated index.md file summarizing all entries, so that I can quickly see what's in my JustDo.so.
 
 #### Acceptance Criteria
 
@@ -152,13 +152,13 @@ This document defines the requirements for the foundational setup of the Second 
 
 #### Acceptance Criteria
 
-1. THE Second_Brain_App SHALL require the `OPENAI_API_KEY` environment variable
-2. THE Second_Brain_App SHALL require the `DATABASE_URL` environment variable
-3. THE Second_Brain_App SHALL require the `API_KEY` environment variable for API authentication
-4. THE Second_Brain_App SHALL require the `DATA_PATH` environment variable specifying the external data directory location
-5. THE Second_Brain_App SHALL support optional `TIMEZONE` environment variable defaulting to `Europe/Berlin`
-6. THE Second_Brain_App SHALL support optional `CONFIDENCE_THRESHOLD` environment variable defaulting to `0.6`
-7. IF a required environment variable is missing, THEN THE Second_Brain_App SHALL fail to start with a descriptive error message
+1. THE JustDo_App SHALL require the `OPENAI_API_KEY` environment variable
+2. THE JustDo_App SHALL require the `DATABASE_URL` environment variable
+3. THE JustDo_App SHALL require the `API_KEY` environment variable for API authentication
+4. THE JustDo_App SHALL require the `DATA_PATH` environment variable specifying the external data directory location
+5. THE JustDo_App SHALL support optional `TIMEZONE` environment variable defaulting to `Europe/Berlin`
+6. THE JustDo_App SHALL support optional `CONFIDENCE_THRESHOLD` environment variable defaulting to `0.6`
+7. IF a required environment variable is missing, THEN THE JustDo_App SHALL fail to start with a descriptive error message
 
 ### Requirement 12: Data Folder Initialization
 
@@ -166,6 +166,6 @@ This document defines the requirements for the foundational setup of the Second 
 
 #### Acceptance Criteria
 
-1. WHEN the application starts and the data folder is empty, THE Second_Brain_App SHALL create the `people`, `projects`, `ideas`, `admin`, and `inbox` subdirectories
+1. WHEN the application starts and the data folder is empty, THE JustDo_App SHALL create the `people`, `projects`, `ideas`, `admin`, and `inbox` subdirectories
 2. WHEN the application starts and the data folder is empty, THE Index_Generator SHALL create an initial empty `index.md` file
 3. WHEN the application starts and the data folder is empty, THE Git_Service SHALL initialize a git repository and create an initial commit

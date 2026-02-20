@@ -1,5 +1,5 @@
 /**
- * Chat-related type definitions for the Second Brain application
+ * Chat-related type definitions for JustDo.so
  * Implements types for chat capture and classification feature
  */
 

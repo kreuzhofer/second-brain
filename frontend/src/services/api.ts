@@ -1,5 +1,5 @@
 /**
- * API Client for Second Brain backend
+ * API Client for JustDo.so backend
  */
 
 export type Category = 'people' | 'projects' | 'ideas' | 'task' | 'admin' | 'inbox';

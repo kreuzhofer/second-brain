@@ -15,7 +15,7 @@ jest.mock('../../src/config/env', () => ({
     DEFAULT_USER_PASSWORD: 'test-password-123',
     JWT_EXPIRES_IN: '1h',
     OPENAI_API_KEY: '',
-    DATABASE_URL: process.env.DATABASE_URL || 'postgresql://user:pass@localhost:5432/second-brain'
+    DATABASE_URL: process.env.DATABASE_URL || 'postgresql://user:pass@localhost:5432/justdo'
   }),
   loadEnvConfig: () => ({
     JWT_SECRET: TEST_JWT_SECRET,
@@ -23,7 +23,7 @@ jest.mock('../../src/config/env', () => ({
     DEFAULT_USER_PASSWORD: 'test-password-123',
     JWT_EXPIRES_IN: '1h',
     OPENAI_API_KEY: '',
-    DATABASE_URL: process.env.DATABASE_URL || 'postgresql://user:pass@localhost:5432/second-brain'
+    DATABASE_URL: process.env.DATABASE_URL || 'postgresql://user:pass@localhost:5432/justdo'
   })
 }));
 
@@ -57,7 +57,7 @@ describe('API Integration Tests', () => {
         .expect(200);
 
       expect(response.body.status).toBe('ok');
-      expect(response.body.service).toBe('second-brain-api');
+      expect(response.body.service).toBe('justdo-api');
     });
   });
 
@@ -558,7 +558,7 @@ describe('API Integration Tests', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
-      expect(response.text).toContain('# Second Brain Index');
+      expect(response.text).toContain('# JustDo.so Index');
     });
   });
 });

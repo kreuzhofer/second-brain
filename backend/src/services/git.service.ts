@@ -53,8 +53,8 @@ export class GitService {
     if (!initialized) {
       await this.git.init();
       // Configure git user for commits
-      await this.git.addConfig('user.email', 'second-brain@local');
-      await this.git.addConfig('user.name', 'Second Brain');
+      await this.git.addConfig('user.email', 'justdo@local');
+      await this.git.addConfig('user.name', 'JustDo.so');
     }
   }
 
@@ -156,7 +156,7 @@ export function formatMoveCommit(
  * Format commit message for initial data folder setup
  */
 export function formatInitCommit(): string {
-  return 'init: Initialize Second Brain data folder';
+  return 'init: Initialize JustDo.so data folder';
 }
 
 // Export singleton instance

@@ -15,7 +15,7 @@ describe('System Prompt Builder', () => {
       const result = buildSystemPrompt('', '');
       
       expect(result).toContain('personal knowledge management assistant');
-      expect(result).toContain('Second Brain application');
+      expect(result).toContain('JustDo.so');
       expect(result).toContain('capture thoughts');
       expect(result).toContain('retrieve information');
       expect(result).toContain('stay organized');

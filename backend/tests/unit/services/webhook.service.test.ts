@@ -21,8 +21,8 @@ describe('WebhookService', () => {
 
     const call = fetchMock.mock.calls[0];
     const headers = call[1].headers as Record<string, string>;
-    expect(headers['X-Second-Brain-Event']).toBe('entry.created');
-    expect(headers['X-Second-Brain-Signature']).toMatch(/^sha256=/);
+    expect(headers['X-JustDo-Event']).toBe('entry.created');
+    expect(headers['X-JustDo-Signature']).toMatch(/^sha256=/);
   });
 
   it('should retry failed webhook deliveries', async () => {

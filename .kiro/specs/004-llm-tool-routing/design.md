@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design document describes the architecture for implementing LLM-based tool routing in the Second Brain chat interface. The current implementation (spec 002) uses a hardcoded flow where every message is classified and captured. This refactor introduces OpenAI function calling to let the LLM decide which tool(s) to invoke based on user intent.
+This design document describes the architecture for implementing LLM-based tool routing in the JustDo.so chat interface. The current implementation (spec 002) uses a hardcoded flow where every message is classified and captured. This refactor introduces OpenAI function calling to let the LLM decide which tool(s) to invoke based on user intent.
 
 The key architectural change is replacing the deterministic `processMessage` flow with an LLM-driven orchestration loop:
 
@@ -410,7 +410,7 @@ interface ToolResultMessage {
 ### System Prompt Template
 
 ```typescript
-const SYSTEM_PROMPT = `You are a personal knowledge management assistant for a Second Brain application. You help the user capture thoughts, retrieve information, and stay organized.
+const SYSTEM_PROMPT = `You are a personal knowledge management assistant for a JustDo.so application. You help the user capture thoughts, retrieve information, and stay organized.
 
 You have access to these tools:
 - classify_and_capture: Use when the user shares new information to remember (facts, ideas, tasks, people info)

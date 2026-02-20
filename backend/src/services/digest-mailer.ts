@@ -102,7 +102,7 @@ export class DigestMailer implements IDigestMailer {
       month: 'long',
       day: 'numeric',
     });
-    return `Second Brain Daily Digest - ${dateStr}`;
+    return `JustDo.so Daily Digest - ${dateStr}`;
   }
 
   /**
@@ -117,7 +117,7 @@ export class DigestMailer implements IDigestMailer {
   formatWeeklySubject(startDate: Date, endDate: Date): string {
     const formatDate = (d: Date) =>
       d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return `Second Brain Weekly Review - ${formatDate(startDate)} to ${formatDate(endDate)}`;
+    return `JustDo.so Weekly Review - ${formatDate(startDate)} to ${formatDate(endDate)}`;
   }
 
   /**

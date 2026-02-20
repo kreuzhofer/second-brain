@@ -125,7 +125,7 @@ calendarPublicRouter.get('/feed.ics', async (req: Request, res: Response) => {
     res.setHeader('Expires', '0');
     res.setHeader('Surrogate-Control', 'no-store');
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-    res.setHeader('Content-Disposition', 'inline; filename="second-brain-week-plan.ics"');
+    res.setHeader('Content-Disposition', 'inline; filename="justdo-week-plan.ics"');
     res.setHeader('X-Generated-At', feed.generatedAt);
     res.setHeader('X-Plan-Revision', feed.revision);
     res.send(feed.ics);

@@ -44,7 +44,7 @@ export class IndexService {
 
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
 
-    let content = `# Second Brain Index\n\n> Last updated: ${now}\n> Total entries: ${total} (${counts.people} people, ${counts.projects} projects, ${counts.ideas} ideas, ${counts.task} tasks)\n\n`;
+    let content = `# JustDo.so Index\n\n> Last updated: ${now}\n> Total entries: ${total} (${counts.people} people, ${counts.projects} projects, ${counts.ideas} ideas, ${counts.task} tasks)\n\n`;
 
     content += this.generatePeopleSection(entries.people);
     content += this.generateProjectsSection(entries.projects);

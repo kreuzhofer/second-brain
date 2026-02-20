@@ -185,7 +185,7 @@ Acceptance criteria:
 - Plan-my-week assistant (build a schedule from tasks, priorities, and focus goals).
 - Calendar publish: generate a subscription link (ICS/WebCal) for planned tasks.
 - Calendar blocker ingest: import busy blocks from external ICS/WebCal calendars and route tasks around conflicts. (Completed phase 1)
-- Focus blocks: create protected calendar blocks and sync back to Second Brain.
+- Focus blocks: create protected calendar blocks and sync back to JustDo.so.
 - Calendar board view (Outlook-style):
   - Configurable visible days (for example 1, 3, 5, 7) with days as columns and time as vertical axis.
   - Show scheduled task blocks in the same board as imported calendar blockers/events.

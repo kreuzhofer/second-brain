@@ -1078,10 +1078,10 @@ export class CalendarService {
     const lines = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//Second Brain//Week Plan//EN',
+      'PRODID:-//JustDo.so//Week Plan//EN',
       'CALSCALE:GREGORIAN',
       'METHOD:PUBLISH',
-      'X-WR-CALNAME:Second Brain Week Plan',
+      'X-WR-CALNAME:JustDo.so Week Plan',
       'REFRESH-INTERVAL;VALUE=DURATION:PT5M',
       'X-PUBLISHED-TTL:PT5M',
       ...plan.items.flatMap((item) => {
@@ -1092,7 +1092,7 @@ export class CalendarService {
         const startMinute = Number(start.slice(14, 16));
         const endHour = Number(end.slice(11, 13));
         const endMinute = Number(end.slice(14, 16));
-        const uid = `${crypto.createHash('sha1').update(item.entryPath).digest('hex').slice(0, 16)}@second-brain`;
+        const uid = `${crypto.createHash('sha1').update(item.entryPath).digest('hex').slice(0, 16)}@justdo`;
         return [
           'BEGIN:VEVENT',
           `UID:${uid}`,

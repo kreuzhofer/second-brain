@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This document specifies the requirements for the Chat Capture and Classification feature of the Second Brain application. This feature provides the core user interface for capturing thoughts via a chat interface and automatically classifying them using LLM-powered tools. The system routes high-confidence classifications directly to storage while sending low-confidence items to an inbox for user clarification.
+This document specifies the requirements for the Chat Capture and Classification feature of the JustDo.so application. This feature provides the core user interface for capturing thoughts via a chat interface and automatically classifying them using LLM-powered tools. The system routes high-confidence classifications directly to storage while sending low-confidence items to an inbox for user clarification.
 
 ## Glossary
 

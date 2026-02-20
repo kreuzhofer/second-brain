@@ -1,6 +1,6 @@
 /**
  * Email Service
- * Main service coordinating all email operations for the Second Brain application.
+ * Main service coordinating all email operations for JustDo.so.
  * 
  * Composes:
  * - EmailParser: Parses raw email content

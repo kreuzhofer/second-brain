@@ -1,4 +1,4 @@
-# CLAUDE.md — Second Brain
+# CLAUDE.md — JustDo.so
 
 ## What is this?
 AI-powered personal knowledge management system. Full-stack TypeScript monorepo (Express + React) with PostgreSQL/pgvector, OpenAI integration, and Docker deployment.
@@ -57,7 +57,7 @@ npm run backfill:embeddings        # backfill missing vector embeddings
 
 ## Key Files
 - `docs/next-mvp.md` — canonical roadmap and progress tracker
-- `docs/second-brain-product-vision.md` — product vision
+- `docs/justdo-product-vision.md` — product vision
 - `docs/API.md` — API documentation
 - `.env.example` — all configuration options with defaults
 - `backend/prisma/schema.prisma` — database schema

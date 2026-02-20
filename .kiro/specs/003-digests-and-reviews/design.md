@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Digests and Reviews feature provides automated, scheduled generation of daily digests and weekly reviews for the Second Brain application. This feature proactively surfaces relevant information to help users stay on top of their knowledge base without manual effort.
+The Digests and Reviews feature provides automated, scheduled generation of daily digests and weekly reviews for the JustDo.so application. This feature proactively surfaces relevant information to help users stay on top of their knowledge base without manual effort.
 
 The system uses node-cron for scheduling, leverages existing Entry and Index services for data access, and delivers content through the chat interface via the Conversation service. All job executions are tracked in the CronJobRun database table for observability and debugging.
 

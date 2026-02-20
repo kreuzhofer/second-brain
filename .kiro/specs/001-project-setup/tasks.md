@@ -2,7 +2,7 @@
 
 ## Overview
 
-This implementation plan establishes the foundational infrastructure for the Second Brain application. Tasks are organized to build incrementally: project scaffolding first, then backend foundation, database schema, entry system with git integration, index generation, and finally frontend foundation.
+This implementation plan establishes the foundational infrastructure for the JustDo.so application. Tasks are organized to build incrementally: project scaffolding first, then backend foundation, database schema, entry system with git integration, index generation, and finally frontend foundation.
 
 ## Tasks
 

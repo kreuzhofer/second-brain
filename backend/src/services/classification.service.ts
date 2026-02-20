@@ -1,7 +1,7 @@
 /**
  * Classification Agent Service
  * LLM-powered classification agent that analyzes user input and determines
- * category, fields, and confidence for the Second Brain application.
+ * category, fields, and confidence for JustDo.so.
  * Uses OpenAI API with structured JSON output for reliable parsing.
  */
 

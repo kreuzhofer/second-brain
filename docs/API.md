@@ -1,4 +1,4 @@
-# Second Brain API Documentation
+# JustDo.so API Documentation
 
 ## Authentication
 
@@ -113,7 +113,7 @@ GET /api/health
 {
   "status": "ok",
   "timestamp": "2026-01-26T10:00:00.000Z",
-  "service": "second-brain-api",
+  "service": "justdo-api",
   "version": "0.1.0"
 }
 ```
@@ -888,7 +888,7 @@ GET /api/index
 
 **Response** (200 OK):
 ```markdown
-# Second Brain Index
+# JustDo.so Index
 
 > Last updated: 2026-01-26T10:00:00.000Z
 > Total entries: 10 (3 people, 4 projects, 2 ideas, 1 admin)
@@ -1133,8 +1133,8 @@ When enabled, the system posts JSON payloads on entry lifecycle events:
 - `entry.moved`
 
 Each request includes:
-- `X-Second-Brain-Event` header with the event type.
-- `X-Second-Brain-Signature` header (`sha256=...`) if `WEBHOOK_SECRET` is set.
+- `X-JustDo-Event` header with the event type.
+- `X-JustDo-Signature` header (`sha256=...`) if `WEBHOOK_SECRET` is set.
 
 Example payload:
 ```json

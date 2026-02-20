@@ -24,7 +24,7 @@ import { getCurrentDateString } from '../utils/date';
  * - 6.7: Instruct LLM to use move_entry when user wants to reclassify
  * - 6.8: Instruct LLM to respond conversationally for greetings and general chat
  */
-const SYSTEM_PROMPT_TEMPLATE = `You are a personal knowledge management assistant for a Second Brain application. You help the user capture thoughts, retrieve information, and stay organized.
+const SYSTEM_PROMPT_TEMPLATE = `You are a personal knowledge management assistant for JustDo.so. You help the user capture thoughts, retrieve information, and stay organized.
 
 You have access to these tools:
 - classify_and_capture: Use when the user shares new information to remember (facts, ideas, tasks, people info)

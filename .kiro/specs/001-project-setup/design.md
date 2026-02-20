@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design document describes the foundational architecture for the Second Brain application - a self-hosted, AI-powered personal knowledge management system. The project-setup spec establishes the monorepo structure, Docker containerization, backend/frontend foundations, database schema, markdown entry system with YAML frontmatter, git integration, and index generation.
+This design document describes the foundational architecture for the JustDo.so application - a self-hosted, AI-powered personal knowledge management system. The project-setup spec establishes the monorepo structure, Docker containerization, backend/frontend foundations, database schema, markdown entry system with YAML frontmatter, git integration, and index generation.
 
 The system follows a clean separation of concerns:
 - **Memory**: Markdown files with YAML frontmatter stored in `/memory` volume
@@ -54,7 +54,7 @@ The project code and data directory are intentionally separate:
 
 ```
 # Project code (GitHub repo)
-second-brain/
+justdo/
 ├── docker-compose.yml
 ├── package.json                 # Workspace root
 ├── .env.example
@@ -92,7 +92,7 @@ second-brain/
 
 # Data directory (separate location, local git repo only)
 # Configured via DATA_PATH environment variable
-# Default: ~/second-brain-memory or /path/to/your/memory
+# Default: ~/justdo-memory or /path/to/your/memory
 ${DATA_PATH}/
 ├── .git/                        # Local git repo (not pushed to GitHub)
 ├── index.md
@@ -109,9 +109,9 @@ The data directory location is configured via the `DATA_PATH` environment variab
 
 ```env
 # Example configurations:
-DATA_PATH=~/second-brain-memory           # Home directory
-DATA_PATH=/mnt/data/second-brain        # Custom mount point
-DATA_PATH=/var/lib/second-brain         # System directory
+DATA_PATH=~/justdo-memory           # Home directory
+DATA_PATH=/mnt/data/justdo        # Custom mount point
+DATA_PATH=/var/lib/justdo         # System directory
 ```
 
 In Docker Compose, this is mounted as a volume:

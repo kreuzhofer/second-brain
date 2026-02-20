@@ -141,7 +141,7 @@ describe('Commit Message Formatters', () => {
   describe('formatInitCommit', () => {
     it('should return the init commit message', () => {
       const message = formatInitCommit();
-      expect(message).toBe('init: Initialize Second Brain data folder');
+      expect(message).toBe('init: Initialize JustDo.so data folder');
     });
   });
 });

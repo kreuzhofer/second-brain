@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Brain, Search, Target, MessageSquare } from 'lucide-react';
+import { Zap, Search, Target, MessageSquare } from 'lucide-react';
 import { ChatUI } from '@/components/chat';
 import { EntryModal } from '@/components/EntryModal';
 import { DeepFocusView } from '@/components/DeepFocusView';
@@ -14,7 +14,7 @@ import { APP_SHELL_CLASSES, getMobileNavButtonClass } from '@/components/layout-
 
 function App() {
   const [authToken, setAuthToken] = useState<string>(() =>
-    localStorage.getItem('second-brain-auth-token') || ''
+    localStorage.getItem('justdo-auth-token') || ''
   );
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authEmail, setAuthEmail] = useState('');
@@ -48,7 +48,7 @@ function App() {
       setAuthError(null);
     } catch (err) {
       setIsAuthenticated(false);
-      localStorage.removeItem('second-brain-auth-token');
+      localStorage.removeItem('justdo-auth-token');
       setAuthToken('');
       setAuthError('Session expired. Please sign in again.');
     }
@@ -71,7 +71,7 @@ function App() {
         ? await api.auth.login({ email: authEmail, password: authPassword })
         : await api.auth.register({ email: authEmail, password: authPassword, name: authName || undefined });
 
-      localStorage.setItem('second-brain-auth-token', response.token);
+      localStorage.setItem('justdo-auth-token', response.token);
       api.setAuthToken(response.token);
       setAuthToken(response.token);
       setIsAuthenticated(true);
@@ -120,9 +120,9 @@ function App() {
         <div className={APP_SHELL_CLASSES.headerInner}>
           <div className={APP_SHELL_CLASSES.headerRow}>
             <div className={APP_SHELL_CLASSES.brandWrap}>
-              <Brain className="h-6 w-6 sm:h-8 sm:w-8 text-primary shrink-0" />
+              <Zap className="h-6 w-6 sm:h-8 sm:w-8 text-primary shrink-0" />
               <h1 className={APP_SHELL_CLASSES.brandTitle}>
-                Second Brain
+                JustDo.so
               </h1>
             </div>
             {isAuthenticated && (
@@ -155,7 +155,7 @@ function App() {
         {!isAuthenticated ? (
           <Card className="max-w-md mx-auto">
             <CardHeader>
-              <CardTitle>Welcome to Second Brain</CardTitle>
+              <CardTitle>Welcome to JustDo.so</CardTitle>
               <CardDescription>
                 {authMode === 'login'
                   ? 'Sign in to continue'
@@ -294,7 +294,7 @@ function App() {
           </div>
         )}
         <div className="hidden lg:block w-full px-4 py-1 text-center text-[10px] text-muted-foreground leading-none">
-          Second Brain
+          JustDo.so
         </div>
       </footer>
     </div>

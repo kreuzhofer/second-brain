@@ -79,11 +79,11 @@ export class WebhookService {
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'X-Second-Brain-Event': eventType
+        'X-JustDo-Event': eventType
       };
       const signature = this.signPayload(payload);
       if (signature) {
-        headers['X-Second-Brain-Signature'] = signature;
+        headers['X-JustDo-Signature'] = signature;
       }
 
       const response = await this.fetchImpl(url, {

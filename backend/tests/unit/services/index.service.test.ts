@@ -16,7 +16,7 @@ describe('IndexService', () => {
     it('should create index content', async () => {
       await indexService.regenerate();
       const content = await indexService.getIndexContent();
-      expect(content).toContain('# Second Brain Index');
+      expect(content).toContain('# JustDo.so Index');
     });
 
     it('should include header with timestamp', async () => {

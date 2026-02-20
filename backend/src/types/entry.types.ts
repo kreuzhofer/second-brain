@@ -1,5 +1,5 @@
 /**
- * Entry type definitions for the Second Brain application
+ * Entry type definitions for JustDo.so
  */
 
 export type Category = 'people' | 'projects' | 'ideas' | 'task' | 'admin' | 'inbox';

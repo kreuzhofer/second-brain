@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This feature enhances entry content management in the Second Brain application. Currently, entries are created with only frontmatter (metadata) and no body content. The product vision shows entries should have both frontmatter AND body content (Notes sections, Logs, Elaboration, etc.). Additionally, users cannot delete entries through the LLM interface.
+This feature enhances entry content management in the JustDo.so application. Currently, entries are created with only frontmatter (metadata) and no body content. The product vision shows entries should have both frontmatter AND body content (Notes sections, Logs, Elaboration, etc.). Additionally, users cannot delete entries through the LLM interface.
 
 This spec addresses three gaps:
 1. Body content generation during entry creation

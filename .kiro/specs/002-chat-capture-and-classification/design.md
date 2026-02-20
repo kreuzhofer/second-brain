@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design document describes the architecture and implementation of the Chat Capture and Classification feature for the Second Brain application. The feature provides a conversational interface for capturing thoughts and an LLM-powered classification system that automatically routes entries based on confidence scores.
+This design document describes the architecture and implementation of the Chat Capture and Classification feature for the JustDo.so application. The feature provides a conversational interface for capturing thoughts and an LLM-powered classification system that automatically routes entries based on confidence scores.
 
 The system follows a tool-based agent architecture where the LLM acts as a classification agent with access to specific tools for creating, updating, and querying entries. High-confidence classifications (≥0.6) are filed directly to the appropriate category, while low-confidence classifications go to the inbox with a clarification request.
 

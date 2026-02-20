@@ -1,4 +1,4 @@
-# Second Brain – Product Vision Document
+# JustDo.so – Product Vision Document
 
 > A self-hosted, AI-powered personal knowledge management system that captures thoughts, classifies them automatically, and surfaces what matters – without external service dependencies.
 
@@ -241,7 +241,7 @@ Please clarify by replying with more context or a category hint like [project] o
 Auto-generated on every change:
 
 ```markdown
-# Second Brain Index
+# JustDo.so Index
 
 > Last updated: 2026-01-26T14:32:00Z
 > Total entries: 47 (12 people, 18 projects, 9 ideas, 8 admin)

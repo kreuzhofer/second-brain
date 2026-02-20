@@ -1,6 +1,6 @@
 /**
  * Digest Service
- * Generates daily digests and weekly reviews for the Second Brain application.
+ * Generates daily digests and weekly reviews for JustDo.so.
  * Implements proactive surfacing of relevant information.
  */
 

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This document defines the requirements for the Digests and Reviews feature of the Second Brain application. This feature provides proactive surfacing of relevant information through scheduled daily digests and weekly reviews, helping users stay on top of their knowledge base without manual effort.
+This document defines the requirements for the Digests and Reviews feature of the JustDo.so application. This feature provides proactive surfacing of relevant information through scheduled daily digests and weekly reviews, helping users stay on top of their knowledge base without manual effort.
 
 The feature delivers concise, actionable summaries via the chat interface, following the design principle of "small, frequent, actionable output" with daily digests under 150 words and weekly reviews under 250 words.
 

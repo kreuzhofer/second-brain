@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This document defines the requirements for the Proactive Crons feature of the Second Brain application. This feature extends the existing cron infrastructure (from spec 003) to add three proactive scheduled jobs that help users stay on top of their knowledge base:
+This document defines the requirements for the Proactive Crons feature of the JustDo.so application. This feature extends the existing cron infrastructure (from spec 003) to add three proactive scheduled jobs that help users stay on top of their knowledge base:
 
 1. **Stale Check** - Flags projects with no updates in a configurable period
 2. **Follow-up Reminder** - Surfaces people entries with pending follow-ups
@@ -53,7 +53,7 @@ These jobs deliver their output via the chat interface, following the existing d
 
 ### Requirement 3: Inactivity Nudge
 
-**User Story:** As a user, I want to receive a gentle reminder if I haven't captured any thoughts recently, so that I stay engaged with my second brain.
+**User Story:** As a user, I want to receive a gentle reminder if I haven't captured any thoughts recently, so that I stay engaged with my JustDo.so.
 
 #### Acceptance Criteria
 

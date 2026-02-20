@@ -98,7 +98,7 @@ describe('ContextAssembler', () => {
       expect(context.indexContent).toBeDefined();
       expect(typeof context.indexContent).toBe('string');
       // Index should contain the header
-      expect(context.indexContent).toContain('Second Brain Index');
+      expect(context.indexContent).toContain('JustDo.so Index');
     });
   });
 

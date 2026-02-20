@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The email channel enables bidirectional conversation with the Second Brain application via SMTP/IMAP. Users can capture thoughts by sending emails to a configured address, receive confirmation replies, and engage in threaded conversations for course corrections. The system also supports outbound email delivery for digests and proactive messages, solving the "user not looking at app" problem.
+The email channel enables bidirectional conversation with the JustDo.so application via SMTP/IMAP. Users can capture thoughts by sending emails to a configured address, receive confirmation replies, and engage in threaded conversations for course corrections. The system also supports outbound email delivery for digests and proactive messages, solving the "user not looking at app" problem.
 
 ## Glossary
 
@@ -33,7 +33,7 @@ The email channel enables bidirectional conversation with the Second Brain appli
 
 ### Requirement 2: Inbound Email Processing
 
-**User Story:** As a user, I want to send emails to capture thoughts, so that I can add entries to my Second Brain without opening the app.
+**User Story:** As a user, I want to send emails to capture thoughts, so that I can add entries to my JustDo.so without opening the app.
 
 #### Acceptance Criteria
 

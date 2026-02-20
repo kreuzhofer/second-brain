@@ -134,7 +134,7 @@ async function start() {
     process.on('SIGINT', shutdown);
     
     app.listen(config.PORT, () => {
-      console.log(`Second Brain API running on port ${config.PORT}`);
+      console.log(`JustDo.so API running on port ${config.PORT}`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

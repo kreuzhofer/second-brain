@@ -2,7 +2,7 @@
 
 ## Overview
 
-The email channel provides bidirectional communication with the Second Brain application via standard email protocols. Users can capture thoughts by sending emails to a configured address, receive confirmation replies, and engage in threaded conversations for course corrections. The system also delivers scheduled digests via email.
+The email channel provides bidirectional communication with the JustDo.so application via standard email protocols. Users can capture thoughts by sending emails to a configured address, receive confirmation replies, and engage in threaded conversations for course corrections. The system also delivers scheduled digests via email.
 
 The implementation uses:
 - **Nodemailer** for SMTP outbound email delivery
@@ -21,7 +21,7 @@ flowchart TB
         UserEmail[User's Email Client]
     end
     
-    subgraph App["Second Brain Application"]
+    subgraph App["JustDo.so Application"]
         subgraph EmailService["Email Service Layer"]
             ImapPoller[IMAP Poller]
             EmailParser[Email Parser]

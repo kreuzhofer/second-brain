@@ -1,4 +1,4 @@
-# Second Brain
+# JustDo.so
 
 A self-hosted, AI-powered personal knowledge management system that captures thoughts, classifies them automatically, and surfaces what matters – without external service dependencies.
 
@@ -25,7 +25,7 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd second-brain
+   cd justdo
    ```
 
 2. **Create environment file**
@@ -57,7 +57,7 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
 | `JWT_SECRET` | Yes | - | JWT signing secret |
 | `DEFAULT_USER_EMAIL` | Yes | - | Default local user email |
 | `DEFAULT_USER_PASSWORD` | Yes | - | Default local user password |
-| `DEFAULT_USER_NAME` | No | `Second Brain` | Default local user name |
+| `DEFAULT_USER_NAME` | No | `JustDo.so` | Default local user name |
 | `JWT_EXPIRES_IN` | No | `30d` | JWT expiration (e.g. `30d`, `12h`) |
 | `TIMEZONE` | No | `Europe/Berlin` | Timezone for timestamps |
 | `CONFIDENCE_THRESHOLD` | No | `0.6` | Classification confidence threshold |
@@ -71,7 +71,7 @@ A self-hosted, AI-powered personal knowledge management system that captures tho
 ### Email Channel (Optional)
 
 The email channel enables bidirectional email integration. When configured, you can:
-- Capture thoughts by sending emails to your Second Brain
+- Capture thoughts by sending emails to JustDo.so
 - Receive confirmation emails when entries are created
 - Get daily digest and weekly review emails
 
@@ -128,7 +128,7 @@ At startup, the application verifies connectivity to both SMTP and IMAP servers 
 ## Project Structure
 
 ```
-second-brain/
+justdo/
 ├── docker-compose.yml      # Docker Compose configuration
 ├── package.json            # Root workspace configuration
 ├── .env.example            # Environment variables template

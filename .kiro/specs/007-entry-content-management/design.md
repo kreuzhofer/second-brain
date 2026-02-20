@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design extends the Second Brain entry management system to support full markdown content (body content) in addition to frontmatter metadata. The current implementation only stores structured data in YAML frontmatter, but the product vision shows entries should have rich body content like Notes, Logs, and Elaboration sections.
+This design extends the JustDo.so entry management system to support full markdown content (body content) in addition to frontmatter metadata. The current implementation only stores structured data in YAML frontmatter, but the product vision shows entries should have rich body content like Notes, Logs, and Elaboration sections.
 
 The design covers three main capabilities:
 1. **Body content generation** - The Classification Agent generates appropriate body content during entry creation

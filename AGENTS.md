@@ -5,7 +5,7 @@
 - `backend/src/` contains Express API, services, and types; `backend/tests/` holds unit, integration, and property tests.
 - `frontend/src/` contains React components, pages, and client utilities.
 - PostgreSQL stores entries, revisions, embeddings, and user data; no filesystem-backed memory store.
-- `docs/` contains product and API documentation; `second-brain-product-vision.md` is the product vision.
+- `docs/` contains product and API documentation; `justdo-product-vision.md` is the product vision.
 
 ## Build, Test, and Development Commands
 - `npm install` installs workspace dependencies.

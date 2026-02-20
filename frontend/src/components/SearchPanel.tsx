@@ -86,7 +86,7 @@ export function SearchPanel({ onEntryClick, variant = 'panel' }: SearchPanelProp
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex-1 min-w-[220px]">
         <Input
-          placeholder="Search your second brain..."
+          placeholder="Search..."
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {

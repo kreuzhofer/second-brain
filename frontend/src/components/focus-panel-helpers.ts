@@ -1,8 +1,8 @@
 export type FocusPanelTab = 'focus' | 'ideas' | 'people' | 'inbox' | 'recent' | 'calendar';
 export type CalendarViewMode = 'list' | 'board';
 
-export const FOCUS_PANEL_TAB_STORAGE_KEY = 'second-brain-focus-panel-tab';
-export const CALENDAR_VIEW_MODE_STORAGE_KEY = 'second-brain-calendar-view-mode';
+export const FOCUS_PANEL_TAB_STORAGE_KEY = 'justdo-focus-panel-tab';
+export const CALENDAR_VIEW_MODE_STORAGE_KEY = 'justdo-calendar-view-mode';
 
 export const getVisibleItems = <T>(items: T[], expanded: boolean, maxItems: number): T[] => {
   if (expanded) return items;

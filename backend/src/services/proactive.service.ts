@@ -1,6 +1,6 @@
 /**
  * Proactive Service
- * Generates proactive notifications for the Second Brain application:
+ * Generates proactive notifications for JustDo.so:
  * - Stale project checks
  * - Follow-up reminders
  * - Inactivity nudges
@@ -361,7 +361,7 @@ Reply with anything on your mind.`,
       // Variation 2
       `**🌱 Time to capture?**
 
-Your second brain misses you! ${days} days without a new thought.
+JustDo.so misses you! ${days} days without a new thought.
 
 What's one thing you're working on right now?`,
 

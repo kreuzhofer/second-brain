@@ -134,7 +134,7 @@ describe('Property Tests: Context Assembler', () => {
           expect(context.indexContent).toBeDefined();
           expect(typeof context.indexContent).toBe('string');
           // Index content should contain the header (from regenerate)
-          expect(context.indexContent).toContain('Second Brain Index');
+          expect(context.indexContent).toContain('JustDo.so Index');
         }),
         { numRuns: 3 } // Per steering guidelines: DB operations use 3-5 runs
       );
@@ -332,7 +332,7 @@ describe('Property Tests: Context Assembler', () => {
           // Property: Index content SHALL be non-empty when entries exist
           expect(context.indexContent).toBeDefined();
           expect(context.indexContent.length).toBeGreaterThan(0);
-          expect(context.indexContent).toContain('Second Brain Index');
+          expect(context.indexContent).toContain('JustDo.so Index');
         }),
         { numRuns: 3 }
       );

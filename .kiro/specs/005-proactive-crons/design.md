@@ -279,7 +279,7 @@ Reply with anything on your mind.
 // Variation 2
 **🌱 Time to capture?**
 
-Your second brain misses you! {days} days without a new thought.
+Your JustDo.so misses you! {days} days without a new thought.
 
 What's one thing you're working on right now?
 
