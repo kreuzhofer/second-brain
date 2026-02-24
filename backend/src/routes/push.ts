@@ -92,3 +92,30 @@ pushRouter.get('/status', async (_req: Request, res: Response) => {
   const subscriptions = await service.getSubscriptions(userId);
   res.json({ enabled: true, subscriptionCount: subscriptions.length });
 });
+
+/**
+ * POST /api/push/test
+ * Send a test push notification to the authenticated user.
+ * Optional body: { title, body }
+ */
+pushRouter.post('/test', async (req: Request, res: Response) => {
+  const userId = requireUserId();
+  const service = getPushNotificationService();
+
+  if (!service.isEnabled()) {
+    return res.status(404).json({
+      error: { code: 'NOT_CONFIGURED', message: 'Push notifications are not configured.' }
+    });
+  }
+
+  const { title, body } = req.body as { title?: string; body?: string };
+
+  const sent = await service.sendToUser(userId, {
+    title: title || 'Test Notification',
+    body: body || 'This is a test push notification from JustDo.so.',
+    tag: 'test',
+    url: '/'
+  });
+
+  res.json({ sent });
+});

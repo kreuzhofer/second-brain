@@ -79,6 +79,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Post-capture task-start CTA phase 1: Completed (task-only `Start 5 minutes now` action from capture responses, Deep Focus preloaded to 5 minutes)
 - Voice capture phase 1: Completed (chat push-to-talk + Whisper transcription endpoint)
 - Smart nudges phase 1: Completed (stale project detection, follow-up reminders, inactivity nudges — all cron-scheduled, chat-delivered, property-tested)
+- Web Push notifications: Completed (VAPID-based push subscription, service worker, push delivery for proactive nudges, bell toggle in chat header, integration + unit tests)
 
 ## Notes
 - Prioritize backend-first slices where possible.
@@ -145,7 +146,7 @@ _(No item currently queued. Pick from Priority Next or the backlog below.)_
 - Calendar integration (pre-meeting context surfacing).
 - Smart nudges phase 1 (partially completed — see status below):
   - **Done**: Stale project detection (14-day threshold, cron-scheduled), follow-up reminders for people entries (cron-scheduled), inactivity nudges (3-day threshold, cron-scheduled). All delivered to chat via proactive service. Configurable via env vars (`STALE_DAYS`, `INACTIVITY_DAYS`, schedule times). Property tests in place.
-  - **Not yet implemented**: Deadline-based reminders (nudge when task due dates approach), priority decay (auto-deprioritize tasks that sit unworked), frontend notification badges/toasts (currently chat-only delivery).
+  - **Not yet implemented**: Deadline-based reminders (nudge when task due dates approach), priority decay (auto-deprioritize tasks that sit unworked). _(Frontend push notifications now delivered via Web Push — see status above.)_
 - Adaptive digests (user preferences, length caps, focus areas).
 - Stale-project lifecycle with archive/hibernate automation.
 
@@ -258,3 +259,5 @@ _(No item currently queued. Pick from Priority Next or the backlog below.)_
 - 2026-02-11: Added hourly calendar source auto-sync via cron job (`0 * * * *`) that syncs all enabled external sources.
 - 2026-02-11: Refresh button now triggers parallel external source sync + plan reload with spinner.
 - 2026-02-11: Verification complete: TypeScript clean, frontend tests (`8/8` files, `56` tests), backend tests (`75/75` suites, `916` tests), production build, and Docker rebuild/redeploy succeeded.
+- 2026-02-24: Completed Web Push notifications for proactive nudges: VAPID-based push subscription (PushSubscription model + migration), push-notification.service.ts, push API routes (vapid-key, subscribe, unsubscribe, status), service worker (sw.js), frontend push.ts helper + PushToggle component in chat header, cron integration for best-effort push delivery alongside chat.
+- 2026-02-24: Verification complete: backend tests passing (unit + integration for push), frontend TypeScript clean, Docker rebuild/redeploy succeeded. End-to-end push tested with Firefox (macOS) — notifications delivered with browser tab open and closed.
