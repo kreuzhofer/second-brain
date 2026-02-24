@@ -147,6 +147,14 @@ export class UserService {
     this.setDefaultUserId(user.id);
   }
 
+  async disableUser(userId: string, currentPassword: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error('User not found.');
+    const valid = await this.verifyPassword(currentPassword, user.passwordHash);
+    if (!valid) throw new Error('Current password is incorrect.');
+    await this.prisma.user.update({ where: { id: userId }, data: { disabledAt: new Date() } });
+  }
+
   async getUserByInboundCode(code: string) {
     return this.prisma.user.findUnique({ where: { inboundEmailCode: code } });
   }

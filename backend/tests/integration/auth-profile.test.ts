@@ -217,3 +217,75 @@ describe('GET /api/auth/inbound-email', () => {
       .expect(401);
   });
 });
+
+describe('GET /api/auth/export', () => {
+  it('returns JSON export with expected keys', async () => {
+    const res = await request(app)
+      .get('/api/auth/export')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(res.headers['content-type']).toMatch(/application\/json/);
+    expect(res.headers['content-disposition']).toMatch(/attachment.*justdo-export/);
+    expect(res.body).toHaveProperty('exportedAt');
+    expect(res.body).toHaveProperty('entries');
+    expect(res.body).toHaveProperty('conversations');
+    expect(res.body).toHaveProperty('digestPreferences');
+    expect(res.body).toHaveProperty('calendarSources');
+    expect(res.body).toHaveProperty('entryLinks');
+    expect(res.body).toHaveProperty('focusTracks');
+    expect(res.body).toHaveProperty('focusSessions');
+    expect(Array.isArray(res.body.entries)).toBe(true);
+  });
+
+  it('returns 401 without auth', async () => {
+    await request(app)
+      .get('/api/auth/export')
+      .expect(401);
+  });
+});
+
+describe('POST /api/auth/disable', () => {
+  it('disables account with correct password', async () => {
+    const res = await request(app)
+      .post('/api/auth/disable')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ password: TEST_USER_PASSWORD })
+      .expect(200);
+
+    expect(res.body.disabled).toBe(true);
+
+    // Login should now fail with 403
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: TEST_USER_EMAIL, password: TEST_USER_PASSWORD })
+      .expect(403);
+
+    expect(loginRes.body.error.code).toBe('ACCOUNT_DISABLED');
+  });
+
+  it('returns 401 with wrong password', async () => {
+    const res = await request(app)
+      .post('/api/auth/disable')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ password: 'wrong-password' })
+      .expect(401);
+
+    expect(res.body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('returns 400 without password', async () => {
+    await request(app)
+      .post('/api/auth/disable')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({})
+      .expect(400);
+  });
+
+  it('returns 401 without auth', async () => {
+    await request(app)
+      .post('/api/auth/disable')
+      .send({ password: TEST_USER_PASSWORD })
+      .expect(401);
+  });
+});

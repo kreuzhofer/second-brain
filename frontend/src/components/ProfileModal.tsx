@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Loader2, User, KeyRound, Info, Copy, Check, Mail } from 'lucide-react';
+import { X, Loader2, User, KeyRound, Shield, Copy, Check, Mail, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/services/api';
@@ -18,17 +18,18 @@ interface ProfileModalProps {
   userName: string;
   onClose: () => void;
   onProfileUpdate: (user: { email: string; name: string }) => void;
+  onLogout?: () => void;
 }
 
-type Tab = 'profile' | 'password' | 'about';
+type Tab = 'profile' | 'password' | 'account';
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: 'profile', label: 'Profile', icon: <User className="h-4 w-4" /> },
   { key: 'password', label: 'Password', icon: <KeyRound className="h-4 w-4" /> },
-  { key: 'about', label: 'About', icon: <Info className="h-4 w-4" /> },
+  { key: 'account', label: 'Account', icon: <Shield className="h-4 w-4" /> },
 ];
 
-export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpdate }: ProfileModalProps) {
+export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpdate, onLogout }: ProfileModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>('profile');
 
   // Profile tab state
@@ -56,6 +57,12 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
+  // Account tab state
+  const [exportBusy, setExportBusy] = useState(false);
+  const [disablePassword, setDisablePassword] = useState('');
+  const [disableBusy, setDisableBusy] = useState(false);
+  const [disableError, setDisableError] = useState<string | null>(null);
+
   // Sync props when modal opens
   useEffect(() => {
     if (open) {
@@ -72,6 +79,8 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
       setPasswordError(null);
       setPasswordSuccess(false);
       setInboundCopied(false);
+      setDisablePassword('');
+      setDisableError(null);
       setActiveTab('profile');
 
       // Fetch inbound email address
@@ -170,6 +179,43 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
       setPasswordBusy(false);
     }
   }, [currentPassword, newPassword, confirmPassword]);
+
+  const handleExport = useCallback(async () => {
+    setExportBusy(true);
+    try {
+      const blob = await api.auth.exportData();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `justdo-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // silent — browser download handles errors visually
+    } finally {
+      setExportBusy(false);
+    }
+  }, []);
+
+  const handleDisable = useCallback(async () => {
+    if (!disablePassword) {
+      setDisableError('Password is required.');
+      return;
+    }
+    setDisableBusy(true);
+    setDisableError(null);
+    try {
+      await api.auth.disableAccount({ password: disablePassword });
+      onClose();
+      onLogout?.();
+    } catch (err) {
+      setDisableError(err instanceof Error ? err.message : 'Failed to disable account.');
+    } finally {
+      setDisableBusy(false);
+    }
+  }, [disablePassword, onClose, onLogout]);
 
   if (!open) return null;
 
@@ -379,16 +425,59 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
             </div>
           )}
 
-          {activeTab === 'about' && (
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
+          {activeTab === 'account' && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6 shrink-0">
                   <path d="M13 1L5 14h6l-2 9 10-14h-6z" fill="#4f46e5" />
                 </svg>
                 <span className="text-base font-semibold text-foreground">JustDo.so</span>
               </div>
-              <p>AI-powered personal knowledge management.</p>
-              <p className="text-xs">More settings (notifications, data export, account management) coming soon.</p>
+
+              {/* Export Data */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <Download className="h-4 w-4" />
+                  Export Data
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Download all your entries, conversations, preferences, and calendar data as JSON.
+                </p>
+                <Button onClick={handleExport} disabled={exportBusy} size="sm" variant="outline">
+                  {exportBusy && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+                  Download Export
+                </Button>
+              </div>
+
+              <hr />
+
+              {/* Disable Account */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-destructive">Disable Account</label>
+                <p className="text-xs text-muted-foreground">
+                  Disabling your account will prevent you from logging in. Your data will be preserved.
+                </p>
+                <Input
+                  type="password"
+                  value={disablePassword}
+                  onChange={(e) => {
+                    setDisablePassword(e.target.value);
+                    setDisableError(null);
+                  }}
+                  placeholder="Enter your password to confirm"
+                  autoComplete="current-password"
+                />
+                {disableError && <p className="text-sm text-destructive">{disableError}</p>}
+                <Button
+                  onClick={handleDisable}
+                  disabled={disableBusy}
+                  size="sm"
+                  variant="destructive"
+                >
+                  {disableBusy && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+                  Disable Account
+                </Button>
+              </div>
             </div>
           )}
         </div>

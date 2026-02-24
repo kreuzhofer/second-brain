@@ -294,6 +294,7 @@ function App() {
                 setUserEmail(user.email);
                 setUserName(user.name);
               }}
+              onLogout={handleLogout}
             />
           </EntriesProvider>
         )}

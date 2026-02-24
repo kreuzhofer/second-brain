@@ -41,6 +41,10 @@ export class AuthService {
       throw new Error('Invalid email or password');
     }
 
+    if (user.disabledAt) {
+      throw new Error('Account is disabled');
+    }
+
     return { user, token: this.signToken(user.id, user.email) };
   }
 

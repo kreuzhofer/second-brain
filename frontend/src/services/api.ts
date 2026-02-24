@@ -512,6 +512,19 @@ class ApiClient {
     inboundEmail: async (): Promise<{ address: string | null; enabled: boolean }> => {
       return this.request<{ address: string | null; enabled: boolean }>('/auth/inbound-email');
     },
+    exportData: async (): Promise<Blob> => {
+      const headers: Record<string, string> = {};
+      if (this.authToken) headers['Authorization'] = `Bearer ${this.authToken}`;
+      const res = await fetch(`${this.baseUrl}/auth/export`, { headers });
+      if (!res.ok) throw new Error('Export failed');
+      return res.blob();
+    },
+    disableAccount: async (payload: { password: string }): Promise<{ disabled: boolean }> => {
+      return this.request<{ disabled: boolean }>('/auth/disable', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
   };
 
   /**

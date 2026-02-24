@@ -4,6 +4,7 @@ import { getUserService } from '../services/user.service';
 import { authMiddleware } from '../middleware/auth';
 import { requireUserId } from '../context/user-context';
 import { getInboundEmailAddress } from '../config/email';
+import { getPrismaClient } from '../lib/prisma';
 
 export const authRouter = Router();
 
@@ -67,9 +68,16 @@ authRouter.post('/login', async (req: Request, res: Response) => {
       user: { id: user.id, email: user.email, name: user.name }
     });
   } catch (error) {
-    res.status(401).json({
-      error: { code: 'UNAUTHORIZED', message: 'Invalid email or password.' }
-    });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    if (message === 'Account is disabled') {
+      res.status(403).json({
+        error: { code: 'ACCOUNT_DISABLED', message: 'Account is disabled.' }
+      });
+    } else {
+      res.status(401).json({
+        error: { code: 'UNAUTHORIZED', message: 'Invalid email or password.' }
+      });
+    }
   }
 });
 
@@ -175,4 +183,84 @@ authRouter.get('/inbound-email', authMiddleware, async (_req: Request, res: Resp
     : null;
 
   res.json({ address, enabled: address !== null });
+});
+
+authRouter.get('/export', authMiddleware, async (_req: Request, res: Response) => {
+  const userId = requireUserId();
+  const prisma = getPrismaClient();
+
+  const [
+    entries,
+    conversations,
+    digestPreferences,
+    calendarSources,
+    calendarSettings,
+    entryLinks,
+    focusTracks,
+    focusSessions,
+  ] = await Promise.all([
+    prisma.entry.findMany({
+      where: { userId },
+      include: {
+        projectDetails: true,
+        adminDetails: true,
+        ideaDetails: true,
+        personDetails: true,
+        inboxDetails: true,
+        sections: true,
+        logs: true,
+        tags: { include: { tag: true } },
+        revisions: true,
+      },
+    }),
+    prisma.conversation.findMany({
+      where: { userId },
+      include: { messages: true, summaries: true },
+    }),
+    prisma.digestPreference.findMany({ where: { userId } }),
+    prisma.calendarSource.findMany({ where: { userId } }),
+    prisma.calendarSettings.findFirst({ where: { userId } }),
+    prisma.entryLink.findMany({ where: { userId } }),
+    prisma.focusTrack.findMany({ where: { userId } }),
+    prisma.focusSession.findMany({ where: { userId } }),
+  ]);
+
+  const exportData = {
+    exportedAt: new Date().toISOString(),
+    entries,
+    conversations,
+    digestPreferences,
+    calendarSources,
+    calendarSettings,
+    entryLinks,
+    focusTracks,
+    focusSessions,
+  };
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Disposition', `attachment; filename="justdo-export-${dateStr}.json"`);
+  res.setHeader('Content-Type', 'application/json');
+  res.json(exportData);
+});
+
+authRouter.post('/disable', authMiddleware, async (req: Request, res: Response) => {
+  const { password } = req.body as { password?: string };
+  if (!password) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Password is required.' } });
+    return;
+  }
+
+  const userId = requireUserId();
+  const userService = getUserService();
+  try {
+    await userService.disableUser(userId, password);
+    res.json({ disabled: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to disable account.';
+    if (message === 'Current password is incorrect.') {
+      res.status(401).json({ error: { code: 'UNAUTHORIZED', message } });
+    } else {
+      res.status(400).json({ error: { code: 'DISABLE_FAILED', message } });
+    }
+  }
 });

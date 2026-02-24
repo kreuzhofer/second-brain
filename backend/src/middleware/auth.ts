@@ -58,5 +58,15 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     return;
   }
 
+  if (user.disabledAt) {
+    res.status(403).json({
+      error: {
+        code: 'ACCOUNT_DISABLED',
+        message: 'Account is disabled'
+      }
+    });
+    return;
+  }
+
   runWithUserId(user.id, () => next());
 }

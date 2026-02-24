@@ -7,6 +7,9 @@ jest.mock('../../../src/services/user.service', () => ({
       if (id === 'test-user') {
         return { id: 'test-user' };
       }
+      if (id === 'disabled-user') {
+        return { id: 'disabled-user', disabledAt: new Date() };
+      }
       return null;
     })
   })
@@ -17,6 +20,9 @@ jest.mock('../../../src/services/auth.service', () => ({
     verifyToken: jest.fn((token: string) => {
       if (token === 'valid-token') {
         return { userId: 'test-user', email: 'test@example.com' };
+      }
+      if (token === 'disabled-token') {
+        return { userId: 'disabled-user', email: 'disabled@example.com' };
       }
       return null;
     })
@@ -124,5 +130,22 @@ describe('authMiddleware', () => {
 
     expect(mockNext).not.toHaveBeenCalled();
     expect(statusMock).toHaveBeenCalledWith(401);
+  });
+
+  it('should return 403 when user account is disabled', async () => {
+    mockReq.headers = {
+      authorization: 'Bearer disabled-token'
+    };
+
+    await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+
+    expect(mockNext).not.toHaveBeenCalled();
+    expect(statusMock).toHaveBeenCalledWith(403);
+    expect(jsonMock).toHaveBeenCalledWith({
+      error: {
+        code: 'ACCOUNT_DISABLED',
+        message: 'Account is disabled'
+      }
+    });
   });
 });
