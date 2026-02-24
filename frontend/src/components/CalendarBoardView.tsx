@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTheme } from '@/hooks/use-theme';
 import {
   CalendarBusyBlock,
   CalendarSettings,
@@ -24,11 +25,11 @@ const TIME_LABEL_STEP = 60;
 const FULL_DAY_MINUTES = 1440;
 
 const CATEGORY_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  task:     { bg: 'bg-blue-100',   border: 'border-blue-300',   text: 'text-blue-900' },
-  admin:    { bg: 'bg-blue-100',   border: 'border-blue-300',   text: 'text-blue-900' },
-  projects: { bg: 'bg-green-100',  border: 'border-green-300',  text: 'text-green-900' },
-  ideas:    { bg: 'bg-amber-100',  border: 'border-amber-300',  text: 'text-amber-900' },
-  people:   { bg: 'bg-pink-100',   border: 'border-pink-300',   text: 'text-pink-900' }
+  task:     { bg: 'bg-blue-100 dark:bg-blue-900/30',   border: 'border-blue-300 dark:border-blue-700',   text: 'text-blue-900 dark:text-blue-200' },
+  admin:    { bg: 'bg-blue-100 dark:bg-blue-900/30',   border: 'border-blue-300 dark:border-blue-700',   text: 'text-blue-900 dark:text-blue-200' },
+  projects: { bg: 'bg-green-100 dark:bg-green-900/30', border: 'border-green-300 dark:border-green-700', text: 'text-green-900 dark:text-green-200' },
+  ideas:    { bg: 'bg-amber-100 dark:bg-amber-900/30', border: 'border-amber-300 dark:border-amber-700', text: 'text-amber-900 dark:text-amber-200' },
+  people:   { bg: 'bg-pink-100 dark:bg-pink-900/30',   border: 'border-pink-300 dark:border-pink-700',   text: 'text-pink-900 dark:text-pink-200' }
 };
 
 interface CalendarBoardViewProps {
@@ -67,6 +68,7 @@ export default function CalendarBoardView({
   onEntryClick,
   onMarkDone
 }: CalendarBoardViewProps) {
+  const { resolvedTheme } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [markingDone, setMarkingDone] = useState<string | null>(null);
   const [confirmingDone, setConfirmingDone] = useState<string | null>(null);
@@ -238,7 +240,7 @@ export default function CalendarBoardView({
 
   const getSourceColor = (block: CalendarBusyBlock): string =>
     block.sourceColor || '#94a3b8';
-  const busyBlockTextStyle = getBusyBlockTextStyle();
+  const busyBlockTextStyle = getBusyBlockTextStyle(resolvedTheme === 'dark');
 
   const isPeekColumn = (colIndex: number) => hasPeek && colIndex === 1;
 
@@ -321,7 +323,7 @@ export default function CalendarBoardView({
               <div
                 key={ci}
                 className={`p-1.5 text-center text-[11px] font-medium border-l border-border ${
-                  absDayIndex === todayDayIndex ? 'bg-blue-50 text-blue-700' : 'text-muted-foreground'
+                  absDayIndex === todayDayIndex ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' : 'text-muted-foreground'
                 } ${isPeekColumn(ci) ? 'opacity-40' : ''}`}
               >
                 {header}
@@ -453,7 +455,7 @@ export default function CalendarBoardView({
                             </button>
                           )}
                           {isConfirming ? (
-                            <span className="text-[10px] font-medium leading-tight text-amber-700 flex items-center gap-1">
+                            <span className="text-[10px] font-medium leading-tight text-amber-700 dark:text-amber-300 flex items-center gap-1">
                               Complete task?
                               <button
                                 type="button"
@@ -509,7 +511,7 @@ export default function CalendarBoardView({
               className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-left"
             >
               <div className="text-xs font-medium">{item.sourceName}</div>
-              <div className="mt-0.5 text-[11px] text-amber-800">{item.reason}</div>
+              <div className="mt-0.5 text-[11px] text-amber-800 dark:text-amber-300">{item.reason}</div>
             </button>
           ))}
         </div>

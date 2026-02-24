@@ -9,7 +9,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { api, ChatMessage, ChatResponse } from '@/services/api';
 import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEntries } from '@/state/entries';
@@ -124,12 +123,12 @@ export function ChatUI({ onEntryClick, onStartFocus, className }: ChatUIProps) {
   }, [onStartFocus]);
 
   return (
-    <Card className={cn('flex flex-col h-full min-h-0', className)}>
-      <CardHeader className="flex-shrink-0 border-b p-2.5 sm:p-3.5">
+    <div className={cn('flex flex-col h-full min-h-0 bg-background', className)}>
+      <div className="flex-shrink-0 border-b p-2.5 sm:p-3.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5" />
-            <CardTitle className="text-base sm:text-lg">Chat</CardTitle>
+            <h3 className="text-base sm:text-lg font-semibold">Chat</h3>
           </div>
           <div className="flex items-center">
             <PushToggle />
@@ -142,8 +141,8 @@ export function ChatUI({ onEntryClick, onStartFocus, className }: ChatUIProps) {
             </button>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
+      </div>
+      <div className="flex-1 flex flex-col p-0 overflow-hidden">
         <MessageList 
           messages={messages} 
           onEntryClick={onEntryClick}
@@ -160,7 +159,7 @@ export function ChatUI({ onEntryClick, onStartFocus, className }: ChatUIProps) {
           onSend={handleSendMessage} 
           disabled={isLoading || isResettingConversation} 
         />
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

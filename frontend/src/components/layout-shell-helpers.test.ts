@@ -31,4 +31,17 @@ describe('layout shell helpers', () => {
   it('uses 16px text for form controls to avoid mobile auto zoom', () => {
     expect(FORM_CONTROL_TEXT_CLASS).toBe('text-base');
   });
+
+  it('uses no gap on desktop content grid for merged borders', () => {
+    expect(APP_SHELL_CLASSES.contentGrid).toContain('gap-0');
+  });
+
+  it('provides chat column class with right border divider', () => {
+    expect(APP_SHELL_CLASSES.chatColumn).toContain('border-r');
+  });
+
+  it('removes main area padding for edge-to-edge panels', () => {
+    expect(APP_SHELL_CLASSES.main).not.toContain('px-2');
+    expect(APP_SHELL_CLASSES.main).not.toContain('py-2');
+  });
 });

@@ -80,6 +80,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Voice capture phase 1: Completed (chat push-to-talk + Whisper transcription endpoint)
 - Smart nudges phase 1: Completed (stale project detection, follow-up reminders, inactivity nudges — all cron-scheduled, chat-delivered, property-tested)
 - Web Push notifications: Completed (VAPID-based push subscription, service worker, push delivery for proactive nudges, bell toggle in chat header, integration + unit tests)
+- Frontend design polish: Completed (compact layout with merged borders, dark mode with system/light/dark toggle and localStorage persistence, user settings gear menu with theme selector and logout)
 
 ## Notes
 - Prioritize backend-first slices where possible.

@@ -8,6 +8,7 @@ import { EntryModal } from '@/components/EntryModal';
 import { DeepFocusView } from '@/components/DeepFocusView';
 import { SearchPanel } from '@/components/SearchPanel';
 import { FocusPanel } from '@/components/FocusPanel';
+import { UserSettingsMenu } from '@/components/UserSettingsMenu';
 import { api, EntryWithPath } from '@/services/api';
 import { EntriesProvider } from '@/state/entries';
 import { APP_SHELL_CLASSES, getMobileNavButtonClass } from '@/components/layout-shell-helpers';
@@ -28,6 +29,7 @@ function App() {
   const [focusInitialMinutes, setFocusInitialMinutes] = useState<number | undefined>(undefined);
   const [mobilePanel, setMobilePanel] = useState<'focus' | 'chat'>('focus');
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
 
   // Check authentication when token changes
   useEffect(() => {
@@ -43,11 +45,13 @@ function App() {
 
   const checkSession = async () => {
     try {
-      await api.auth.me();
+      const user = await api.auth.me();
       setIsAuthenticated(true);
+      setUserEmail(user.email);
       setAuthError(null);
     } catch (err) {
       setIsAuthenticated(false);
+      setUserEmail('');
       localStorage.removeItem('justdo-auth-token');
       setAuthToken('');
       setAuthError('Session expired. Please sign in again.');
@@ -81,6 +85,14 @@ function App() {
     } finally {
       setAuthBusy(false);
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('justdo-auth-token');
+    api.setAuthToken('');
+    setAuthToken('');
+    setIsAuthenticated(false);
+    setUserEmail('');
   };
 
   const handleEntryClick = (path: string) => {
@@ -141,6 +153,7 @@ function App() {
                 >
                   <Search className="h-5 w-5" />
                 </Button>
+                <UserSettingsMenu userEmail={userEmail} onLogout={handleLogout} />
               </div>
             )}
           </div>
@@ -234,7 +247,7 @@ function App() {
         ) : (
           <EntriesProvider enabled={isAuthenticated}>
             <div className={APP_SHELL_CLASSES.contentGrid}>
-              <div className="hidden lg:flex flex-col min-h-0">
+              <div className={APP_SHELL_CLASSES.chatColumn}>
                 <ChatUI
                   onEntryClick={handleEntryClick}
                   onStartFocus={handleStartFocusFromPath}
@@ -295,9 +308,6 @@ function App() {
             </div>
           </div>
         )}
-        <div className="hidden lg:block w-full px-4 py-1 text-center text-[10px] text-muted-foreground leading-none">
-          JustDo.so
-        </div>
       </footer>
     </div>
   );

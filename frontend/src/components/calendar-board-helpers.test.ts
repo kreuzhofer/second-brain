@@ -113,10 +113,17 @@ describe('calendar-board-helpers', () => {
   });
 
   describe('getBusyBlockTextStyle', () => {
-    it('uses high-contrast slate text for busy block labels', () => {
+    it('uses high-contrast dark text for light mode', () => {
       expect(getBusyBlockTextStyle()).toEqual({
         titleColor: '#334155',
         locationColor: '#475569'
+      });
+    });
+
+    it('uses light text for dark mode', () => {
+      expect(getBusyBlockTextStyle(true)).toEqual({
+        titleColor: '#cbd5e1',
+        locationColor: '#94a3b8'
       });
     });
   });

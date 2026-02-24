@@ -90,12 +90,18 @@ export function addDaysToYmd(startDate: string, dayOffset: number): string {
 /**
  * Use a stable high-contrast text palette for translucent busy blocks.
  * Busy block backgrounds are rendered with low opacity, so dark text is readable
- * across all source colors.
+ * across all source colors. Pass isDark for dark-mode-appropriate light text.
  */
-export function getBusyBlockTextStyle(): { titleColor: string; locationColor: string } {
+export function getBusyBlockTextStyle(isDark?: boolean): { titleColor: string; locationColor: string } {
+  if (isDark) {
+    return {
+      titleColor: '#cbd5e1',   // slate-300
+      locationColor: '#94a3b8'  // slate-400
+    };
+  }
   return {
-    titleColor: '#334155',
-    locationColor: '#475569'
+    titleColor: '#334155',   // slate-700
+    locationColor: '#475569'  // slate-600
   };
 }
 

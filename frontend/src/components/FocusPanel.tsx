@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   api,
@@ -650,16 +649,16 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   };
 
   return (
-    <Card className="flex h-full">
+    <div className="flex h-full bg-background">
       <div className="flex-1 min-w-0">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 p-2.5 sm:p-4">
+        <div className="flex flex-row items-center justify-between space-y-0 p-2.5 sm:p-4 border-b">
           <div className="flex items-center gap-2">
             {activeTab === 'ideas' && <Lightbulb className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'people' && <User className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'calendar' && <Target className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'inbox' && <Inbox className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'recent' && <FileText className="h-4 w-4 text-muted-foreground" />}
-            <CardTitle className="text-base sm:text-lg font-medium">{title}</CardTitle>
+            <h3 className="text-base sm:text-lg font-medium">{title}</h3>
           </div>
           <div className="flex items-center gap-2">
             {activeTab === 'focus' && (
@@ -783,8 +782,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-2.5 sm:space-y-3 p-2.5 sm:p-4 pt-0">
+        </div>
+        <div className="space-y-2.5 sm:space-y-3 p-2.5 sm:p-4 pt-0">
         {activeTab === 'focus' && (
           <div className="space-y-2">
             <div className="grid grid-cols-3 gap-2 text-[11px] sm:text-xs text-muted-foreground">
@@ -867,7 +866,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                   Generated {formatDate(calendarPlan.generatedAt)} | Rev {calendarPlan.revision}
                 </div>
                 {calendarPlan.warnings && calendarPlan.warnings.length > 0 && (
-                  <div className="text-xs text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-md px-2 py-1">
+                  <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-md px-2 py-1">
                     {calendarPlan.warnings.length} item(s) could not be scheduled in this window.
                   </div>
                 )}
@@ -1005,7 +1004,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                         <span
                           className={`text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
                             source.enabled
-                              ? 'border-green-500/40 text-green-700 bg-green-500/10'
+                              ? 'border-green-500/40 text-green-700 dark:text-green-400 bg-green-500/10'
                               : 'border-border text-muted-foreground bg-muted'
                           }`}
                         >
@@ -1197,8 +1196,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                     className="w-full min-h-[44px] rounded-md border border-amber-500/40 bg-amber-500/10 p-2 sm:p-2.5 text-left"
                   >
                     <div className="text-sm font-medium">{item.sourceName}</div>
-                    <div className="mt-1 text-xs text-amber-800">{item.reason}</div>
-                    <div className="mt-1 text-[11px] text-amber-900/80 uppercase tracking-wide">
+                    <div className="mt-1 text-xs text-amber-800 dark:text-amber-300">{item.reason}</div>
+                    <div className="mt-1 text-[11px] text-amber-900/80 dark:text-amber-200/80 uppercase tracking-wide">
                       {item.reasonCode.replace(/_/g, ' ')}
                     </div>
                   </button>
@@ -1241,7 +1240,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                   {item.dueDate && (
                     <span className="shrink-0 flex items-center gap-2">
                       {isOverdueDate(item.dueDate) && (
-                        <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-[1px] text-[10px] font-semibold uppercase tracking-wide text-red-600">
+                        <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-[1px] text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:text-red-400">
                           Overdue
                         </span>
                       )}
@@ -1402,7 +1401,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
             )}
           </div>
         )}
-        </CardContent>
+        </div>
       </div>
       <div className="sticky top-2 self-start mt-2 mr-2 sm:top-3 sm:mt-3 sm:mr-3 flex flex-col shrink-0 max-h-[calc(100dvh-120px)]">
         <div className="rounded-md border border-border overflow-hidden max-h-[calc(100dvh-120px)] overflow-y-auto bg-background">
@@ -1426,7 +1425,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
           ))}
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 

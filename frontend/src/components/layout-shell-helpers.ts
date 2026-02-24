@@ -11,8 +11,9 @@ export const APP_SHELL_CLASSES = {
   brandTitle: 'text-base sm:text-lg lg:text-xl font-bold leading-none whitespace-nowrap',
   headerSearchWrap: 'flex items-center gap-2 w-full justify-end min-w-0',
   mobileSearchPanelWrap: 'mt-1.5 lg:hidden',
-  main: 'w-full flex-1 min-h-0 px-2 py-2 sm:px-3 sm:py-3 lg:px-4 lg:py-4 pb-[calc(58px+env(safe-area-inset-bottom))] lg:pb-3',
-  contentGrid: 'grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,3fr)] gap-2 sm:gap-3 lg:gap-4 h-full min-h-0',
+  main: 'w-full flex-1 min-h-0 pb-[calc(58px+env(safe-area-inset-bottom))] lg:pb-0',
+  contentGrid: 'grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,3fr)] gap-0 h-full min-h-0',
+  chatColumn: 'hidden lg:flex flex-col min-h-0 border-r',
   desktopFocusColumn: 'hidden lg:flex flex-col min-h-0 lg:overflow-y-auto',
   bottomNav: 'fixed bottom-0 left-0 right-0 lg:hidden border-t bg-background/95 supports-[backdrop-filter]:bg-background/90 backdrop-blur',
   bottomNavInner: 'grid grid-cols-2 items-stretch gap-1 px-1 pt-1 pb-[calc(4px+env(safe-area-inset-bottom))]'
