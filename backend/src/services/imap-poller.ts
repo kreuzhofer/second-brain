@@ -15,8 +15,9 @@
 
 import Imap from 'node-imap';
 import { getEmailConfig, EmailConfig } from '../config/email';
-import { getEmailParser, ParsedEmail } from './email-parser';
+import { getEmailParser, ParsedEmail, EmailAddress } from './email-parser';
 import { getThreadTracker } from './thread-tracker';
+import { getUserService } from './user.service';
 
 // ============================================
 // Types and Interfaces
@@ -32,10 +33,24 @@ export interface PollResult {
 }
 
 /**
- * Callback function for processing emails
- * Returns true if email was processed successfully
+ * Callback function for processing emails.
+ * Accepts optional userId for per-user routing.
+ * Returns true if email was processed successfully.
  */
-export type EmailProcessor = (email: ParsedEmail) => Promise<boolean>;
+export type EmailProcessor = (email: ParsedEmail, userId?: string) => Promise<boolean>;
+
+/**
+ * Extract the +code suffix from recipient email addresses.
+ * E.g., "user+a3f2e1@example.com" → "a3f2e1"
+ * Returns null if no valid 6-char hex +suffix found in any recipient.
+ */
+export function extractRecipientCode(recipients: EmailAddress[]): string | null {
+  for (const r of recipients) {
+    const match = r.address.match(/\+([a-f0-9]{6})@/i);
+    if (match) return match[1].toLowerCase();
+  }
+  return null;
+}
 
 /**
  * Interface for the ImapPoller service
@@ -257,6 +272,23 @@ export class ImapPoller implements IImapPoller {
         console.log(`ImapPoller: Processing email - Subject: "${email.subject}" From: ${fromAddr}`);
 
         try {
+          // Per-user routing: extract +code from recipient addresses
+          const recipientCode = extractRecipientCode(email.to);
+          let routedUserId: string | undefined;
+
+          if (recipientCode) {
+            const userService = getUserService();
+            const user = await userService.getUserByInboundCode(recipientCode);
+            if (!user) {
+              console.log(`ImapPoller: Unknown inbound code "${recipientCode}", dropping email: ${email.messageId}`);
+              continue;
+            }
+            routedUserId = user.id;
+            console.log(`ImapPoller: Routed to user ${user.email} via code ${recipientCode}`);
+          } else {
+            console.log(`ImapPoller: No routing code in recipients, using default user`);
+          }
+
           // Check for duplicate by Message-ID - Requirement 7.5
           const existing = await this.threadTracker.getByMessageId(email.messageId);
           if (existing) {
@@ -266,7 +298,7 @@ export class ImapPoller implements IImapPoller {
 
           // Process the email
           if (this.processor) {
-            const success = await this.processor(email);
+            const success = await this.processor(email, routedUserId);
             if (success) {
               result.emailsProcessed++;
               console.log(`ImapPoller: Successfully processed email - Subject: "${email.subject}"`);

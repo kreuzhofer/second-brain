@@ -12,12 +12,14 @@
  * Requirements: 2.4, 2.5, 2.6, 9.1, 9.2, 9.3, 9.4
  */
 
-import { getEmailConfig, EmailConfig } from '../config/email';
+import { getEmailConfig, EmailConfig, getInboundEmailAddress } from '../config/email';
 import { getEmailParser, ParsedEmail } from './email-parser';
 import { getThreadTracker, ThreadTracker } from './thread-tracker';
 import { getSmtpSender, SmtpSender, SendEmailResult } from './smtp-sender';
 import { getConfirmationSender, ConfirmationSender } from './confirmation-sender';
 import { getImapPoller, ImapPoller, resetImapPoller } from './imap-poller';
+import { runWithUserId, requireUserId } from '../context/user-context';
+import { getUserService } from './user.service';
 import { getChatService, ChatService } from './chat.service';
 import { Category } from '../types/entry.types';
 
@@ -180,9 +182,16 @@ export class EmailService implements IEmailService {
   }
 
   /**
-   * Process inbound email and return boolean for ImapPoller callback
+   * Process inbound email and return boolean for ImapPoller callback.
+   * Wraps processing in user context when userId is provided (per-user routing).
    */
-  private async processEmailCallback(email: ParsedEmail): Promise<boolean> {
+  private async processEmailCallback(email: ParsedEmail, userId?: string): Promise<boolean> {
+    if (userId) {
+      return runWithUserId(userId, async () => {
+        const result = await this.processEmail(email);
+        return result.success;
+      });
+    }
     const result = await this.processEmail(email);
     return result.success;
   }
@@ -271,10 +280,23 @@ export class EmailService implements IEmailService {
         conversationId: chatResponse.conversationId,
       });
 
-      // 8. Send confirmation or clarification email
+      // 8. Resolve Reply-To address for per-user routing
+      let replyToAddress: string | undefined;
+      try {
+        const currentUserId = requireUserId();
+        const userService = getUserService();
+        const currentUser = await userService.getUserById(currentUserId);
+        if (currentUser?.inboundEmailCode) {
+          replyToAddress = getInboundEmailAddress(currentUser.inboundEmailCode) ?? undefined;
+        }
+      } catch {
+        // No user context available — skip Reply-To
+      }
+
+      // 9. Send confirmation or clarification email
       console.log(`EmailService: chatResponse.entry = ${JSON.stringify(chatResponse.entry)}`);
       console.log(`EmailService: chatResponse.message.content = ${chatResponse.message?.content?.substring(0, 100)}...`);
-      
+
       if (chatResponse.entry) {
         // Entry was created - send confirmation
         console.log(`EmailService: Sending confirmation for entry ${chatResponse.entry.name}`);
@@ -288,6 +310,7 @@ export class EmailService implements IEmailService {
             category: chatResponse.entry.category,
             confidence: chatResponse.entry.confidence,
           },
+          replyTo: replyToAddress,
         });
       } else if (chatResponse.message?.content) {
         // No entry created but LLM has a response (clarification needed)
@@ -298,7 +321,9 @@ export class EmailService implements IEmailService {
           `Re: ${email.subject} [SB-${threadId}]`,
           `${chatResponse.message.content}\n\n---\nThread ID: [SB-${threadId}]`,
           email.messageId,
-          [email.messageId]
+          [email.messageId],
+          undefined,
+          replyToAddress
         );
         if (!result.success) {
           console.error(`EmailService: Failed to send clarification email: ${result.error}`);

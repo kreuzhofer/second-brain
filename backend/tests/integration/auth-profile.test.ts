@@ -196,3 +196,24 @@ describe('PATCH /api/auth/password', () => {
       .expect(401);
   });
 });
+
+describe('GET /api/auth/inbound-email', () => {
+  it('returns inbound email address when user has code', async () => {
+    const res = await request(app)
+      .get('/api/auth/inbound-email')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    // User should have inboundEmailCode after resetDatabase backfill
+    // enabled may be false if IMAP env vars are not set in test env
+    expect(res.body).toHaveProperty('address');
+    expect(res.body).toHaveProperty('enabled');
+    expect(typeof res.body.enabled).toBe('boolean');
+  });
+
+  it('returns 401 without auth', async () => {
+    await request(app)
+      .get('/api/auth/inbound-email')
+      .expect(401);
+  });
+});

@@ -391,6 +391,8 @@ describe('ConfirmationSender', () => {
         expect.stringContaining('Re: My thought'),
         expect.stringContaining('Test Entry'),
         '<original-123@example.com>',
+        undefined,
+        undefined,
         undefined
       );
     });
@@ -435,7 +437,9 @@ describe('ConfirmationSender', () => {
         expect.any(String),
         expect.any(String),
         expect.any(String),
-        ['<ref1@example.com>', '<ref2@example.com>']
+        ['<ref1@example.com>', '<ref2@example.com>'],
+        undefined,
+        undefined
       );
     });
 
@@ -481,6 +485,28 @@ describe('ConfirmationSender', () => {
       const callArgs = (mockSmtpSender.sendReply as jest.Mock).mock.calls[0];
       const body = callArgs[2];
       expect(body).toContain('routed to your inbox due to low confidence');
+    });
+
+    it('passes replyTo to sendReply when provided', async () => {
+      const mockResult: SendEmailResult = { success: true };
+      (mockSmtpSender.sendReply as jest.Mock).mockResolvedValue(mockResult);
+
+      const paramsWithReplyTo = {
+        ...defaultParams,
+        replyTo: 'inbox+abc123@example.com',
+      };
+
+      await confirmationSender.sendConfirmation(paramsWithReplyTo);
+
+      expect(mockSmtpSender.sendReply).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.any(String),
+        expect.any(String),
+        undefined,
+        undefined,
+        'inbox+abc123@example.com'
+      );
     });
   });
 

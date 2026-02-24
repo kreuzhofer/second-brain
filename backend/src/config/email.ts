@@ -227,3 +227,18 @@ export function getEmailConfig(): EmailConfig {
 export function resetEmailConfig(): void {
   emailConfigInstance = null;
 }
+
+/**
+ * Build the per-user inbound email address from the user's code.
+ * Format: {local_part}+{code}@{domain}
+ * Returns null if IMAP is not configured.
+ */
+export function getInboundEmailAddress(code: string): string | null {
+  const config = getEmailConfig();
+  if (!config.imap) return null;
+  const imapUser = config.imap.user;
+  const domain = process.env.IMAP_INBOUND_DOMAIN || imapUser.split('@')[1];
+  const localPart = imapUser.split('@')[0];
+  if (!domain || !localPart) return null;
+  return `${localPart}+${code}@${domain}`;
+}

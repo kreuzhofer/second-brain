@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Loader2, User, KeyRound, Info } from 'lucide-react';
+import { X, Loader2, User, KeyRound, Info, Copy, Check, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/services/api';
@@ -44,6 +44,10 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailSuccess, setEmailSuccess] = useState(false);
 
+  // Inbound email state
+  const [inboundEmail, setInboundEmail] = useState<string | null>(null);
+  const [inboundCopied, setInboundCopied] = useState(false);
+
   // Password tab state
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -67,7 +71,13 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
       setConfirmPassword('');
       setPasswordError(null);
       setPasswordSuccess(false);
+      setInboundCopied(false);
       setActiveTab('profile');
+
+      // Fetch inbound email address
+      api.auth.inboundEmail()
+        .then((res) => setInboundEmail(res.address))
+        .catch(() => setInboundEmail(null));
     }
   }, [open, userName, userEmail]);
 
@@ -265,6 +275,44 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
                   {emailBusy && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
                   Save Email
                 </Button>
+              </div>
+
+              {/* Inbound Email Address */}
+              <hr />
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <Mail className="h-4 w-4" />
+                  Personal Inbound Email
+                </label>
+                {inboundEmail ? (
+                  <div className="flex items-center gap-2">
+                    <code className="text-sm bg-muted px-2 py-1 rounded flex-1 truncate">
+                      {inboundEmail}
+                    </code>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(inboundEmail);
+                        setInboundCopied(true);
+                        setTimeout(() => setInboundCopied(false), 2000);
+                      }}
+                    >
+                      {inboundCopied ? (
+                        <Check className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Email capture not configured.
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Send emails to this address to capture them as entries.
+                </p>
               </div>
             </div>
           )}

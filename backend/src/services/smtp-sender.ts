@@ -28,6 +28,7 @@ export interface SendEmailOptions {
   html?: string;
   inReplyTo?: string;
   references?: string[];
+  replyTo?: string;
 }
 
 /**
@@ -62,7 +63,8 @@ export interface ISmtpSender {
     text: string,
     originalMessageId: string,
     references?: string[],
-    html?: string
+    html?: string,
+    replyTo?: string
   ): Promise<SendEmailResult>;
 }
 
@@ -194,6 +196,10 @@ export class SmtpSender implements ISmtpSender {
         mailOptions.references = options.references;
       }
 
+      if (options.replyTo) {
+        mailOptions.replyTo = options.replyTo;
+      }
+
       const info = await this.transporter!.sendMail(mailOptions);
 
       return {
@@ -239,7 +245,8 @@ export class SmtpSender implements ISmtpSender {
     text: string,
     originalMessageId: string,
     references?: string[],
-    html?: string
+    html?: string,
+    replyTo?: string
   ): Promise<SendEmailResult> {
     // Build references array: include all previous references plus the original message
     const allReferences = references ? [...references] : [];
@@ -254,6 +261,7 @@ export class SmtpSender implements ISmtpSender {
       html,
       inReplyTo: originalMessageId,
       references: allReferences,
+      replyTo,
     });
   }
 }

@@ -3,6 +3,7 @@ import { getAuthService } from '../services/auth.service';
 import { getUserService } from '../services/user.service';
 import { authMiddleware } from '../middleware/auth';
 import { requireUserId } from '../context/user-context';
+import { getInboundEmailAddress } from '../config/email';
 
 export const authRouter = Router();
 
@@ -158,4 +159,20 @@ authRouter.patch('/password', authMiddleware, async (req: Request, res: Response
       res.status(400).json({ error: { code: 'UPDATE_FAILED', message } });
     }
   }
+});
+
+authRouter.get('/inbound-email', authMiddleware, async (_req: Request, res: Response) => {
+  const userId = requireUserId();
+  const userService = getUserService();
+  const user = await userService.getUserById(userId);
+  if (!user) {
+    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found.' } });
+    return;
+  }
+
+  const address = user.inboundEmailCode
+    ? getInboundEmailAddress(user.inboundEmailCode)
+    : null;
+
+  res.json({ address, enabled: address !== null });
 });

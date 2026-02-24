@@ -509,6 +509,9 @@ class ApiClient {
         body: JSON.stringify(payload),
       });
     },
+    inboundEmail: async (): Promise<{ address: string | null; enabled: boolean }> => {
+      return this.request<{ address: string | null; enabled: boolean }>('/auth/inbound-email');
+    },
   };
 
   /**

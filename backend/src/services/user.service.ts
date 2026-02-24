@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { getPrismaClient } from '../lib/prisma';
 import { setDefaultUserId } from '../context/user-context';
@@ -37,6 +38,13 @@ export class UserService {
           data: { passwordHash: await this.hashPassword(password), name }
         });
       }
+      // Backfill inbound email code for existing users
+      if (!existing.inboundEmailCode) {
+        await this.prisma.user.update({
+          where: { id: existing.id },
+          data: { inboundEmailCode: this.generateInboundEmailCode() }
+        });
+      }
       this.setDefaultUserId(existing.id);
       return { userId: existing.id, email };
     }
@@ -45,7 +53,8 @@ export class UserService {
       data: {
         email,
         name,
-        passwordHash: await this.hashPassword(password)
+        passwordHash: await this.hashPassword(password),
+        inboundEmailCode: this.generateInboundEmailCode()
       }
     });
 
@@ -59,7 +68,8 @@ export class UserService {
       data: {
         email: payload.email,
         name: payload.name ?? null,
-        passwordHash
+        passwordHash,
+        inboundEmailCode: this.generateInboundEmailCode()
       }
     });
   }
@@ -135,6 +145,14 @@ export class UserService {
     });
 
     this.setDefaultUserId(user.id);
+  }
+
+  async getUserByInboundCode(code: string) {
+    return this.prisma.user.findUnique({ where: { inboundEmailCode: code } });
+  }
+
+  generateInboundEmailCode(): string {
+    return crypto.randomBytes(3).toString('hex');
   }
 
   private async hashPassword(password: string): Promise<string> {

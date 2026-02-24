@@ -46,6 +46,8 @@ export interface SendConfirmationParams {
   entry: ConfirmationEntryInfo;
   /** Optional references for email threading */
   references?: string[];
+  /** Optional Reply-To address for per-user email routing */
+  replyTo?: string;
 }
 
 /**
@@ -171,7 +173,7 @@ export class ConfirmationSender implements IConfirmationSender {
    * @returns SendEmailResult with success status and messageId or error
    */
   async sendConfirmation(params: SendConfirmationParams): Promise<SendEmailResult> {
-    const { to, originalSubject, originalMessageId, threadId, entry, references } = params;
+    const { to, originalSubject, originalMessageId, threadId, entry, references, replyTo } = params;
 
     // Format the confirmation email
     const { subject, body } = this.formatConfirmationEmail(
@@ -187,7 +189,9 @@ export class ConfirmationSender implements IConfirmationSender {
       subject,
       body,
       originalMessageId,
-      references
+      references,
+      undefined,
+      replyTo
     );
   }
 }
