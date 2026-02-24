@@ -27,8 +27,7 @@ import {
 import {
   formatBlockTime,
   formatExpiresAt,
-  formatMinutes,
-  formatPlanRange
+  formatMinutes
 } from '@/components/calendar-panel-helpers';
 import {
   RefreshCw,
@@ -847,29 +846,9 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
         {activeTab === 'calendar' && (
           <div className="space-y-3">
             {calendarError && <p className="text-sm text-destructive">{calendarError}</p>}
-            {calendarPlan && (
-              <div className="rounded-md border border-border p-2.5 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Plan window</div>
-                    <div className="text-sm font-medium">{formatPlanRange(calendarPlan.startDate, calendarPlan.endDate)}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Total focus</div>
-                    <div className="text-sm font-medium">{formatMinutes(calendarPlan.totalMinutes)}</div>
-                  </div>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {calendarPlan.items.length} scheduled block(s)
-                </div>
-                <div className="text-[11px] text-muted-foreground">
-                  Generated {formatDate(calendarPlan.generatedAt)} | Rev {calendarPlan.revision}
-                </div>
-                {calendarPlan.warnings && calendarPlan.warnings.length > 0 && (
-                  <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-md px-2 py-1">
-                    {calendarPlan.warnings.length} item(s) could not be scheduled in this window.
-                  </div>
-                )}
+            {calendarPlan && calendarPlan.warnings && calendarPlan.warnings.length > 0 && (
+              <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-md px-2 py-1">
+                {calendarPlan.warnings.length} item(s) could not be scheduled in this window.
               </div>
             )}
 
