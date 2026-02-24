@@ -155,6 +155,21 @@ export class UserService {
     await this.prisma.user.update({ where: { id: userId }, data: { disabledAt: new Date() } });
   }
 
+  async getDigestEmail(userId: string): Promise<{ email: string | null; enabled: boolean }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error('User not found.');
+    return { email: user.digestEmail, enabled: user.digestEmailEnabled };
+  }
+
+  async updateDigestEmail(userId: string, data: { email?: string | null; enabled?: boolean }): Promise<{ email: string | null; enabled: boolean }> {
+    const updateData: { digestEmail?: string | null; digestEmailEnabled?: boolean } = {};
+    if (data.email !== undefined) updateData.digestEmail = data.email;
+    if (data.enabled !== undefined) updateData.digestEmailEnabled = data.enabled;
+
+    const user = await this.prisma.user.update({ where: { id: userId }, data: updateData });
+    return { email: user.digestEmail, enabled: user.digestEmailEnabled };
+  }
+
   async getUserByInboundCode(code: string) {
     return this.prisma.user.findUnique({ where: { inboundEmailCode: code } });
   }

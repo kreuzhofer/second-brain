@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Loader2, User, KeyRound, Shield, Copy, Check, Mail, Download } from 'lucide-react';
+import { X, Loader2, User, KeyRound, Shield, Copy, Check, Mail, Download, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/services/api';
@@ -57,6 +57,13 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
+  // Digest email state
+  const [digestEmail, setDigestEmail] = useState('');
+  const [digestEnabled, setDigestEnabled] = useState(false);
+  const [digestBusy, setDigestBusy] = useState(false);
+  const [digestError, setDigestError] = useState<string | null>(null);
+  const [digestSuccess, setDigestSuccess] = useState(false);
+
   // Account tab state
   const [exportBusy, setExportBusy] = useState(false);
   const [disablePassword, setDisablePassword] = useState('');
@@ -87,6 +94,17 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
       api.auth.inboundEmail()
         .then((res) => setInboundEmail(res.address))
         .catch(() => setInboundEmail(null));
+
+      // Fetch digest email settings
+      api.auth.digestEmail()
+        .then((res) => {
+          setDigestEmail(res.email ?? '');
+          setDigestEnabled(res.enabled);
+        })
+        .catch(() => {
+          setDigestEmail('');
+          setDigestEnabled(false);
+        });
     }
   }, [open, userName, userEmail]);
 
@@ -198,6 +216,32 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
       setExportBusy(false);
     }
   }, []);
+
+  const handleSaveDigest = useCallback(async () => {
+    if (digestEnabled && digestEmail) {
+      const trimmed = digestEmail.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        setDigestError('Please enter a valid email address.');
+        return;
+      }
+    }
+    setDigestBusy(true);
+    setDigestError(null);
+    setDigestSuccess(false);
+    try {
+      const result = await api.auth.updateDigestEmail({
+        email: digestEmail.trim() || null,
+        enabled: digestEnabled,
+      });
+      setDigestEmail(result.email ?? '');
+      setDigestEnabled(result.enabled);
+      setDigestSuccess(true);
+    } catch (err) {
+      setDigestError(err instanceof Error ? err.message : 'Failed to update digest email.');
+    } finally {
+      setDigestBusy(false);
+    }
+  }, [digestEmail, digestEnabled]);
 
   const handleDisable = useCallback(async () => {
     if (!disablePassword) {
@@ -359,6 +403,49 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
                 <p className="text-xs text-muted-foreground">
                   Send emails to this address to capture them as entries.
                 </p>
+              </div>
+
+              {/* Digest Email */}
+              <hr />
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <Send className="h-4 w-4" />
+                  Digest Email
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Receive daily digest and weekly review emails at a custom address.
+                </p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={digestEnabled}
+                    onChange={(e) => {
+                      setDigestEnabled(e.target.checked);
+                      setDigestSuccess(false);
+                      setDigestError(null);
+                    }}
+                    className="rounded"
+                  />
+                  Enable digest email delivery
+                </label>
+                {digestEnabled && (
+                  <Input
+                    type="email"
+                    value={digestEmail}
+                    onChange={(e) => {
+                      setDigestEmail(e.target.value);
+                      setDigestSuccess(false);
+                      setDigestError(null);
+                    }}
+                    placeholder={userEmail || 'you@example.com'}
+                  />
+                )}
+                {digestError && <p className="text-sm text-destructive">{digestError}</p>}
+                {digestSuccess && <p className="text-sm text-green-600 dark:text-green-400">Digest email updated.</p>}
+                <Button onClick={handleSaveDigest} disabled={digestBusy} size="sm">
+                  {digestBusy && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+                  Save Digest Settings
+                </Button>
               </div>
             </div>
           )}

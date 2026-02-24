@@ -254,8 +254,15 @@ export class CronService {
       // Generate content
       const content = await generator();
       
-      // Deliver via email if configured
-      const recipientEmail = this.config.DIGEST_RECIPIENT_EMAIL;
+      // Deliver via email if configured (per-user setting takes priority over global env var)
+      let recipientEmail = this.config.DIGEST_RECIPIENT_EMAIL;
+      const userId = getCurrentUserId();
+      if (userId) {
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (user?.digestEmailEnabled && user.digestEmail) {
+          recipientEmail = user.digestEmail;
+        }
+      }
       let emailSent = false;
       if (recipientEmail) {
         if (jobName === 'daily_digest') {

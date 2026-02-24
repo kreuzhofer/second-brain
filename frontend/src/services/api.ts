@@ -519,6 +519,15 @@ class ApiClient {
       if (!res.ok) throw new Error('Export failed');
       return res.blob();
     },
+    digestEmail: async (): Promise<{ email: string | null; enabled: boolean }> => {
+      return this.request<{ email: string | null; enabled: boolean }>('/auth/digest-email');
+    },
+    updateDigestEmail: async (payload: { email?: string | null; enabled?: boolean }): Promise<{ email: string | null; enabled: boolean }> => {
+      return this.request<{ email: string | null; enabled: boolean }>('/auth/digest-email', {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    },
     disableAccount: async (payload: { password: string }): Promise<{ disabled: boolean }> => {
       return this.request<{ disabled: boolean }>('/auth/disable', {
         method: 'POST',

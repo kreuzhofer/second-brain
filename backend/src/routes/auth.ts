@@ -185,6 +185,41 @@ authRouter.get('/inbound-email', authMiddleware, async (_req: Request, res: Resp
   res.json({ address, enabled: address !== null });
 });
 
+authRouter.get('/digest-email', authMiddleware, async (_req: Request, res: Response) => {
+  const userId = requireUserId();
+  const userService = getUserService();
+  try {
+    const result = await userService.getDigestEmail(userId);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({
+      error: { code: 'FETCH_FAILED', message: error instanceof Error ? error.message : 'Failed to fetch digest email.' }
+    });
+  }
+});
+
+authRouter.patch('/digest-email', authMiddleware, async (req: Request, res: Response) => {
+  const { email, enabled } = req.body as { email?: string; enabled?: boolean };
+
+  if (email !== undefined && email !== null) {
+    if (typeof email !== 'string' || !isValidEmail(email)) {
+      res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Email is invalid.' } });
+      return;
+    }
+  }
+
+  const userId = requireUserId();
+  const userService = getUserService();
+  try {
+    const result = await userService.updateDigestEmail(userId, { email, enabled });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({
+      error: { code: 'UPDATE_FAILED', message: error instanceof Error ? error.message : 'Update failed.' }
+    });
+  }
+});
+
 authRouter.get('/export', authMiddleware, async (_req: Request, res: Response) => {
   const userId = requireUserId();
   const prisma = getPrismaClient();

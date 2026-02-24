@@ -48,7 +48,9 @@ async function ensureTestUser(): Promise<void> {
       email: TEST_USER_EMAIL,
       name: 'Test User',
       passwordHash: await bcrypt.hash(TEST_USER_PASSWORD, 10),
-      disabledAt: null
+      disabledAt: null,
+      digestEmail: null,
+      digestEmailEnabled: false
     }
   });
 

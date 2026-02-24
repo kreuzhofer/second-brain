@@ -8,6 +8,8 @@ import { getDigestService } from '../services/digest.service';
 import { getDigestPreferencesService, DigestPreferences } from '../services/digest-preferences.service';
 import { Category } from '../types/entry.types';
 import { getConfig } from '../config/env';
+import { getCurrentUserId } from '../context/user-context';
+import { getPrismaClient } from '../lib/prisma';
 
 export const digestRouter = Router();
 
@@ -92,13 +94,24 @@ digestRouter.get('/', async (req: Request, res: Response) => {
     }
 
     let emailSent = false;
-    
+
+    // Determine recipient: per-user setting takes priority over global env var
+    let recipientEmail = config.DIGEST_RECIPIENT_EMAIL;
+    const userId = getCurrentUserId();
+    if (userId) {
+      const prisma = getPrismaClient();
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (user?.digestEmailEnabled && user.digestEmail) {
+        recipientEmail = user.digestEmail;
+      }
+    }
+
     // Send via email if requested and configured
-    if (send === 'true' && config.DIGEST_RECIPIENT_EMAIL) {
+    if (send === 'true' && recipientEmail) {
       if (type === 'daily') {
-        emailSent = await digestService.deliverDailyDigestToEmail(config.DIGEST_RECIPIENT_EMAIL, content);
+        emailSent = await digestService.deliverDailyDigestToEmail(recipientEmail, content);
       } else {
-        emailSent = await digestService.deliverWeeklyReviewToEmail(config.DIGEST_RECIPIENT_EMAIL, content);
+        emailSent = await digestService.deliverWeeklyReviewToEmail(recipientEmail, content);
       }
     }
 
@@ -106,7 +119,7 @@ digestRouter.get('/', async (req: Request, res: Response) => {
       type,
       content,
       generatedAt: new Date().toISOString(),
-      ...(send === 'true' && { emailSent, recipientEmail: config.DIGEST_RECIPIENT_EMAIL })
+      ...(send === 'true' && { emailSent, recipientEmail })
     });
   } catch (error) {
     console.error('Digest generation failed:', error);

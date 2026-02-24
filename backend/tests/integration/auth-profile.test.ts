@@ -245,6 +245,87 @@ describe('GET /api/auth/export', () => {
   });
 });
 
+describe('GET /api/auth/digest-email', () => {
+  it('returns defaults (null email, disabled)', async () => {
+    const res = await request(app)
+      .get('/api/auth/digest-email')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(res.body.email).toBeNull();
+    expect(res.body.enabled).toBe(false);
+  });
+
+  it('returns 401 without auth', async () => {
+    await request(app)
+      .get('/api/auth/digest-email')
+      .expect(401);
+  });
+});
+
+describe('PATCH /api/auth/digest-email', () => {
+  it('updates email and enabled', async () => {
+    const res = await request(app)
+      .patch('/api/auth/digest-email')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ email: 'digest@example.com', enabled: true })
+      .expect(200);
+
+    expect(res.body.email).toBe('digest@example.com');
+    expect(res.body.enabled).toBe(true);
+  });
+
+  it('persists changes across requests', async () => {
+    await request(app)
+      .patch('/api/auth/digest-email')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ email: 'digest2@example.com', enabled: true })
+      .expect(200);
+
+    const res = await request(app)
+      .get('/api/auth/digest-email')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(res.body.email).toBe('digest2@example.com');
+    expect(res.body.enabled).toBe(true);
+  });
+
+  it('rejects invalid email', async () => {
+    await request(app)
+      .patch('/api/auth/digest-email')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ email: 'not-valid', enabled: true })
+      .expect(400);
+  });
+
+  it('allows disabling without changing email', async () => {
+    // First enable
+    await request(app)
+      .patch('/api/auth/digest-email')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ email: 'digest@example.com', enabled: true })
+      .expect(200);
+
+    // Then disable
+    const res = await request(app)
+      .patch('/api/auth/digest-email')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ enabled: false })
+      .expect(200);
+
+    expect(res.body.email).toBe('digest@example.com');
+    expect(res.body.enabled).toBe(false);
+  });
+
+  it('returns 401 without auth', async () => {
+    await request(app)
+      .patch('/api/auth/digest-email')
+      .send({ email: 'test@example.com', enabled: true })
+      .expect(401);
+  });
+});
+
 describe('POST /api/auth/disable', () => {
   it('disables account with correct password', async () => {
     const res = await request(app)
