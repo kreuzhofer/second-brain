@@ -38,6 +38,10 @@ services:
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
       - FOCUS_MUSIC_SEARCH_TERMS=${FOCUS_MUSIC_SEARCH_TERMS:-}
       - FOCUS_MUSIC_RESULTS_LIMIT=${FOCUS_MUSIC_RESULTS_LIMIT:-}
+      # Web Push notifications (optional)
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
+      - VAPID_SUBJECT=${VAPID_SUBJECT:-}
     depends_on:
       db:
         condition: service_healthy
