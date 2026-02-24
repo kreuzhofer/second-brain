@@ -16,6 +16,7 @@ import { queueRouter } from './routes/queue';
 import { focusRouter } from './routes/focus';
 import { calendarRouter, calendarPublicRouter } from './routes/calendar';
 import { insightsRouter } from './routes/insights';
+import { pushRouter } from './routes/push';
 import { initializeDataFolder, initializeEmailChannel, shutdownEmailChannel } from './services/init.service';
 import { getCronService, resetCronService } from './services/cron.service';
 import { getOfflineQueueService } from './services/offline-queue.service';
@@ -51,6 +52,7 @@ app.use('/api/queue', authMiddleware, queueRouter);
 app.use('/api/focus', authMiddleware, focusRouter);
 app.use('/api/calendar', authMiddleware, calendarRouter);
 app.use('/api/insights', authMiddleware, insightsRouter);
+app.use('/api/push', authMiddleware, pushRouter);
 
 // Serve frontend static files in production
 if (process.env.NODE_ENV === 'production') {

@@ -14,6 +14,7 @@ import { MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEntries } from '@/state/entries';
 import { buildTaskCaptureAction } from './chat-capture-helpers';
+import { PushToggle } from './PushToggle';
 
 interface ChatUIProps {
   onEntryClick: (path: string) => void;
@@ -130,13 +131,16 @@ export function ChatUI({ onEntryClick, onStartFocus, className }: ChatUIProps) {
             <MessageSquare className="h-5 w-5" />
             <CardTitle className="text-base sm:text-lg">Chat</CardTitle>
           </div>
-          <button
-            onClick={handleNewConversation}
-            disabled={isLoading || isResettingConversation}
-            className="min-h-[44px] px-2 text-sm text-muted-foreground hover:text-foreground flex items-center"
-          >
-            New conversation
-          </button>
+          <div className="flex items-center">
+            <PushToggle />
+            <button
+              onClick={handleNewConversation}
+              disabled={isLoading || isResettingConversation}
+              className="min-h-[44px] px-2 text-sm text-muted-foreground hover:text-foreground flex items-center"
+            >
+              New conversation
+            </button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">

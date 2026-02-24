@@ -10,6 +10,8 @@ import { getPrismaClient } from '../lib/prisma';
 import { getCalendarService } from './calendar.service';
 import { DigestService, getDigestService } from './digest.service';
 import { ProactiveService, getProactiveService } from './proactive.service';
+import { PushNotificationService, getPushNotificationService } from './push-notification.service';
+import { getCurrentUserId } from '../context/user-context';
 
 // ============================================
 // Types
@@ -92,12 +94,14 @@ export class CronService {
   private runningJobs: Set<string> = new Set();
   private digestService: DigestService;
   private proactiveService: ProactiveService;
+  private pushService: PushNotificationService;
   private prisma = getPrismaClient();
   private config = getConfig();
 
   constructor(digestService?: DigestService, proactiveService?: ProactiveService) {
     this.digestService = digestService || getDigestService();
     this.proactiveService = proactiveService || getProactiveService();
+    this.pushService = getPushNotificationService();
   }
 
   /**
@@ -367,7 +371,18 @@ export class CronService {
       
       // Deliver to chat and update CronJobRun with content (Requirement 6.2)
       await this.proactiveService.deliverToChat(content);
-      
+
+      // Send push notification (best-effort, don't fail the job)
+      try {
+        const payload = PushNotificationService.buildPayloadFromContent(jobName, content);
+        const userId = getCurrentUserId();
+        if (userId) {
+          await this.pushService.sendToUser(userId, payload);
+        }
+      } catch (pushError) {
+        console.error(`Push notification failed for job ${jobName}:`, pushError);
+      }
+
       await this.prisma.cronJobRun.update({
         where: { id: cronJobRun.id },
         data: {

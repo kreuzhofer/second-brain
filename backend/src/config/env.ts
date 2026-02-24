@@ -69,6 +69,11 @@ export interface EnvConfig {
   // Entry revision retention
   ENTRY_REVISION_MAX_PER_ENTRY: number;
   ENTRY_REVISION_MAX_DAYS?: number;
+
+  // Web Push Notifications (optional)
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
 }
 
 /**
@@ -346,7 +351,12 @@ export function loadEnvConfig(): EnvConfig {
     OFFLINE_QUEUE_MAX_ATTEMPTS: offlineMaxAttempts,
     OFFLINE_QUEUE_DEDUPE_TTL_HOURS: offlineDedupeTtl,
     ENTRY_REVISION_MAX_PER_ENTRY: revisionMaxPerEntry,
-    ENTRY_REVISION_MAX_DAYS: revisionMaxDays
+    ENTRY_REVISION_MAX_DAYS: revisionMaxDays,
+
+    // Web Push Notifications
+    VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || undefined,
+    VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || undefined,
+    VAPID_SUBJECT: process.env.VAPID_SUBJECT || (process.env.DEFAULT_USER_EMAIL ? `mailto:${process.env.DEFAULT_USER_EMAIL}` : undefined),
   };
 }
 

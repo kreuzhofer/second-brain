@@ -78,6 +78,7 @@ This is the canonical roadmap document for current MVP progress and next-level f
 - Calendar board view (Outlook-style): Completed (multi-day grid with configurable columns, busy-block overlay with source colors, task check-off from board, list/board view toggle)
 - Post-capture task-start CTA phase 1: Completed (task-only `Start 5 minutes now` action from capture responses, Deep Focus preloaded to 5 minutes)
 - Voice capture phase 1: Completed (chat push-to-talk + Whisper transcription endpoint)
+- Smart nudges phase 1: Completed (stale project detection, follow-up reminders, inactivity nudges — all cron-scheduled, chat-delivered, property-tested)
 
 ## Notes
 - Prioritize backend-first slices where possible.
@@ -93,47 +94,13 @@ See [`.local.security-report.md`](.local.security-report.md) for a comprehensive
 ## Next-Level Backlog (Unified)
 
 ### Priority Next (Execution Momentum, Procrastination-First)
-1. Smart nudges based on deadlines, inactivity, and priority decay.
-2. Browser extension for one-click capture with URL metadata.
-3. Mobile PWA with offline-first capture queue.
+1. Mobile PWA with offline-first capture queue.
+2. Smart nudges phase 2 (deadline-based reminders, priority decay — see below).
 
 ### AI Handoff: Next Thing To Implement
 This section is the execution contract for any coding agent.
 
-Implement this next: **Smart Nudges (Phase 1)**.
-
-Problem to solve:
-- Users lose momentum when tasks linger without reminders or decay.
-- Manual review is inconsistent; nudges should surface timely prompts.
-- Nudges should prioritize deadlines, inactivity, and priority decay without becoming noisy.
-
-In scope:
-1. Nudge rules:
-- Identify candidates based on deadline proximity, inactivity, and priority decay.
-- Define simple score/thresholds for surfacing.
-2. Delivery path:
-- Include nudges in daily digest and optionally in app UI (non-blocking).
-3. Preferences:
-- Allow opt-in/out and cap per day.
-4. Guardrails:
-- Avoid repeated nudges for the same item within a short window.
-
-Out of scope (Phase 1):
-- Complex ML ranking.
-- Push notification infrastructure.
-- New capture flows.
-
-Implementation references:
-- Digest pipeline and formatting: `backend/src/services/digest.service.ts`.
-- Preferences API: `backend/src/routes/preferences.route.ts`.
-- Focus/task data sources: `backend/src/services/entry.service.ts`.
-
-Acceptance criteria:
-1. Nudges appear in daily digest with clear, concise prompts.
-2. Nudge selection respects deadline proximity, inactivity, and priority decay.
-3. Preferences allow disabling or capping nudges.
-4. No duplicate nudges for the same item within the cooldown window.
-5. Tests cover candidate selection and suppression logic.
+_(No item currently queued. Pick from Priority Next or the backlog below.)_
 
 ### Admin -> Task Migration Plan (Phases 1-3)
 1. Phase 1 (DB migration, additive + backfill):
@@ -173,11 +140,12 @@ Acceptance criteria:
 - Full mobile UI optimization for the current feature set (responsive layout, touch-first navigation).
 - Voice capture (Whisper) with push-to-talk in chat input. (Completed phase 1)
 - Mobile PWA with offline-first capture queue.
-- Browser extension for one-click capture with URL metadata. (Priority next)
 
 ### Proactive and Scheduling
 - Calendar integration (pre-meeting context surfacing).
-- Smart nudges based on deadlines, inactivity, and priority decay.
+- Smart nudges phase 1 (partially completed — see status below):
+  - **Done**: Stale project detection (14-day threshold, cron-scheduled), follow-up reminders for people entries (cron-scheduled), inactivity nudges (3-day threshold, cron-scheduled). All delivered to chat via proactive service. Configurable via env vars (`STALE_DAYS`, `INACTIVITY_DAYS`, schedule times). Property tests in place.
+  - **Not yet implemented**: Deadline-based reminders (nudge when task due dates approach), priority decay (auto-deprioritize tasks that sit unworked), frontend notification badges/toasts (currently chat-only delivery).
 - Adaptive digests (user preferences, length caps, focus areas).
 - Stale-project lifecycle with archive/hibernate automation.
 

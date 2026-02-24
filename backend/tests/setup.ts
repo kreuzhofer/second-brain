@@ -58,6 +58,7 @@ export async function resetDatabase(): Promise<void> {
     throw new Error('resetDatabase can only run when NODE_ENV is "test"');
   }
   await prisma.$transaction([
+    prisma.pushSubscription.deleteMany(),
     prisma.calendarBusyBlock.deleteMany(),
     prisma.calendarSource.deleteMany(),
     prisma.calendarSettings.deleteMany(),
