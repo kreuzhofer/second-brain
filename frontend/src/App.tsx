@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Zap, Search, Target, MessageSquare } from 'lucide-react';
+import { Search, Target, MessageSquare } from 'lucide-react';
 import { ChatUI } from '@/components/chat';
 import { EntryModal } from '@/components/EntryModal';
 import { DeepFocusView } from '@/components/DeepFocusView';
@@ -120,7 +120,9 @@ function App() {
         <div className={APP_SHELL_CLASSES.headerInner}>
           <div className={APP_SHELL_CLASSES.headerRow}>
             <div className={APP_SHELL_CLASSES.brandWrap}>
-              <Zap className="h-6 w-6 sm:h-8 sm:w-8 text-primary shrink-0" />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6 sm:h-8 sm:w-8 shrink-0">
+                <path d="M13 1L5 14h6l-2 9 10-14h-6z" fill="#4f46e5" />
+              </svg>
               <h1 className={APP_SHELL_CLASSES.brandTitle}>
                 JustDo.so
               </h1>
