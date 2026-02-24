@@ -1,5 +1,5 @@
 /**
- * Service Worker for Second Brain
+ * Service Worker for JustDo.so
  * Handles push notification display and click events.
  * Scoped to proactive nudges only.
  */
@@ -21,15 +21,15 @@ self.addEventListener('push', (event) => {
   const options = {
     body: body || '',
     tag: tag || 'second-brain',
-    icon: '/brain.svg',
-    badge: '/brain.svg',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     data: { url: url || '/' },
     // Don't re-buzz if same tag already showing (replace silently)
     renotify: false
   };
 
   event.waitUntil(
-    self.registration.showNotification(title || 'Second Brain', options)
+    self.registration.showNotification(title || 'JustDo.so', options)
   );
 });
 
