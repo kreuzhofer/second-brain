@@ -18,6 +18,7 @@ import { getEmailConfig, EmailConfig } from '../config/email';
 import { getEmailParser, ParsedEmail, EmailAddress } from './email-parser';
 import { getThreadTracker } from './thread-tracker';
 import { getUserService } from './user.service';
+import { getSmtpSender } from './smtp-sender';
 
 // ============================================
 // Types and Interfaces
@@ -286,7 +287,30 @@ export class ImapPoller implements IImapPoller {
             routedUserId = user.id;
             console.log(`ImapPoller: Routed to user ${user.email} via code ${recipientCode}`);
           } else {
-            console.log(`ImapPoller: No routing code in recipients, using default user`);
+            // No routing code — send auto-reply informing sender, then drop
+            const senderAddress = email.from?.address;
+            if (senderAddress) {
+              const smtpSender = getSmtpSender();
+              if (smtpSender.isAvailable()) {
+                const replySubject = `Re: ${email.subject}`;
+                const replyText = [
+                  'Your email could not be delivered because it was sent without a personal routing code.',
+                  '',
+                  'To send emails to this system, please use your personal inbound email address which includes a +code suffix (e.g., inbox+abc123@example.com).',
+                  'You can find your personal inbound email address in your profile settings.',
+                  '',
+                  'This is an automated message. Please do not reply.',
+                ].join('\n');
+                try {
+                  await smtpSender.sendReply(senderAddress, replySubject, replyText, email.messageId);
+                  console.log(`ImapPoller: Sent missing-code auto-reply to ${senderAddress}`);
+                } catch (replyErr) {
+                  console.error(`ImapPoller: Failed to send missing-code auto-reply to ${senderAddress}:`, replyErr);
+                }
+              }
+            }
+            console.log(`ImapPoller: No routing code in recipients, dropping email: ${email.messageId}`);
+            continue;
           }
 
           // Check for duplicate by Message-ID - Requirement 7.5

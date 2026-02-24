@@ -48,7 +48,35 @@ jest.mock('../../../src/services/thread-tracker', () => ({
   }),
 }));
 
+jest.mock('../../../src/services/smtp-sender', () => {
+  const sendReply = jest.fn().mockResolvedValue({ success: true, messageId: 'reply-1' });
+  const isAvailable = jest.fn().mockReturnValue(true);
+  return {
+    getSmtpSender: jest.fn().mockReturnValue({
+      sendReply,
+      isAvailable,
+      sendEmail: jest.fn(),
+      verify: jest.fn(),
+    }),
+    __mockSendReply: sendReply,
+    __mockIsAvailable: isAvailable,
+  };
+});
+
+jest.mock('../../../src/services/user.service', () => ({
+  getUserService: jest.fn().mockReturnValue({
+    getUserByInboundCode: jest.fn().mockResolvedValue(null),
+  }),
+}));
+
 import { getEmailConfig } from '../../../src/config/email';
+
+// Get references to hoisted mock fns
+const { __mockSendReply: mockSendReply, __mockIsAvailable: mockIsAvailable } =
+  jest.requireMock('../../../src/services/smtp-sender') as {
+    __mockSendReply: jest.Mock;
+    __mockIsAvailable: jest.Mock;
+  };
 
 describe('ImapPoller', () => {
   beforeEach(() => {
@@ -283,6 +311,110 @@ describe('ImapPoller', () => {
       expect(typeof result.emailsFound).toBe('number');
       expect(typeof result.emailsProcessed).toBe('number');
       expect(Array.isArray(result.errors)).toBe(true);
+    });
+  });
+
+  describe('no-code auto-reply and drop', () => {
+    const makeEmail = (from: string, to: string, subject = 'Test') => ({
+      messageId: '<test-msg-1@example.com>',
+      subject,
+      from: { address: from },
+      to: [{ address: to }],
+      date: new Date('2026-01-01'),
+      text: 'Hello',
+      html: '',
+      cc: [],
+      attachments: [],
+    });
+
+    it('should send auto-reply and drop email when no routing code', async () => {
+      mockConfiguredConfig();
+      const poller = new ImapPoller();
+      const processor: EmailProcessor = jest.fn().mockResolvedValue(true);
+      poller.setProcessor(processor);
+
+      // Mock fetchUnseenEmails to return an email without +code
+      const email = makeEmail('sender@external.com', 'inbox@example.com');
+      jest.spyOn(poller as any, 'fetchUnseenEmails').mockResolvedValue([email]);
+      mockSendReply.mockClear();
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const result = await poller.pollNow();
+      consoleSpy.mockRestore();
+
+      // Should NOT have processed via the normal processor
+      expect(processor).not.toHaveBeenCalled();
+      expect(result.emailsProcessed).toBe(0);
+
+      // Should have sent auto-reply
+      expect(mockSendReply).toHaveBeenCalledTimes(1);
+      expect(mockSendReply).toHaveBeenCalledWith(
+        'sender@external.com',
+        'Re: Test',
+        expect.stringContaining('personal routing code'),
+        '<test-msg-1@example.com>',
+      );
+    });
+
+    it('should not send auto-reply when SMTP is unavailable', async () => {
+      mockConfiguredConfig();
+      const poller = new ImapPoller();
+      const processor: EmailProcessor = jest.fn().mockResolvedValue(true);
+      poller.setProcessor(processor);
+
+      const email = makeEmail('sender@external.com', 'inbox@example.com');
+      jest.spyOn(poller as any, 'fetchUnseenEmails').mockResolvedValue([email]);
+      mockSendReply.mockClear();
+      mockIsAvailable.mockReturnValueOnce(false);
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      await poller.pollNow();
+      consoleSpy.mockRestore();
+
+      expect(mockSendReply).not.toHaveBeenCalled();
+      expect(processor).not.toHaveBeenCalled();
+    });
+
+    it('should still drop email even if auto-reply fails', async () => {
+      mockConfiguredConfig();
+      const poller = new ImapPoller();
+      const processor: EmailProcessor = jest.fn().mockResolvedValue(true);
+      poller.setProcessor(processor);
+
+      const email = makeEmail('sender@external.com', 'inbox@example.com');
+      jest.spyOn(poller as any, 'fetchUnseenEmails').mockResolvedValue([email]);
+      mockSendReply.mockClear();
+      mockSendReply.mockRejectedValueOnce(new Error('SMTP down'));
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const result = await poller.pollNow();
+      consoleSpy.mockRestore();
+      errorSpy.mockRestore();
+
+      // Email should be dropped regardless
+      expect(processor).not.toHaveBeenCalled();
+      expect(result.emailsProcessed).toBe(0);
+    });
+
+    it('should log drop message with messageId', async () => {
+      mockConfiguredConfig();
+      const poller = new ImapPoller();
+      poller.setProcessor(jest.fn().mockResolvedValue(true));
+
+      const email = makeEmail('sender@external.com', 'inbox@example.com');
+      jest.spyOn(poller as any, 'fetchUnseenEmails').mockResolvedValue([email]);
+      mockSendReply.mockClear();
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      await poller.pollNow();
+
+      const dropLog = consoleSpy.mock.calls.find(
+        (args) => typeof args[0] === 'string' && args[0].includes('dropping email')
+      );
+      expect(dropLog).toBeDefined();
+      expect(dropLog![0]).toContain('<test-msg-1@example.com>');
+      consoleSpy.mockRestore();
     });
   });
 });
