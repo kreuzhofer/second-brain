@@ -1,4 +1,4 @@
-import { Settings, Monitor, Sun, Moon, LogOut } from 'lucide-react';
+import { Settings, Monitor, Sun, Moon, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -15,9 +15,10 @@ import { useTheme, type Theme } from '@/hooks/use-theme';
 interface UserSettingsMenuProps {
   userEmail: string;
   onLogout: () => void;
+  onOpenProfile: () => void;
 }
 
-export function UserSettingsMenu({ userEmail, onLogout }: UserSettingsMenuProps) {
+export function UserSettingsMenu({ userEmail, onLogout, onOpenProfile }: UserSettingsMenuProps) {
   const { theme, setTheme } = useTheme();
 
   return (
@@ -31,6 +32,10 @@ export function UserSettingsMenu({ userEmail, onLogout }: UserSettingsMenuProps)
         <DropdownMenuLabel className="font-normal text-xs text-muted-foreground truncate">
           {userEmail}
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onOpenProfile}>
+          <User className="h-4 w-4 mr-2" /> Profile
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs font-medium">Theme</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as Theme)}>

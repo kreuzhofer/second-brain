@@ -76,6 +76,29 @@ export class UserService {
     return bcrypt.compare(password, passwordHash);
   }
 
+  async updateName(userId: string, name: string) {
+    return this.prisma.user.update({ where: { id: userId }, data: { name } });
+  }
+
+  async updateEmail(userId: string, newEmail: string, currentPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error('User not found.');
+    const valid = await this.verifyPassword(currentPassword, user.passwordHash);
+    if (!valid) throw new Error('Current password is incorrect.');
+    const existing = await this.prisma.user.findUnique({ where: { email: newEmail } });
+    if (existing && existing.id !== userId) throw new Error('Email already in use.');
+    return this.prisma.user.update({ where: { id: userId }, data: { email: newEmail } });
+  }
+
+  async updatePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error('User not found.');
+    const valid = await this.verifyPassword(currentPassword, user.passwordHash);
+    if (!valid) throw new Error('Current password is incorrect.');
+    const hash = await this.hashPassword(newPassword);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash: hash } });
+  }
+
   async backfillUserIds(userId: string): Promise<void> {
     await this.prisma.$transaction([
       this.prisma.entry.updateMany({ where: { userId: null }, data: { userId } }),

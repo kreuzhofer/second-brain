@@ -46,7 +46,8 @@ async function ensureTestUser(): Promise<void> {
     },
     update: {
       email: TEST_USER_EMAIL,
-      name: 'Test User'
+      name: 'Test User',
+      passwordHash: await bcrypt.hash(TEST_USER_PASSWORD, 10)
     }
   });
 

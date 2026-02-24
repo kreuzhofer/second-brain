@@ -9,6 +9,7 @@ import { DeepFocusView } from '@/components/DeepFocusView';
 import { SearchPanel } from '@/components/SearchPanel';
 import { FocusPanel } from '@/components/FocusPanel';
 import { UserSettingsMenu } from '@/components/UserSettingsMenu';
+import { ProfileModal } from '@/components/ProfileModal';
 import { api, EntryWithPath } from '@/services/api';
 import { EntriesProvider } from '@/state/entries';
 import { APP_SHELL_CLASSES, getMobileNavButtonClass } from '@/components/layout-shell-helpers';
@@ -30,6 +31,8 @@ function App() {
   const [mobilePanel, setMobilePanel] = useState<'focus' | 'chat'>('focus');
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [userName, setUserName] = useState('');
+  const [profileOpen, setProfileOpen] = useState(false);
 
   // Check authentication when token changes
   useEffect(() => {
@@ -48,6 +51,7 @@ function App() {
       const user = await api.auth.me();
       setIsAuthenticated(true);
       setUserEmail(user.email);
+      setUserName(user.name ?? '');
       setAuthError(null);
     } catch (err) {
       setIsAuthenticated(false);
@@ -93,6 +97,7 @@ function App() {
     setAuthToken('');
     setIsAuthenticated(false);
     setUserEmail('');
+    setUserName('');
   };
 
   const handleEntryClick = (path: string) => {
@@ -153,7 +158,7 @@ function App() {
                 >
                   <Search className="h-5 w-5" />
                 </Button>
-                <UserSettingsMenu userEmail={userEmail} onLogout={handleLogout} />
+                <UserSettingsMenu userEmail={userEmail} onLogout={handleLogout} onOpenProfile={() => setProfileOpen(true)} />
               </div>
             )}
           </div>
@@ -280,6 +285,16 @@ function App() {
               onEntryClick={handleEntryClick}
             />
             <DeepFocusView entry={focusEntry} onClose={handleCloseFocus} initialMinutes={focusInitialMinutes} />
+            <ProfileModal
+              open={profileOpen}
+              userEmail={userEmail}
+              userName={userName}
+              onClose={() => setProfileOpen(false)}
+              onProfileUpdate={(user) => {
+                setUserEmail(user.email);
+                setUserName(user.name);
+              }}
+            />
           </EntriesProvider>
         )}
       </main>

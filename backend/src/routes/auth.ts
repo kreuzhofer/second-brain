@@ -82,3 +82,80 @@ authRouter.get('/me', authMiddleware, async (_req: Request, res: Response) => {
   }
   res.json({ id: user.id, email: user.email, name: user.name });
 });
+
+authRouter.patch('/profile', authMiddleware, async (req: Request, res: Response) => {
+  const { name } = req.body as { name?: string };
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Name is required.' } });
+    return;
+  }
+  if (name.length > 100) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Name must be 100 characters or less.' } });
+    return;
+  }
+
+  const userId = requireUserId();
+  const userService = getUserService();
+  try {
+    const user = await userService.updateName(userId, name.trim());
+    res.json({ id: user.id, email: user.email, name: user.name });
+  } catch (error) {
+    res.status(400).json({
+      error: { code: 'UPDATE_FAILED', message: error instanceof Error ? error.message : 'Update failed.' }
+    });
+  }
+});
+
+authRouter.patch('/email', authMiddleware, async (req: Request, res: Response) => {
+  const { email, password } = req.body as { email?: string; password?: string };
+  if (!email || !password) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Email and current password are required.' } });
+    return;
+  }
+  if (!isValidEmail(email)) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Email is invalid.' } });
+    return;
+  }
+
+  const userId = requireUserId();
+  const userService = getUserService();
+  try {
+    const user = await userService.updateEmail(userId, email, password);
+    res.json({ id: user.id, email: user.email, name: user.name });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Update failed.';
+    if (message === 'Current password is incorrect.') {
+      res.status(401).json({ error: { code: 'UNAUTHORIZED', message } });
+    } else if (message === 'Email already in use.') {
+      res.status(409).json({ error: { code: 'CONFLICT', message } });
+    } else {
+      res.status(400).json({ error: { code: 'UPDATE_FAILED', message } });
+    }
+  }
+});
+
+authRouter.patch('/password', authMiddleware, async (req: Request, res: Response) => {
+  const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Current password and new password are required.' } });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'New password must be at least 8 characters.' } });
+    return;
+  }
+
+  const userId = requireUserId();
+  const userService = getUserService();
+  try {
+    await userService.updatePassword(userId, currentPassword, newPassword);
+    res.status(204).send();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Update failed.';
+    if (message === 'Current password is incorrect.') {
+      res.status(401).json({ error: { code: 'UNAUTHORIZED', message } });
+    } else {
+      res.status(400).json({ error: { code: 'UPDATE_FAILED', message } });
+    }
+  }
+});

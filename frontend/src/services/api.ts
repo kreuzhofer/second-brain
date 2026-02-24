@@ -491,6 +491,24 @@ class ApiClient {
     me: async (): Promise<AuthUser> => {
       return this.request<AuthUser>('/auth/me');
     },
+    updateProfile: async (payload: { name: string }): Promise<AuthUser> => {
+      return this.request<AuthUser>('/auth/profile', {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    },
+    updateEmail: async (payload: { email: string; password: string }): Promise<AuthUser> => {
+      return this.request<AuthUser>('/auth/email', {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    },
+    updatePassword: async (payload: { currentPassword: string; newPassword: string }): Promise<void> => {
+      await this.request<void>('/auth/password', {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    },
   };
 
   /**
