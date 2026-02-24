@@ -95,14 +95,65 @@ See [`.local.security-report.md`](.local.security-report.md) for a comprehensive
 
 ## Next-Level Backlog (Unified)
 
-### Priority Next (Execution Momentum, Procrastination-First)
-1. Mobile PWA with offline-first capture queue.
-2. Smart nudges phase 2 (deadline-based reminders, priority decay — see below).
+### Priority Next
+1. **User Profile & Account Management** (see spec below)
+2. Mobile PWA with offline-first capture queue.
+3. Smart nudges phase 2 (deadline-based reminders, priority decay — see below).
 
 ### AI Handoff: Next Thing To Implement
 This section is the execution contract for any coding agent.
 
 _(No item currently queued. Pick from Priority Next or the backlog below.)_
+
+### User Profile & Account Management Spec
+
+Accessed from the existing gear dropdown (`UserSettingsMenu`) via a new "Profile" menu item.
+Opens a modal dialog with tabbed sections.
+
+#### Profile Tab
+- **View & edit display name** — text input, save button. Backend: `PATCH /api/auth/profile` updates `User.name`.
+- **Change email** — new email input + current password confirmation. Backend: `PATCH /api/auth/email`. Validates email uniqueness. (Future: email verification flow.)
+- **Change password** — current password + new password + confirm. Backend: `PATCH /api/auth/password`. Validates current password via bcrypt, hashes new.
+
+#### Email & Notifications Tab
+- **Personal inbound email address** — read-only display of `{IMAP_USER_PREFIX}+{user_code}@{IMAP_DOMAIN}`. Each user gets a unique 6-character hex code (`inboundEmailCode`) generated on registration and stored on `User` model. Backend IMAP poller filters by this code in the `+` suffix to route emails to the correct user. Emails to the bare IMAP address (no `+` suffix or unknown code) are dropped/ignored.
+- **Digest email delivery** — toggle on/off, recipient email input (defaults to user's login email). Stored per-user on `User` model (`digestEmail: String?`, `digestEmailEnabled: Boolean @default(false)`). Replaces the current global `DIGEST_RECIPIENT_EMAIL` env var for per-user delivery.
+- **Digest frequency preferences** — link to existing digest preferences (already implemented via `DigestPreference` model).
+- **Notification preferences** — email notification types toggle (digest daily, digest weekly, entry confirmations). Stored as flags on `User` or `DigestPreference`.
+
+#### Data & Account Tab
+- **Export my data (JSON)** — button triggers `GET /api/auth/export` which returns a JSON file containing all user entries (with revisions, links, tags), conversations, digest preferences, calendar sources/settings, and push subscriptions. Streamed as `application/json` download with `Content-Disposition: attachment`.
+- **Disable account** — soft delete. Sets `User.disabledAt` timestamp. Disabled users cannot log in. Does NOT delete data (allows re-enable by admin or future self-service). Requires current password confirmation. Backend: `POST /api/auth/disable`.
+
+#### Schema Changes Required
+```
+User model additions:
+  inboundEmailCode  String   @unique  // 6-char hex, generated on registration
+  digestEmail       String?           // per-user digest delivery email
+  digestEmailEnabled Boolean @default(false)
+  disabledAt        DateTime?         // soft-delete timestamp
+```
+
+#### Backend Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| `PATCH` | `/api/auth/profile` | Update display name |
+| `PATCH` | `/api/auth/email` | Change login email (requires password) |
+| `PATCH` | `/api/auth/password` | Change password (requires current) |
+| `GET` | `/api/auth/export` | Export all user data as JSON download |
+| `POST` | `/api/auth/disable` | Soft-disable account (requires password) |
+
+#### IMAP Per-User Routing
+- On user registration: generate random 6-char hex code, store as `User.inboundEmailCode`.
+- IMAP poller: parse `+{code}` suffix from recipient address. Look up user by code. If no match or no code, drop the email.
+- Display in profile UI: `{IMAP_USER}+{code}@{domain}` (derived from `IMAP_USER` env var at runtime).
+- New env var: `IMAP_INBOUND_DOMAIN` (optional, defaults to domain part of `IMAP_USER`) for display purposes.
+
+#### Implementation Phases
+1. **Phase 1 (Core profile):** Name edit, password change, email change + backend endpoints + profile modal UI.
+2. **Phase 2 (Inbound email):** Schema migration for `inboundEmailCode`, IMAP routing per user, profile UI display.
+3. **Phase 3 (Data & account):** JSON export endpoint, account disable endpoint + UI.
+4. **Phase 4 (Per-user digest):** Migrate from global `DIGEST_RECIPIENT_EMAIL` to per-user `digestEmail` + `digestEmailEnabled`.
 
 ### Admin -> Task Migration Plan (Phases 1-3)
 1. Phase 1 (DB migration, additive + backfill):
