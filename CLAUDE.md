@@ -56,7 +56,7 @@ npm run backfill:embeddings        # backfill missing vector embeddings
 - Current suite: ~885 backend tests across 73 suites, 13+ frontend tests.
 
 ## Key Files
-- `docs/next-mvp.md` — canonical roadmap and progress tracker
+- `docs/roadmap.md` — canonical roadmap and progress tracker
 - `docs/justdo-product-vision.md` — product vision
 - `docs/API.md` — API documentation
 - `.env.example` — all configuration options with defaults
