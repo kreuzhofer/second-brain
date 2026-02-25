@@ -67,7 +67,7 @@ All original milestones shipped:
 ## Not Yet Implemented
 
 ### Priority Next
-1. **Multi-user support** — full multi-profile/multi-user with per-user data isolation.
+1. **Multi-user SaaS support** (see spec below)
 2. **Pull-to-refresh in PWA mode** — detect standalone PWA display mode and add pull-to-refresh gesture for mobile users.
 3. **Mobile PWA with offline-first capture queue.**
 4. **Smart nudges phase 2** — deadline-based reminders (nudge when task due dates approach), priority decay (auto-deprioritize tasks that sit unworked).
@@ -76,6 +76,92 @@ All original milestones shipped:
 This section is the execution contract for any coding agent.
 
 _(No item currently queued. Pick from Priority Next or the backlog below.)_
+
+### Multi-User SaaS Spec
+
+#### Current State (already done)
+- All 19 data models are user-scoped (`userId` + `onDelete: Cascade`)
+- All services enforce `userId` in queries via `requireUserId()` + AsyncLocalStorage
+- All data routes behind `authMiddleware`; JWT Bearer token auth
+- Registration endpoint exists (`POST /api/auth/register`)
+- Per-user email routing (inbound email codes) and digest delivery
+- Profile management modal (name, email, password, data export, account disable)
+- Frontend login/register toggle in `App.tsx` (no separate pages)
+
+#### What's Missing
+
+**Auth hardening:**
+- No email verification on registration (anyone can claim any email)
+- No password reset flow (locked out if password forgotten)
+- No rate limiting on auth or API endpoints
+- No registration controls (open to anyone, no invite system)
+- Token stored in localStorage (XSS-vulnerable); no refresh token strategy
+- No periodic session revalidation; no server-side logout/token revocation
+
+**Admin & management:**
+- No admin/superuser role — no way to manage users or view system health
+- No user management API or UI
+- No ability to re-enable disabled accounts
+
+**Frontend auth UX:**
+- Login/register is an inline card in App.tsx, not a proper page
+- No "forgot password" link or reset flow
+- No email verification landing page
+- Brief flash of login screen on page refresh before session validates
+- No auth context/provider — all state in App.tsx root
+
+**Operational:**
+- No per-user usage quotas (entries, API calls, storage)
+- No admin audit logging
+- No system health/usage dashboard
+
+#### Implementation Phases
+
+**Phase 1: Auth hardening**
+- Email verification flow: send verification email on register → verify link → activate account. Unverified accounts can log in but see a "verify your email" banner and cannot use email channel.
+- Password reset flow: `POST /api/auth/forgot-password` sends reset link → `POST /api/auth/reset-password` with token sets new password. Token expires in 1 hour.
+- Registration controls: `REGISTRATION_MODE` env var — `open` (default, anyone can register), `invite` (require invite code), `closed` (no new registrations).
+- Rate limiting: per-IP rate limits on `/api/auth/login` (5/min), `/api/auth/register` (3/min), `/api/auth/forgot-password` (3/min). Per-user rate limit on API endpoints (100/min default, configurable).
+- Schema: add `emailVerified Boolean @default(false)`, `emailVerificationToken String?`, `passwordResetToken String?`, `passwordResetExpiresAt DateTime?` to User model.
+
+**Phase 2: Admin role & user management**
+- Add `role` field to User model: `user` (default), `admin`. Promote default user to admin on bootstrap.
+- Admin middleware: `requireAdmin()` that checks `role === 'admin'` after `authMiddleware`.
+- Admin API endpoints:
+  - `GET /api/admin/users` — list all users (paginated, with stats: entry count, last active, verified, disabled).
+  - `PATCH /api/admin/users/:id` — enable/disable user, change role.
+  - `GET /api/admin/stats` — system-wide stats (total users, entries, conversations, storage).
+- Admin can re-enable disabled accounts.
+- Audit log for admin actions (who did what, when).
+
+**Phase 3: Frontend auth UX**
+- Dedicated login page (`/login`) with "Forgot password?" link and "Create account" link.
+- Registration page (`/register`) with email verification notice after submit.
+- Password reset pages: request (`/forgot-password`) and reset (`/reset-password?token=...`).
+- Email verification landing page (`/verify-email?token=...`).
+- Auth context/provider extracted from App.tsx into `AuthProvider` with proper loading state (no login flash on refresh).
+- Redirect to `/login` on token expiry with "session expired" message.
+
+**Phase 4: Admin dashboard UI**
+- Admin-only route (`/admin`) with sidebar navigation.
+- User management table: search, filter by status (active/disabled/unverified), sort by last active.
+- User detail view: activity summary, entry counts by category, last login, enable/disable toggle, role selector.
+- System stats panel: total users, entries, conversations, storage usage, active sessions.
+- System health: cron job status, email channel status, database size.
+
+**Phase 5: Usage controls & session management**
+- Per-user quotas: max entries (configurable, default unlimited for self-hosted), max storage (embedding count). Enforced at service layer; 429 when exceeded. Admin can override per user.
+- Token refresh: `POST /api/auth/refresh` returns new JWT using existing valid token (extends session without re-login). Frontend auto-refreshes before expiry.
+- Server-side logout: `POST /api/auth/logout` adds token to a short-lived blocklist (Redis or in-memory with TTL matching token expiry). `POST /api/auth/logout-all` invalidates all tokens by bumping a `tokenVersion` on User model.
+- Active sessions: track last-used metadata per token (IP, user agent, last seen). `GET /api/auth/sessions` lists active sessions. `DELETE /api/auth/sessions/:id` revokes specific session.
+
+#### Safety Constraints
+- Non-breaking rollout: existing single-user deployments continue working unchanged.
+- Default user is auto-promoted to admin on startup (backward compatible).
+- `REGISTRATION_MODE=open` is the default (no action needed for existing deploys).
+- Unverified email does not block login — it only restricts email channel features.
+- All admin endpoints require both `authMiddleware` + `requireAdmin()`.
+- Rate limiting is best-effort (in-memory by default; Redis adapter optional).
 
 ### Intelligence and Linking
 - LLM hint extraction for chat/email (category hints, related entities, thread linking).
@@ -94,11 +180,10 @@ _(No item currently queued. Pick from Priority Next or the backlog below.)_
 ### Reliability and Data Management
 - Full audit UI with diffs and rollback in the app.
 - Backup/export workflows (zip + optional cloud sync).
-- Multi-user support (see Priority Next).
 
 ### Developer and Ops
 - Plug-in system for custom capture sources.
-- Structured analytics dashboard for usage metrics.
+- Structured analytics dashboard for usage metrics (partially covered by admin stats in multi-user Phase 4).
 
 ---
 
