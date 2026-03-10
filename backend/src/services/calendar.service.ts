@@ -98,6 +98,8 @@ export interface BusyBlockResponse {
   isAllDay: boolean;
 }
 
+export type QuickActionType = 'done' | 'skip' | 'open';
+
 export interface CalendarSettingsRecord {
   workdayStartTime: string;
   workdayEndTime: string;
@@ -1068,9 +1070,39 @@ export class CalendarService {
     }
   }
 
+  signQuickAction(feedToken: string, entryPath: string, action: QuickActionType): string {
+    return crypto
+      .createHmac('sha256', this.config.JWT_SECRET as string)
+      .update(`${feedToken}:${entryPath}:${action}`)
+      .digest('hex')
+      .slice(0, 16);
+  }
+
+  verifyQuickAction(
+    feedToken: string,
+    entryPath: string,
+    action: string,
+    sig: string
+  ): boolean {
+    if (!['done', 'skip', 'open'].includes(action)) return false;
+    const expected = this.signQuickAction(feedToken, entryPath, action as QuickActionType);
+    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  }
+
+  buildQuickActionUrl(
+    baseUrl: string,
+    feedToken: string,
+    entryPath: string,
+    action: QuickActionType
+  ): string {
+    const sig = this.signQuickAction(feedToken, entryPath, action);
+    return `${baseUrl}/api/calendar/quick-action?token=${encodeURIComponent(feedToken)}&entry=${encodeURIComponent(entryPath)}&action=${action}&sig=${sig}`;
+  }
+
   async buildIcsFeedForUser(
     userId: string,
-    options?: WeekPlanOptions
+    options?: WeekPlanOptions,
+    feedContext?: { baseUrl: string; feedToken: string }
   ): Promise<{ ics: string; generatedAt: string; revision: string }> {
     const plan = await this.buildWeekPlanForUser(userId, options);
     const generatedAt = plan.generatedAt.replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
@@ -1093,7 +1125,8 @@ export class CalendarService {
         const endHour = Number(end.slice(11, 13));
         const endMinute = Number(end.slice(14, 16));
         const uid = `${crypto.createHash('sha1').update(item.entryPath).digest('hex').slice(0, 16)}@justdo`;
-        return [
+
+        const eventLines = [
           'BEGIN:VEVENT',
           `UID:${uid}`,
           `DTSTAMP:${generatedAt}`,
@@ -1101,10 +1134,28 @@ export class CalendarService {
           `SEQUENCE:${sequence}`,
           `DTSTART:${toIcsDateTime(dateYmd, startHour, startMinute)}`,
           `DTEND:${toIcsDateTime(dateYmd, endHour, endMinute)}`,
-          `SUMMARY:${escapeIcsText(item.title)}`,
-          `DESCRIPTION:${escapeIcsText(`${item.entryPath} - ${item.reason}`)}`,
-          'END:VEVENT'
+          `SUMMARY:${escapeIcsText(item.title)}`
         ];
+
+        if (feedContext) {
+          const openUrl = this.buildQuickActionUrl(feedContext.baseUrl, feedContext.feedToken, item.entryPath, 'open');
+          const doneUrl = this.buildQuickActionUrl(feedContext.baseUrl, feedContext.feedToken, item.entryPath, 'done');
+          const skipUrl = this.buildQuickActionUrl(feedContext.baseUrl, feedContext.feedToken, item.entryPath, 'skip');
+          eventLines.push(`URL:${openUrl}`);
+          eventLines.push(
+            `DESCRIPTION:${escapeIcsText(
+              `${item.entryPath} - ${item.reason}\n\n` +
+              `Open: ${openUrl}\n` +
+              `Mark done: ${doneUrl}\n` +
+              `Skip today: ${skipUrl}`
+            )}`
+          );
+        } else {
+          eventLines.push(`DESCRIPTION:${escapeIcsText(`${item.entryPath} - ${item.reason}`)}`);
+        }
+
+        eventLines.push('END:VEVENT');
+        return eventLines;
       }),
       'END:VCALENDAR'
     ];

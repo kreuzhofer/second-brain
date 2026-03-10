@@ -1,6 +1,7 @@
 import { Request, Response, Router } from 'express';
-import { requireUserId } from '../context/user-context';
+import { requireUserId, runWithUserId } from '../context/user-context';
 import { getCalendarService } from '../services/calendar.service';
+import { getEntryService } from '../services/entry.service';
 
 const MIN_DAYS = 1;
 const MAX_DAYS = 14;
@@ -114,12 +115,17 @@ calendarPublicRouter.get('/feed.ics', async (req: Request, res: Response) => {
   }
 
   try {
-    const feed = await calendarService.buildIcsFeedForUser(verified.userId, {
-      startDate,
-      days: parsedDays ?? FEED_DEFAULT_DAYS,
-      granularityMinutes: parsedGranularity,
-      bufferMinutes: parsedBuffer
-    });
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const feed = await calendarService.buildIcsFeedForUser(
+      verified.userId,
+      {
+        startDate,
+        days: parsedDays ?? FEED_DEFAULT_DAYS,
+        granularityMinutes: parsedGranularity,
+        bufferMinutes: parsedBuffer
+      },
+      { baseUrl, feedToken: token }
+    );
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -139,6 +145,85 @@ calendarPublicRouter.get('/feed.ics', async (req: Request, res: Response) => {
     });
   }
 });
+
+calendarPublicRouter.get('/quick-action', async (req: Request, res: Response) => {
+  const token = typeof req.query.token === 'string' ? req.query.token : '';
+  const entryPath = typeof req.query.entry === 'string' ? req.query.entry : '';
+  const action = typeof req.query.action === 'string' ? req.query.action : '';
+  const sig = typeof req.query.sig === 'string' ? req.query.sig : '';
+
+  if (!token || !entryPath || !action || !sig) {
+    res.status(400).send(quickActionHtml('Missing parameters', false));
+    return;
+  }
+
+  const calendarService = getCalendarService();
+  const verified = calendarService.verifyFeedToken(token);
+  if (!verified) {
+    res.status(401).send(quickActionHtml('Invalid or expired token', false));
+    return;
+  }
+
+  if (!calendarService.verifyQuickAction(token, entryPath, action, sig)) {
+    res.status(403).send(quickActionHtml('Invalid signature', false));
+    return;
+  }
+
+  try {
+    const result = await runWithUserId(verified.userId, async () => {
+      const entryService = getEntryService();
+
+      if (action === 'open') {
+        return { redirect: true, message: '' };
+      }
+
+      if (action === 'done') {
+        await entryService.update(entryPath, { status: 'done' } as any);
+        return { redirect: false, message: `Marked "${entryPath}" as done` };
+      }
+
+      if (action === 'skip') {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(9, 0, 0, 0);
+        await entryService.update(entryPath, { fixed_at: tomorrow.toISOString() } as any);
+        return { redirect: false, message: `Skipped "${entryPath}" — rescheduled to tomorrow` };
+      }
+
+      return { redirect: false, message: 'Unknown action' };
+    });
+
+    if (result.redirect) {
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      res.redirect(`${baseUrl}/entries/${entryPath}`);
+      return;
+    }
+
+    res.send(quickActionHtml(result.message, true));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Action failed';
+    res.status(400).send(quickActionHtml(message, false));
+  }
+});
+
+function quickActionHtml(message: string, success: boolean): string {
+  const color = success ? '#22c55e' : '#ef4444';
+  const icon = success ? '&#10003;' : '&#10007;';
+  const safeMessage = message
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JustDo.so</title>
+<style>body{font-family:-apple-system,system-ui,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f9fafb}
+.card{text-align:center;padding:2rem 3rem;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.1);background:#fff}
+.icon{font-size:3rem;color:${color}}.msg{margin-top:1rem;font-size:1.1rem;color:#374151}
+.hint{margin-top:.75rem;font-size:.85rem;color:#9ca3af}</style></head>
+<body><div class="card"><div class="icon">${icon}</div><div class="msg">${safeMessage}</div>
+<div class="hint">You can close this tab.</div></div></body></html>`;
+}
 
 calendarRouter.get('/settings', async (_req: Request, res: Response) => {
   const calendarService = getCalendarService();

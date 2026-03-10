@@ -1027,4 +1027,141 @@ describe('Calendar API Integration Tests', () => {
       expect(res.body.blocks).toHaveLength(0);
     });
   });
+
+  describe('ICS feed action URLs', () => {
+    it('includes URL and action links in VEVENT DESCRIPTION', async () => {
+      await request(app)
+        .post('/api/entries')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          category: 'task',
+          name: 'Task with links',
+          status: 'pending',
+          due_date: '2026-02-12',
+          source_channel: 'api',
+          confidence: 0.9
+        })
+        .expect(201);
+
+      const publishResponse = await request(app)
+        .get('/api/calendar/publish')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      const token = new URL(publishResponse.body.httpsUrl).searchParams.get('token') as string;
+
+      const feedResponse = await request(app)
+        .get(`/api/calendar/feed.ics?token=${encodeURIComponent(token)}&startDate=2026-02-09`)
+        .expect(200);
+
+      const ics = feedResponse.text;
+      expect(ics).toContain('URL:');
+      expect(ics).toContain('quick-action');
+      expect(ics).toContain('action=open');
+      expect(ics).toContain('action=done');
+      expect(ics).toContain('action=skip');
+      expect(ics).toContain('sig=');
+    });
+  });
+
+  describe('GET /calendar/quick-action', () => {
+    let feedToken: string;
+
+    async function createTaskAndGetToken(taskName: string, dueDate: string) {
+      await request(app)
+        .post('/api/entries')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          category: 'task',
+          name: taskName,
+          status: 'pending',
+          due_date: dueDate,
+          source_channel: 'api',
+          confidence: 0.9
+        })
+        .expect(201);
+
+      const publishResponse = await request(app)
+        .get('/api/calendar/publish')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      feedToken = new URL(publishResponse.body.httpsUrl).searchParams.get('token') as string;
+    }
+
+    it('returns 400 when parameters are missing', async () => {
+      const res = await request(app)
+        .get('/api/calendar/quick-action')
+        .expect(400);
+
+      expect(res.text).toContain('Missing parameters');
+    });
+
+    it('returns 401 for invalid feed token', async () => {
+      const res = await request(app)
+        .get('/api/calendar/quick-action?token=bad&entry=task/foo&action=done&sig=abcd1234abcd1234')
+        .expect(401);
+
+      expect(res.text).toContain('Invalid or expired token');
+    });
+
+    it('returns 403 for invalid signature', async () => {
+      await createTaskAndGetToken('Sig test task', '2026-02-12');
+
+      const res = await request(app)
+        .get(`/api/calendar/quick-action?token=${encodeURIComponent(feedToken)}&entry=task/sig-test-task&action=done&sig=0000000000000000`)
+        .expect(403);
+
+      expect(res.text).toContain('Invalid signature');
+    });
+
+    it('marks a task as done via quick-action', async () => {
+      await createTaskAndGetToken('Quick done task', '2026-02-12');
+
+      const { getCalendarService: getCS } = require('../../src/services/calendar.service');
+      const calService = getCS();
+      const sig = calService.signQuickAction(feedToken, 'task/quick-done-task', 'done');
+
+      const res = await request(app)
+        .get(`/api/calendar/quick-action?token=${encodeURIComponent(feedToken)}&entry=task/quick-done-task&action=done&sig=${sig}`)
+        .expect(200);
+
+      expect(res.text).toContain('done');
+
+      const entry = await request(app)
+        .get('/api/entries/task/quick-done-task')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(entry.body.entry.status).toBe('done');
+    });
+
+    it('skips a task via quick-action (reschedules to tomorrow)', async () => {
+      await createTaskAndGetToken('Quick skip task', '2026-02-12');
+
+      const { getCalendarService: getCS } = require('../../src/services/calendar.service');
+      const calService = getCS();
+      const sig = calService.signQuickAction(feedToken, 'task/quick-skip-task', 'skip');
+
+      const res = await request(app)
+        .get(`/api/calendar/quick-action?token=${encodeURIComponent(feedToken)}&entry=task/quick-skip-task&action=skip&sig=${sig}`)
+        .expect(200);
+
+      expect(res.text).toContain('rescheduled to tomorrow');
+    });
+
+    it('redirects on open action', async () => {
+      await createTaskAndGetToken('Quick open task', '2026-02-12');
+
+      const { getCalendarService: getCS } = require('../../src/services/calendar.service');
+      const calService = getCS();
+      const sig = calService.signQuickAction(feedToken, 'task/quick-open-task', 'open');
+
+      const res = await request(app)
+        .get(`/api/calendar/quick-action?token=${encodeURIComponent(feedToken)}&entry=task/quick-open-task&action=open&sig=${sig}`)
+        .expect(302);
+
+      expect(res.headers.location).toContain('/entries/task/quick-open-task');
+    });
+  });
 });
