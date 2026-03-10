@@ -276,6 +276,33 @@ function escapeIcsText(value: string): string {
     .replace(/;/g, '\\;');
 }
 
+function buildQuickActionHtml(
+  entryPath: string,
+  reason: string,
+  openUrl: string,
+  doneUrl: string,
+  skipUrl: string
+): string {
+  const btnBase = 'display:inline-block;padding:8px 18px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;margin-right:8px;margin-bottom:8px;';
+  return (
+    `<html><body style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;color:#374151">` +
+    `<p style="margin:0 0 12px"><strong>${escapeHtml(entryPath)}</strong> &mdash; ${escapeHtml(reason)}</p>` +
+    `<div style="margin-top:16px">` +
+    `<a href="${escapeHtml(openUrl)}" style="${btnBase}background:#3b82f6;color:#ffffff">Open</a>` +
+    `<a href="${escapeHtml(doneUrl)}" style="${btnBase}background:#22c55e;color:#ffffff">Mark done</a>` +
+    `<a href="${escapeHtml(skipUrl)}" style="${btnBase}background:#f59e0b;color:#ffffff">Skip today</a>` +
+    `</div></body></html>`
+  );
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function serializeSource(record: {
   id: string;
   name: string;
@@ -1145,9 +1172,14 @@ export class CalendarService {
           eventLines.push(
             `DESCRIPTION:${escapeIcsText(
               `${item.entryPath} - ${item.reason}\n\n` +
-              `Open: ${openUrl}\n` +
-              `Mark done: ${doneUrl}\n` +
+              `Open: ${openUrl}\n\n` +
+              `Mark done: ${doneUrl}\n\n` +
               `Skip today: ${skipUrl}`
+            )}`
+          );
+          eventLines.push(
+            `X-ALT-DESC;FMTTYPE=text/html:${escapeIcsText(
+              buildQuickActionHtml(item.entryPath, item.reason, openUrl, doneUrl, skipUrl)
             )}`
           );
         } else {

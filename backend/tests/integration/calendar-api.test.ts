@@ -1061,6 +1061,10 @@ describe('Calendar API Integration Tests', () => {
       expect(ics).toContain('action=done');
       expect(ics).toContain('action=skip');
       expect(ics).toContain('sig=');
+      // X-ALT-DESC with HTML buttons for Outlook desktop
+      expect(ics).toContain('X-ALT-DESC;FMTTYPE=text/html:');
+      expect(ics).toContain('Mark done</a>');
+      expect(ics).toContain('Skip today</a>');
     });
   });
 
