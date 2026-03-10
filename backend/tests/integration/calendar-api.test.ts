@@ -1161,7 +1161,7 @@ describe('Calendar API Integration Tests', () => {
         .get(`/api/calendar/quick-action?token=${encodeURIComponent(feedToken)}&entry=task/quick-open-task&action=open&sig=${sig}`)
         .expect(302);
 
-      expect(res.headers.location).toContain('/entries/task/quick-open-task');
+      expect(res.headers.location).toContain('?open=task%2Fquick-open-task');
     });
   });
 });

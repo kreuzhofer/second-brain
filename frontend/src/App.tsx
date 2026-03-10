@@ -100,6 +100,19 @@ function App() {
     setUserName('');
   };
 
+  // Deep-link: open entry from ?open= query param (e.g. calendar quick-action)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const params = new URLSearchParams(window.location.search);
+    const openPath = params.get('open');
+    if (openPath) {
+      setSelectedEntryPath(openPath);
+      params.delete('open');
+      const clean = params.toString();
+      window.history.replaceState({}, '', clean ? `?${clean}` : window.location.pathname);
+    }
+  }, [isAuthenticated]);
+
   const handleEntryClick = (path: string) => {
     setSelectedEntryPath(path);
     setMobileSearchOpen(false);

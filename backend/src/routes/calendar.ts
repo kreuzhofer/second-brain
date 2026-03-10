@@ -195,7 +195,7 @@ calendarPublicRouter.get('/quick-action', async (req: Request, res: Response) =>
 
     if (result.redirect) {
       const baseUrl = `${req.protocol}://${req.get('host')}`;
-      res.redirect(`${baseUrl}/entries/${entryPath}`);
+      res.redirect(`${baseUrl}/?open=${encodeURIComponent(entryPath)}`);
       return;
     }
 
