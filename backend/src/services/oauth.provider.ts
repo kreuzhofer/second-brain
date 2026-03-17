@@ -43,16 +43,22 @@ class JustDoClientsStore implements OAuthRegisteredClientsStore {
   private prisma = getPrismaClient();
 
   async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
+    console.log(`[MCP-AUTH] clientsStore.getClient(${clientId})`);
     const record = await this.prisma.oAuthClient.findUnique({
       where: { clientId },
     });
-    if (!record) return undefined;
+    if (!record) {
+      console.log(`[MCP-AUTH] clientsStore.getClient -> not found`);
+      return undefined;
+    }
+    console.log(`[MCP-AUTH] clientsStore.getClient -> found name=${record.clientName}`);
     return toClientInfo(record);
   }
 
   async registerClient(
     client: Omit<OAuthClientInformationFull, 'client_id' | 'client_id_issued_at'>
   ): Promise<OAuthClientInformationFull> {
+    console.log(`[MCP-AUTH] clientsStore.registerClient name=${client.client_name} redirect_uris=${client.redirect_uris?.map(u => u.toString()).join(',')}`);
     // The SDK may pass client_id at runtime even though the type omits it
     const runtimeClient = client as OAuthClientInformationFull;
     const clientId = runtimeClient.client_id || randomUUID();
@@ -96,6 +102,7 @@ export class JustDoOAuthProvider implements OAuthServerProvider {
   ): Promise<void> {
     const req = res.req;
     const body = req.body || {};
+    console.log(`[MCP-AUTH] authorize() client=${client.client_id} name=${client.client_name} redirect=${params.redirectUri} state=${params.state || '-'} method=${req.method}`);
     const isFormPost =
       req.method === 'POST' &&
       (typeof body.email === 'string' && typeof body.password === 'string');
@@ -140,6 +147,7 @@ export class JustDoOAuthProvider implements OAuthServerProvider {
         redirectUrl.searchParams.set('state', params.state);
       }
 
+      console.log(`[MCP-AUTH] authorize() -> login success user=${user.id} -> redirect ${redirectUrl.toString().slice(0, 120)}...`);
       res.redirect(302, redirectUrl.toString());
       return;
     }
@@ -323,6 +331,7 @@ export class JustDoOAuthProvider implements OAuthServerProvider {
     _redirectUri?: string,
     _resource?: URL
   ): Promise<OAuthTokens> {
+    console.log(`[MCP-AUTH] exchangeAuthorizationCode() code=${authorizationCode.slice(0, 8)}...`);
     const record = await this.prisma.oAuthAuthorizationCode.findUnique({
       where: { code: authorizationCode },
     });
@@ -430,6 +439,7 @@ export class JustDoOAuthProvider implements OAuthServerProvider {
   }
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
+    console.log(`[MCP-AUTH] verifyAccessToken() token=${token.slice(0, 12)}...`);
     const config = getConfig();
 
     // Try JWT first (OAuth tokens)
@@ -441,6 +451,7 @@ export class JustDoOAuthProvider implements OAuthServerProvider {
       };
 
       if (decoded.type === 'mcp_access') {
+        console.log(`[MCP-AUTH] verifyAccessToken -> JWT valid user=${decoded.sub} client=${decoded.clientId}`);
         return {
           token,
           clientId: decoded.clientId,
@@ -452,14 +463,15 @@ export class JustDoOAuthProvider implements OAuthServerProvider {
           },
         };
       }
-    } catch {
-      // Not a valid JWT, try API key fallback
+    } catch (err: any) {
+      console.log(`[MCP-AUTH] verifyAccessToken -> JWT failed: ${err.message}, trying API key fallback`);
     }
 
     // Fallback: legacy API key
     const apiKeyService = getApiKeyService();
     const result = await apiKeyService.verify(token);
     if (result) {
+      console.log(`[MCP-AUTH] verifyAccessToken -> API key valid user=${result.userId} agent=${result.agentName}`);
       return {
         token,
         clientId: 'api-key',

@@ -38,6 +38,37 @@ const app = express();
 // Middleware
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
+// MCP/OAuth request logging
+app.use((req, res, next) => {
+  const path = req.path;
+  if (path.startsWith('/.well-known') || path === '/authorize' || path === '/token' ||
+      path === '/register' || path === '/revoke' || path.startsWith('/mcp')) {
+    const start = Date.now();
+    console.log(`[MCP-AUTH] --> ${req.method} ${path} from=${req.ip} origin=${req.get('origin') || '-'} content-type=${req.get('content-type') || '-'}`);
+    if (req.method === 'POST' && path !== '/mcp') {
+      // Log body for OAuth endpoints (not MCP tool calls which are large)
+      const bodyStr = JSON.stringify(req.body || {});
+      console.log(`[MCP-AUTH]     body=${bodyStr.slice(0, 500)}`);
+    }
+    const originalEnd = res.end.bind(res);
+    res.end = function (...args: any[]) {
+      const ms = Date.now() - start;
+      console.log(`[MCP-AUTH] <-- ${req.method} ${path} status=${res.statusCode} ${ms}ms`);
+      if (res.statusCode >= 400) {
+        // Log response body for errors
+        const chunk = args[0];
+        if (chunk && typeof chunk === 'string') {
+          console.log(`[MCP-AUTH]     error-body=${chunk.slice(0, 500)}`);
+        } else if (chunk && Buffer.isBuffer(chunk)) {
+          console.log(`[MCP-AUTH]     error-body=${chunk.toString('utf-8').slice(0, 500)}`);
+        }
+      }
+      return originalEnd(...args);
+    } as any;
+  }
+  next();
+});
+
 // OAuth 2.0 for MCP (must be at app root before other routes)
 const serverUrl = new URL(config.PUBLIC_URL || `http://localhost:${config.PORT}`);
 app.use(mcpAuthRouter({
