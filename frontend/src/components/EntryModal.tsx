@@ -404,9 +404,9 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
         }
       }}
     >
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+      <div className="bg-background rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             {entry && getCategoryIcon(entry.category)}
             <h2 className="text-xl font-semibold">
@@ -903,7 +903,7 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 flex-shrink-0">
+        <div className="px-6 py-4 border-t border-border flex-shrink-0">
           <div className="flex justify-end gap-2">
             {entry && isTaskCategory(entry.category) && (entry.entry as any)?.status !== 'done' && (
               <Button
