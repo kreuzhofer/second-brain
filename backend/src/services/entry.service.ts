@@ -14,7 +14,8 @@ import {
   ProjectsEntry,
   IdeasEntry,
   AdminEntry,
-  InboxEntry
+  InboxEntry,
+  MemoryEntry
 } from '../types/entry.types';
 import { WebhookService, getWebhookService } from './webhook.service';
 import { getConfig } from '../config/env';
@@ -295,6 +296,21 @@ export class EntryService {
         });
       }
 
+      if (storageCategory === 'memory') {
+        const payload = data as any;
+        await tx.memoryDetails.create({
+          data: {
+            entryId: entry.id,
+            agentId: payload.agent_id || 'unknown',
+            agentName: payload.agent_name || 'Unknown Agent',
+            memoryType: payload.memory_type || 'context',
+            confidence: payload.confidence ?? 1.0,
+            expiresAt: payload.expires_at ? new Date(payload.expires_at) : null,
+            sourceConversationId: payload.source_conversation_id || null
+          }
+        });
+      }
+
       const tags = (data as any).tags || [];
       if (tags.length > 0) {
         await this.attachTags(tx, entry.id, tags, userId);
@@ -358,6 +374,7 @@ export class EntryService {
         ideaDetails: true,
         personDetails: true,
         inboxDetails: true,
+        memoryDetails: true,
         sections: { orderBy: { order: 'asc' } },
         logs: { orderBy: { createdAt: 'asc' } },
         tags: { include: { tag: true } }
@@ -401,7 +418,8 @@ export class EntryService {
         adminDetails: true,
         ideaDetails: true,
         personDetails: true,
-        inboxDetails: true
+        inboxDetails: true,
+        memoryDetails: true
       },
       orderBy: { updatedAt: 'desc' }
     });
@@ -453,6 +471,11 @@ export class EntryService {
           summary.last_touched = entry.personDetails.lastTouched
             ? entry.personDetails.lastTouched.toISOString().split('T')[0]
             : undefined;
+        }
+
+        if (entry.category === 'memory' && (entry as any).memoryDetails) {
+          summary.agent_name = (entry as any).memoryDetails.agentName;
+          summary.memory_type = (entry as any).memoryDetails.memoryType;
         }
 
         if (entry.category === 'inbox' && entry.inboxDetails) {
@@ -721,6 +744,7 @@ export class EntryService {
       await tx.ideaDetails.deleteMany({ where: { entryId: entryRecord.id } });
       await tx.personDetails.deleteMany({ where: { entryId: entryRecord.id } });
       await tx.inboxDetails.deleteMany({ where: { entryId: entryRecord.id } });
+      await tx.memoryDetails.deleteMany({ where: { entryId: entryRecord.id } });
 
       if (storageTargetCategory === 'people') {
         const entry = transformed.entry as PeopleEntry;
@@ -986,6 +1010,17 @@ export class EntryService {
           source_channel: entry.sourceChannel || 'api',
           created_at: entry.createdAt.toISOString()
         } as InboxEntry;
+      case 'memory':
+        return {
+          ...base,
+          agent_id: entry.memoryDetails?.agentId || 'unknown',
+          agent_name: entry.memoryDetails?.agentName || 'Unknown Agent',
+          memory_type: entry.memoryDetails?.memoryType || 'context',
+          expires_at: entry.memoryDetails?.expiresAt
+            ? entry.memoryDetails.expiresAt.toISOString()
+            : undefined,
+          source_conversation_id: entry.memoryDetails?.sourceConversationId || undefined
+        } as MemoryEntry;
       default:
         throw new InvalidEntryDataError(`Unknown category: ${entry.category}`);
     }

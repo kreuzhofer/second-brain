@@ -1,4 +1,4 @@
-export type FocusPanelTab = 'focus' | 'ideas' | 'people' | 'inbox' | 'recent' | 'calendar';
+export type FocusPanelTab = 'focus' | 'ideas' | 'people' | 'inbox' | 'recent' | 'calendar' | 'memory';
 export type CalendarViewMode = 'list' | 'board';
 
 export const FOCUS_PANEL_TAB_STORAGE_KEY = 'justdo-focus-panel-tab';
@@ -22,6 +22,7 @@ export const parseFocusPanelTab = (value: string | null | undefined): FocusPanel
     case 'inbox':
     case 'recent':
     case 'calendar':
+    case 'memory':
       return value;
     default:
       return null;

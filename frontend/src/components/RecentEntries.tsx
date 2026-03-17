@@ -9,7 +9,7 @@ import { useMemo, useState } from 'react';
 import { EntrySummary } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, FileText, User, Briefcase, Lightbulb, ClipboardList, Inbox, RefreshCw } from 'lucide-react';
+import { Loader2, FileText, User, Briefcase, Lightbulb, ClipboardList, Inbox, RefreshCw, Brain } from 'lucide-react';
 import { useEntries } from '@/state/entries';
 
 interface RecentEntriesProps {
@@ -37,6 +37,8 @@ export function RecentEntries({ onEntryClick, limit = 6 }: RecentEntriesProps) {
         return <ClipboardList className="h-4 w-4" />;
       case 'inbox':
         return <Inbox className="h-4 w-4" />;
+      case 'memory':
+        return <Brain className="h-4 w-4" />;
       default:
         return <FileText className="h-4 w-4" />;
     }

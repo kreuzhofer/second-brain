@@ -22,6 +22,15 @@ enum EntryCategory {
   task
   admin
   inbox
+  memory
+}
+
+enum MemoryType {
+  fact
+  preference
+  context
+  feedback
+  relationship
 }
 
 enum ProjectStatus {
@@ -94,6 +103,7 @@ model User {
   calendarBusyBlocks CalendarBusyBlock[]
   calendarSettings   CalendarSettings?
   pushSubscriptions  PushSubscription[]
+  agentApiKeys       AgentApiKey[]
 }
 
 model Conversation {
@@ -265,6 +275,7 @@ model Entry {
   ideaDetails       IdeaDetails?
   personDetails     PersonDetails?
   inboxDetails      InboxDetails?
+  memoryDetails     MemoryDetails?
   sections          EntrySection[]
   logs              EntryLog[]
   tags              EntryTag[]
@@ -335,6 +346,36 @@ model InboxDetails {
   suggestedCategory EntryCategory
   suggestedName     String
   status            InboxStatus   @default(needs_review)
+}
+
+model MemoryDetails {
+  entryId              String      @id
+  entry                Entry       @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  agentId              String
+  agentName            String
+  memoryType           MemoryType
+  confidence           Float       @default(1.0)
+  expiresAt            DateTime?
+  sourceConversationId String?
+
+  @@index([agentId])
+}
+
+model AgentApiKey {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keyHash     String
+  keyPrefix   String
+  agentName   String
+  permissions String[]
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([keyPrefix])
 }
 
 model EntrySection {

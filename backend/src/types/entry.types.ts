@@ -2,7 +2,8 @@
  * Entry type definitions for JustDo.so
  */
 
-export type Category = 'people' | 'projects' | 'ideas' | 'task' | 'admin' | 'inbox';
+export type Category = 'people' | 'projects' | 'ideas' | 'task' | 'admin' | 'inbox' | 'memory';
+export type MemoryType = 'fact' | 'preference' | 'context' | 'feedback' | 'relationship';
 export type Channel = 'chat' | 'email' | 'api';
 export type ProjectStatus = 'active' | 'waiting' | 'blocked' | 'someday' | 'done';
 export type AdminStatus = 'pending' | 'done';
@@ -80,9 +81,20 @@ export interface InboxEntry {
 }
 
 /**
+ * Memory entry - knowledge stored by an AI agent
+ */
+export interface MemoryEntry extends BaseEntry {
+  agent_id: string;
+  agent_name: string;
+  memory_type: MemoryType;
+  expires_at?: string;
+  source_conversation_id?: string;
+}
+
+/**
  * Union type for all entry types
  */
-export type Entry = PeopleEntry | ProjectsEntry | IdeasEntry | AdminEntry | InboxEntry;
+export type Entry = PeopleEntry | ProjectsEntry | IdeasEntry | AdminEntry | InboxEntry | MemoryEntry;
 
 /**
  * Entry with path information (for API responses)
@@ -164,6 +176,8 @@ export interface EntrySummary {
   last_touched?: string;
   original_text?: string;
   suggested_category?: Category;
+  agent_name?: string;
+  memory_type?: MemoryType;
 }
 
 /**
@@ -228,12 +242,25 @@ export interface CreateInboxInput {
   source_channel: Channel;
 }
 
-export type CreateEntryInput = 
-  | CreatePeopleInput 
-  | CreateProjectsInput 
-  | CreateIdeasInput 
-  | CreateAdminInput 
-  | CreateInboxInput;
+export interface CreateMemoryInput {
+  name: string;
+  agent_id: string;
+  agent_name: string;
+  memory_type: MemoryType;
+  confidence?: number;
+  expires_at?: string;
+  source_conversation_id?: string;
+  tags?: string[];
+  source_channel: Channel;
+}
+
+export type CreateEntryInput =
+  | CreatePeopleInput
+  | CreateProjectsInput
+  | CreateIdeasInput
+  | CreateAdminInput
+  | CreateInboxInput
+  | CreateMemoryInput;
 
 // ============================================
 // Update Entry Input Types
@@ -287,12 +314,21 @@ export interface UpdateInboxInput {
   confidence?: number;
 }
 
-export type UpdateEntryInput = 
-  | UpdatePeopleInput 
-  | UpdateProjectsInput 
-  | UpdateIdeasInput 
-  | UpdateAdminInput 
-  | UpdateInboxInput;
+export interface UpdateMemoryInput {
+  name?: string;
+  memory_type?: MemoryType;
+  confidence?: number;
+  expires_at?: string | null;
+  tags?: string[];
+}
+
+export type UpdateEntryInput =
+  | UpdatePeopleInput
+  | UpdateProjectsInput
+  | UpdateIdeasInput
+  | UpdateAdminInput
+  | UpdateInboxInput
+  | UpdateMemoryInput;
 
 // ============================================
 // Body Content Update Types

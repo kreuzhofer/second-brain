@@ -84,6 +84,8 @@ export async function resetDatabase(): Promise<void> {
     prisma.ideaDetails.deleteMany(),
     prisma.personDetails.deleteMany(),
     prisma.inboxDetails.deleteMany(),
+    prisma.memoryDetails.deleteMany(),
+    prisma.agentApiKey.deleteMany(),
     prisma.focusSession.deleteMany(),
     prisma.entry.deleteMany(),
     prisma.tag.deleteMany()

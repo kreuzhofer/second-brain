@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   api,
   CalendarBusyBlock,
@@ -40,7 +41,9 @@ import {
   FileText,
   Briefcase,
   ClipboardList,
-  Target
+  Target,
+  Brain,
+  Loader2
 } from 'lucide-react';
 
 const CALENDAR_SOURCE_COLORS = [
@@ -87,6 +90,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
   const [inboxExpanded, setInboxExpanded] = useState(false);
   const [isTriageLoading, setIsTriageLoading] = useState(false);
   const [recentExpanded, setRecentExpanded] = useState(false);
+  const [memorySearch, setMemorySearch] = useState('');
+  const [memoryExpanded, setMemoryExpanded] = useState(false);
   const [peopleInsights, setPeopleInsights] = useState<RelationshipInsight[]>([]);
   const [peopleInsightsLoading, setPeopleInsightsLoading] = useState(false);
   const [peopleInsightsError, setPeopleInsightsError] = useState<string | null>(null);
@@ -530,6 +535,22 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
     );
   }, [entries]);
 
+  const memoryItems = useMemo(() => {
+    return entries
+      .filter((e) => e.category === 'memory')
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  }, [entries]);
+
+  const filteredMemoryItems = useMemo(() => {
+    if (!memorySearch.trim()) return memoryItems;
+    const q = memorySearch.toLowerCase();
+    return memoryItems.filter((m) =>
+      m.name.toLowerCase().includes(q) ||
+      (m.agent_name || '').toLowerCase().includes(q) ||
+      (m.memory_type || '').toLowerCase().includes(q)
+    );
+  }, [memoryItems, memorySearch]);
+
   const inboxCount = entries.filter((entry) => entry.category === 'inbox').length;
   const activeProjects = entries.filter((entry) => entry.category === 'projects' && entry.status === 'active').length;
   const pendingAdmin = entries.filter((entry) => isTaskCategory(entry.category) && entry.status === 'pending').length;
@@ -549,6 +570,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
           ? 'No planned blocks yet.'
         : activeTab === 'recent'
           ? 'No recent activity yet.'
+        : activeTab === 'memory'
+          ? 'No memories yet. AI agents can store memories via MCP.'
         : 'Inbox is clear.';
   const combinedError = error ?? loadError;
 
@@ -562,6 +585,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
           ? 'Calendar'
         : activeTab === 'recent'
           ? 'Recent Entries'
+        : activeTab === 'memory'
+          ? 'Memories'
           : 'Inbox';
 
   const getCategoryIcon = (category: string) => {
@@ -577,6 +602,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
         return <ClipboardList className="h-4 w-4" />;
       case 'inbox':
         return <Inbox className="h-4 w-4" />;
+      case 'memory':
+        return <Brain className="h-4 w-4" />;
       default:
         return <FileText className="h-4 w-4" />;
     }
@@ -657,6 +684,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
             {activeTab === 'calendar' && <Target className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'inbox' && <Inbox className="h-4 w-4 text-muted-foreground" />}
             {activeTab === 'recent' && <FileText className="h-4 w-4 text-muted-foreground" />}
+            {activeTab === 'memory' && <Brain className="h-4 w-4 text-muted-foreground" />}
             <h3 className="text-base sm:text-lg font-medium">{title}</h3>
           </div>
           <div className="flex items-center gap-2">
@@ -1380,6 +1408,75 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
             )}
           </div>
         )}
+
+        {activeTab === 'memory' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Brain className="h-5 w-5" />
+                Memories
+              </h2>
+              <span className="text-xs text-muted-foreground">{memoryItems.length} total</span>
+            </div>
+
+            <Input
+              placeholder="Filter memories..."
+              value={memorySearch}
+              onChange={(e) => setMemorySearch(e.target.value)}
+              className="h-9"
+            />
+
+            {isLoading && memoryItems.length === 0 && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
+
+            {!isLoading && filteredMemoryItems.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                {memorySearch ? 'No memories match your filter.' : 'No memories yet. AI agents can store memories via MCP.'}
+              </p>
+            )}
+
+            {filteredMemoryItems.length > 0 && (
+              <>
+                <ul className="space-y-2">
+                  {getVisibleItems(filteredMemoryItems, memoryExpanded, maxItems).map((memory) => (
+                    <li key={memory.path}>
+                      <button
+                        type="button"
+                        onClick={() => onEntryClick(memory.path)}
+                        className="w-full text-left rounded-md border border-border p-3 hover:bg-accent transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm truncate">{memory.name}</span>
+                          <span className="text-[10px] uppercase text-muted-foreground ml-2 shrink-0">
+                            {memory.memory_type || 'memory'}
+                          </span>
+                        </div>
+                        {memory.agent_name && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            by {memory.agent_name}
+                          </div>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {shouldShowExpandToggle(filteredMemoryItems.length, maxItems) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setMemoryExpanded((prev) => !prev)}
+                  >
+                    {memoryExpanded ? 'Show less' : `Show all (${filteredMemoryItems.length})`}
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+        )}
         </div>
       </div>
       <div className="sticky top-2 self-start mt-2 mr-2 sm:top-3 sm:mt-3 sm:mr-3 flex flex-col shrink-0 max-h-[calc(100dvh-120px)]">
@@ -1390,6 +1487,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
             { key: 'ideas', label: 'Ideas' },
             { key: 'people', label: 'People' },
             { key: 'inbox', label: 'Inbox' },
+            { key: 'memory', label: 'Memory' },
             { key: 'recent', label: 'Recent' }
           ] as Array<{ key: typeof activeTab; label: string }>).map((tab, index, all) => (
             <button

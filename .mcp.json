@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "justdo-brain": {
+      "command": "npx",
+      "args": ["tsx", "backend/src/mcp/mcp-server.ts"],
+      "env": {
+        "DATABASE_URL": "postgresql://secondbrain:secondbrain@localhost:5433/secondbrain",
+        "MCP_AGENT_ID": "claude-code",
+        "MCP_AGENT_NAME": "Claude Code"
+      }
+    }
+  }
+}

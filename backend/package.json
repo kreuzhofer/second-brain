@@ -15,9 +15,12 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "backfill:embeddings": "tsx src/scripts/backfill-embeddings.ts"
+    "backfill:embeddings": "tsx src/scripts/backfill-embeddings.ts",
+    "mcp:start": "tsx src/mcp/mcp-server.ts",
+    "mcp:import-memories": "tsx src/scripts/import-claude-memories.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@prisma/client": "^5.9.0",
     "bcryptjs": "^2.4.3",
     "express": "^4.18.2",

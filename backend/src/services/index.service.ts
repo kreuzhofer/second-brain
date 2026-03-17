@@ -62,7 +62,8 @@ export class IndexService {
       ideas: [],
       task: [],
       admin: [],
-      inbox: []
+      inbox: [],
+      memory: []
     };
 
     const entries = await this.entryService.list();

@@ -16,7 +16,8 @@ const CATEGORY_OPTIONS: Array<{ value: Category | 'all'; label: string }> = [
   { value: 'projects', label: 'Projects' },
   { value: 'ideas', label: 'Ideas' },
   { value: 'task', label: 'Tasks' },
-  { value: 'inbox', label: 'Inbox' }
+  { value: 'inbox', label: 'Inbox' },
+  { value: 'memory', label: 'Memories' }
 ];
 
 export function SearchPanel({ onEntryClick, variant = 'panel' }: SearchPanelProps) {

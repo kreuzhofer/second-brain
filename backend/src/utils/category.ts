@@ -31,7 +31,7 @@ export function toLegacyCompatibleCategories(category?: Category | string): Cate
 
 export function isValidCategory(category: string, includeInbox = true): boolean {
   const valid = includeInbox
-    ? ['people', 'projects', 'ideas', 'task', 'admin', 'inbox']
-    : ['people', 'projects', 'ideas', 'task', 'admin'];
+    ? ['people', 'projects', 'ideas', 'task', 'admin', 'inbox', 'memory']
+    : ['people', 'projects', 'ideas', 'task', 'admin', 'memory'];
   return valid.includes(category);
 }

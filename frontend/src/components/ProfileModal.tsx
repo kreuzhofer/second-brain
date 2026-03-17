@@ -6,10 +6,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Loader2, User, KeyRound, Shield, Copy, Check, Mail, Download, Send } from 'lucide-react';
+import { X, Loader2, User, KeyRound, Shield, Copy, Check, Mail, Download, Send, Bot, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { api } from '@/services/api';
+import { api, AgentApiKey, AgentApiKeyCreateResponse } from '@/services/api';
 import { cn } from '@/lib/utils';
 
 interface ProfileModalProps {
@@ -21,12 +21,13 @@ interface ProfileModalProps {
   onLogout?: () => void;
 }
 
-type Tab = 'profile' | 'password' | 'account';
+type Tab = 'profile' | 'password' | 'account' | 'apikeys';
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: 'profile', label: 'Profile', icon: <User className="h-4 w-4" /> },
   { key: 'password', label: 'Password', icon: <KeyRound className="h-4 w-4" /> },
   { key: 'account', label: 'Account', icon: <Shield className="h-4 w-4" /> },
+  { key: 'apikeys', label: 'API Keys', icon: <Bot className="h-4 w-4" /> },
 ];
 
 export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpdate, onLogout }: ProfileModalProps) {
@@ -70,6 +71,16 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
   const [disableBusy, setDisableBusy] = useState(false);
   const [disableError, setDisableError] = useState<string | null>(null);
 
+  // API Keys tab state
+  const [apiKeys, setApiKeys] = useState<AgentApiKey[]>([]);
+  const [apiKeysBusy, setApiKeysBusy] = useState(false);
+  const [apiKeysError, setApiKeysError] = useState<string | null>(null);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyResult, setNewKeyResult] = useState<AgentApiKeyCreateResponse | null>(null);
+  const [keyCopied, setKeyCopied] = useState(false);
+  const [setupGuideOpen, setSetupGuideOpen] = useState<string | null>(null);
+  const [configCopied, setConfigCopied] = useState<string | null>(null);
+
   // Sync props when modal opens
   useEffect(() => {
     if (open) {
@@ -89,6 +100,13 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
       setDisablePassword('');
       setDisableError(null);
       setActiveTab('profile');
+
+      // Reset API keys state
+      setApiKeys([]);
+      setApiKeysError(null);
+      setNewKeyName('');
+      setNewKeyResult(null);
+      setKeyCopied(false);
 
       // Fetch inbound email address
       api.auth.inboundEmail()
@@ -260,6 +278,64 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
       setDisableBusy(false);
     }
   }, [disablePassword, onClose, onLogout]);
+
+  const loadApiKeys = useCallback(async () => {
+    setApiKeysBusy(true);
+    setApiKeysError(null);
+    try {
+      const result = await api.apiKeys.list();
+      setApiKeys(result.keys);
+    } catch (err) {
+      setApiKeysError(err instanceof Error ? err.message : 'Failed to load API keys.');
+    } finally {
+      setApiKeysBusy(false);
+    }
+  }, []);
+
+  const handleCreateKey = useCallback(async () => {
+    const trimmed = newKeyName.trim();
+    if (!trimmed) {
+      setApiKeysError('Agent name is required.');
+      return;
+    }
+    setApiKeysBusy(true);
+    setApiKeysError(null);
+    try {
+      const result = await api.apiKeys.create({ agentName: trimmed });
+      setNewKeyResult(result);
+      setNewKeyName('');
+      await loadApiKeys();
+    } catch (err) {
+      setApiKeysError(err instanceof Error ? err.message : 'Failed to create API key.');
+    } finally {
+      setApiKeysBusy(false);
+    }
+  }, [newKeyName, loadApiKeys]);
+
+  const handleRevokeKey = useCallback(async (id: string) => {
+    try {
+      await api.apiKeys.revoke(id);
+      await loadApiKeys();
+    } catch (err) {
+      setApiKeysError(err instanceof Error ? err.message : 'Failed to revoke key.');
+    }
+  }, [loadApiKeys]);
+
+  const handleDeleteKey = useCallback(async (id: string) => {
+    try {
+      await api.apiKeys.delete(id);
+      await loadApiKeys();
+    } catch (err) {
+      setApiKeysError(err instanceof Error ? err.message : 'Failed to delete key.');
+    }
+  }, [loadApiKeys]);
+
+  // Load API keys when switching to the apikeys tab
+  useEffect(() => {
+    if (open && activeTab === 'apikeys') {
+      loadApiKeys();
+    }
+  }, [open, activeTab, loadApiKeys]);
 
   if (!open) return null;
 
@@ -567,6 +643,213 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
               </div>
             </div>
           )}
+
+          {activeTab === 'apikeys' && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Create API Key</label>
+                <p className="text-xs text-muted-foreground">
+                  API keys let AI agents (Claude Desktop, Cursor, etc.) access your brain via MCP.
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    value={newKeyName}
+                    onChange={(e) => { setNewKeyName(e.target.value); setApiKeysError(null); }}
+                    placeholder="Agent name (e.g. Claude Desktop)"
+                    className="flex-1"
+                  />
+                  <Button onClick={handleCreateKey} disabled={apiKeysBusy} size="sm">
+                    Create
+                  </Button>
+                </div>
+              </div>
+
+              {newKeyResult && (
+                <div className="rounded-md border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950 p-3 space-y-2">
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200">Key created! Copy it now — it won't be shown again.</p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs bg-background px-2 py-1 rounded flex-1 truncate border">
+                      {newKeyResult.key}
+                    </code>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(newKeyResult.key);
+                        setKeyCopied(true);
+                        setTimeout(() => setKeyCopied(false), 2000);
+                      }}
+                    >
+                      {keyCopied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {apiKeysError && <p className="text-sm text-destructive">{apiKeysError}</p>}
+
+              <hr />
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Your API Keys</label>
+                {apiKeysBusy && apiKeys.length === 0 && (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+                {!apiKeysBusy && apiKeys.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No API keys yet.</p>
+                )}
+                {apiKeys.length > 0 && (
+                  <ul className="space-y-2">
+                    {apiKeys.map((k) => (
+                      <li key={k.id} className="rounded-md border p-3 text-sm space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{k.agentName}</span>
+                          <code className="text-xs text-muted-foreground">{k.keyPrefix}...</code>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Created {new Date(k.createdAt).toLocaleDateString()}
+                          {k.revokedAt && <span className="text-destructive ml-2">(revoked)</span>}
+                        </div>
+                        <div className="flex gap-2 mt-1">
+                          {!k.revokedAt && (
+                            <Button size="sm" variant="outline" onClick={() => handleRevokeKey(k.id)}>
+                              Revoke
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDeleteKey(k.id)}>
+                            Delete
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <hr />
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Setup Guide</label>
+                <p className="text-xs text-muted-foreground">
+                  Connect an AI agent to your brain via the MCP endpoint. Create an API key above, then configure your agent with the instructions below.
+                </p>
+
+                {/* Claude Code */}
+                <SetupGuideSection
+                  id="claude-code"
+                  title="Claude Code"
+                  openId={setupGuideOpen}
+                  onToggle={setSetupGuideOpen}
+                >
+                  <p className="text-xs text-muted-foreground pt-2">
+                    Add a <code className="bg-muted px-1 rounded">.mcp.json</code> file to your project root:
+                  </p>
+                  <ConfigSnippet
+                    id="claude-code"
+                    configCopied={configCopied}
+                    setConfigCopied={setConfigCopied}
+                    content={`{
+  "mcpServers": {
+    "justdo-brain": {
+      "url": "${window.location.origin}/mcp",
+      "headers": {
+        "Authorization": "Bearer <your-api-key>"
+      }
+    }
+  }
+}`}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Replace <code className="bg-muted px-1 rounded">&lt;your-api-key&gt;</code> with the key you created above.
+                    Restart Claude Code after adding the file.
+                  </p>
+                </SetupGuideSection>
+
+                {/* Claude Desktop */}
+                <SetupGuideSection
+                  id="claude-desktop"
+                  title="Claude Desktop"
+                  openId={setupGuideOpen}
+                  onToggle={setSetupGuideOpen}
+                >
+                  <p className="text-xs text-muted-foreground pt-2">
+                    Open <strong>Settings &rarr; Developer &rarr; Edit Config</strong> and add to the <code className="bg-muted px-1 rounded">mcpServers</code> object:
+                  </p>
+                  <ConfigSnippet
+                    id="claude-desktop"
+                    configCopied={configCopied}
+                    setConfigCopied={setConfigCopied}
+                    content={`"justdo-brain": {
+  "url": "${window.location.origin}/mcp",
+  "headers": {
+    "Authorization": "Bearer <your-api-key>"
+  }
+}`}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Config file location:<br />
+                    <strong>macOS:</strong> <code className="bg-muted px-1 rounded text-[11px]">~/Library/Application Support/Claude/claude_desktop_config.json</code><br />
+                    <strong>Windows:</strong> <code className="bg-muted px-1 rounded text-[11px]">%APPDATA%\Claude\claude_desktop_config.json</code>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Replace <code className="bg-muted px-1 rounded">&lt;your-api-key&gt;</code> with the key you created above. Restart Claude Desktop after saving.
+                  </p>
+                </SetupGuideSection>
+
+                {/* Cursor */}
+                <SetupGuideSection
+                  id="cursor"
+                  title="Cursor"
+                  openId={setupGuideOpen}
+                  onToggle={setSetupGuideOpen}
+                >
+                  <p className="text-xs text-muted-foreground pt-2">
+                    Add a <code className="bg-muted px-1 rounded">.cursor/mcp.json</code> file to your project root:
+                  </p>
+                  <ConfigSnippet
+                    id="cursor"
+                    configCopied={configCopied}
+                    setConfigCopied={setConfigCopied}
+                    content={`{
+  "mcpServers": {
+    "justdo-brain": {
+      "url": "${window.location.origin}/mcp",
+      "headers": {
+        "Authorization": "Bearer <your-api-key>"
+      }
+    }
+  }
+}`}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Or go to <strong>Cursor Settings &rarr; MCP</strong>, click <strong>Add new MCP server</strong>, and paste the URL with your API key.
+                  </p>
+                </SetupGuideSection>
+
+                {/* Other agents */}
+                <SetupGuideSection
+                  id="other"
+                  title="Other MCP-compatible agents"
+                  openId={setupGuideOpen}
+                  onToggle={setSetupGuideOpen}
+                >
+                  <p className="text-xs text-muted-foreground pt-2">
+                    Any agent that supports MCP over HTTP (Streamable HTTP transport) can connect:
+                  </p>
+                  <div className="text-xs space-y-1.5 pt-1">
+                    <div><strong>MCP Endpoint:</strong> <code className="bg-muted px-1 rounded">{window.location.origin}/mcp</code></div>
+                    <div><strong>Auth:</strong> <code className="bg-muted px-1 rounded">Authorization: Bearer &lt;your-api-key&gt;</code></div>
+                    <div><strong>Transport:</strong> Streamable HTTP (POST/GET/DELETE)</div>
+                  </div>
+                  <p className="text-xs text-muted-foreground pt-2">
+                    <strong>Available tools:</strong> store_memory, recall_memories, search_brain, get_entry, list_entries
+                  </p>
+                </SetupGuideSection>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -580,4 +863,60 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
   );
 
   return createPortal(modalContent, document.body);
+}
+
+function SetupGuideSection({
+  id, title, openId, onToggle, children
+}: {
+  id: string;
+  title: string;
+  openId: string | null;
+  onToggle: (id: string | null) => void;
+  children: React.ReactNode;
+}) {
+  const isOpen = openId === id;
+  return (
+    <div className="rounded-md border overflow-hidden">
+      <button
+        type="button"
+        className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium hover:bg-muted transition-colors text-left"
+        onClick={() => onToggle(isOpen ? null : id)}
+      >
+        {isOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+        {title}
+      </button>
+      {isOpen && (
+        <div className="px-3 pb-3 space-y-2 border-t bg-muted/30">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConfigSnippet({
+  id, content, configCopied, setConfigCopied
+}: {
+  id: string;
+  content: string;
+  configCopied: string | null;
+  setConfigCopied: (v: string | null) => void;
+}) {
+  return (
+    <div className="relative">
+      <pre className="text-xs bg-background border rounded p-2 pr-12 overflow-x-auto whitespace-pre">{content}</pre>
+      <Button
+        size="sm"
+        variant="outline"
+        className="absolute top-1 right-1 h-7 px-2"
+        onClick={() => {
+          navigator.clipboard.writeText(content);
+          setConfigCopied(id);
+          setTimeout(() => setConfigCopied(null), 2000);
+        }}
+      >
+        {configCopied === id ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+      </Button>
+    </div>
+  );
 }

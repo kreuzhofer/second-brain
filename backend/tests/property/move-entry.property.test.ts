@@ -66,7 +66,8 @@ const CATEGORY_REQUIRED_FIELDS: Record<Category, string[]> = {
   ideas: ['name', 'one_liner', 'related_projects'],
   task: ['name', 'status'],
   admin: ['name', 'status'],
-  inbox: ['original_text', 'suggested_category', 'suggested_name', 'status']
+  inbox: ['original_text', 'suggested_category', 'suggested_name', 'status'],
+  memory: ['name', 'agent_id', 'agent_name', 'memory_type']
 };
 
 /**

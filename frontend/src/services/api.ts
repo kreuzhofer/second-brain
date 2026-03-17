@@ -2,7 +2,7 @@
  * API Client for JustDo.so backend
  */
 
-export type Category = 'people' | 'projects' | 'ideas' | 'task' | 'admin' | 'inbox';
+export type Category = 'people' | 'projects' | 'ideas' | 'task' | 'admin' | 'inbox' | 'memory';
 export type Channel = 'chat' | 'email' | 'api';
 
 export interface Entry {
@@ -88,6 +88,8 @@ export interface EntrySummary {
   last_touched?: string;
   original_text?: string;
   suggested_category?: Category;
+  agent_name?: string;
+  memory_type?: string;
 }
 
 export interface SearchHit {
@@ -292,6 +294,24 @@ export interface Conversation {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+}
+
+export interface AgentApiKey {
+  id: string;
+  keyPrefix: string;
+  agentName: string;
+  permissions: string[];
+  lastUsedAt?: string | null;
+  expiresAt?: string | null;
+  revokedAt?: string | null;
+  createdAt: string;
+}
+
+export interface AgentApiKeyCreateResponse {
+  key: string;
+  id: string;
+  keyPrefix: string;
+  agentName: string;
 }
 
 class ApiClient {
@@ -773,6 +793,24 @@ class ApiClient {
   insights = {
     relationships: async (limit = 5): Promise<RelationshipInsightsResponse> => {
       return this.request<RelationshipInsightsResponse>(`/insights/relationships?limit=${limit}`);
+    }
+  };
+
+  apiKeys = {
+    list: async (): Promise<{ keys: AgentApiKey[] }> => {
+      return this.request<{ keys: AgentApiKey[] }>('/api-keys');
+    },
+    create: async (payload: { agentName: string; permissions?: string[]; expiresAt?: string }): Promise<AgentApiKeyCreateResponse> => {
+      return this.request<AgentApiKeyCreateResponse>('/api-keys', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    },
+    revoke: async (id: string): Promise<void> => {
+      await this.request<void>(`/api-keys/${id}/revoke`, { method: 'POST' });
+    },
+    delete: async (id: string): Promise<void> => {
+      await this.request<void>(`/api-keys/${id}`, { method: 'DELETE' });
     }
   };
 }

@@ -376,6 +376,10 @@ export class SearchService {
       parts.push(entry.original_text);
     }
 
+    if (category === 'memory' && typeof entry.memory_type === 'string') {
+      parts.push(`[${entry.memory_type}]`);
+    }
+
     if (content) parts.push(content);
 
     return parts.join('\n').slice(0, this.maxEmbeddingChars);
