@@ -103,6 +103,7 @@ mcpRouter.post('/', async (req: Request, res: Response) => {
   }
 
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
+  console.log(`[MCP-AUTH] POST /mcp sessionId=${sessionId || '(none)'} known=${sessionId ? transports.has(sessionId) : '-'} total_sessions=${transports.size}`);
 
   if (sessionId && transports.has(sessionId)) {
     // Existing session
@@ -115,18 +116,22 @@ mcpRouter.post('/', async (req: Request, res: Response) => {
   // New session — create transport + server
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
+    onsessioninitialized: (sessionId) => {
+      console.log(`[MCP-AUTH] session initialized: ${sessionId}`);
+      transports.set(sessionId, { transport, agentId: auth.agentId, agentName: auth.agentName, userId: auth.userId });
+    },
   });
+
+  transport.onclose = () => {
+    const sid = transport.sessionId;
+    if (sid) {
+      console.log(`[MCP-AUTH] session closed: ${sid}`);
+      transports.delete(sid);
+    }
+  };
 
   const server = createMcpServer(auth.agentId, auth.agentName, auth.userId);
   await server.connect(transport);
-
-  const newSessionId = transport.sessionId;
-  if (newSessionId) {
-    transports.set(newSessionId, { transport, agentId: auth.agentId, agentName: auth.agentName, userId: auth.userId });
-    transport.onclose = () => {
-      transports.delete(newSessionId);
-    };
-  }
 
   setDefaultUserId(auth.userId);
   await transport.handleRequest(req, res, req.body);
@@ -136,13 +141,16 @@ mcpRouter.post('/', async (req: Request, res: Response) => {
 mcpRouter.get('/', async (req: Request, res: Response) => {
   const auth = await authenticateRequest(req);
   if (!auth) {
-    res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Valid API key required.' } });
+    res.status(401)
+      .set('WWW-Authenticate', `Bearer resource_metadata="${req.protocol}://${req.get('host')}/.well-known/oauth-protected-resource/mcp"`)
+      .json({ error: { code: 'UNAUTHORIZED', message: 'Valid access token required. Connect via OAuth or use an API key.' } });
     return;
   }
 
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
+  console.log(`[MCP-AUTH] GET /mcp sessionId=${sessionId || '(none)'} known=${sessionId ? transports.has(sessionId) : '-'}`);
   if (!sessionId || !transports.has(sessionId)) {
-    res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Invalid or missing session ID.' } });
+    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Session not found.' } });
     return;
   }
 
@@ -155,13 +163,16 @@ mcpRouter.get('/', async (req: Request, res: Response) => {
 mcpRouter.delete('/', async (req: Request, res: Response) => {
   const auth = await authenticateRequest(req);
   if (!auth) {
-    res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Valid API key required.' } });
+    res.status(401)
+      .set('WWW-Authenticate', `Bearer resource_metadata="${req.protocol}://${req.get('host')}/.well-known/oauth-protected-resource/mcp"`)
+      .json({ error: { code: 'UNAUTHORIZED', message: 'Valid access token required. Connect via OAuth or use an API key.' } });
     return;
   }
 
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
+  console.log(`[MCP-AUTH] DELETE /mcp sessionId=${sessionId || '(none)'} known=${sessionId ? transports.has(sessionId) : '-'}`);
   if (!sessionId || !transports.has(sessionId)) {
-    res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Invalid or missing session ID.' } });
+    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Session not found.' } });
     return;
   }
 
