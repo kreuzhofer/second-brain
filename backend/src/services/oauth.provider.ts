@@ -29,7 +29,7 @@ function toClientInfo(record: {
     client_id: record.clientId,
     client_secret: record.clientSecret ?? undefined,
     client_name: record.clientName ?? undefined,
-    redirect_uris: record.redirectUris.map((u) => new URL(u)) as any,
+    redirect_uris: record.redirectUris as any,
     grant_types: record.grantTypes,
     response_types: record.responseTypes,
     token_endpoint_auth_method: record.tokenEndpointAuthMethod,
