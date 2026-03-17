@@ -71,6 +71,7 @@ app.use((req, res, next) => {
 
 // OAuth 2.0 for MCP (must be at app root before other routes)
 const serverUrl = new URL(config.PUBLIC_URL || `http://localhost:${config.PORT}`);
+console.log(`[MCP-AUTH] OAuth issuer URL: ${serverUrl.toString()}, resource: ${new URL('/mcp', serverUrl).toString()}`);
 app.use(mcpAuthRouter({
   provider: getOAuthProvider(),
   issuerUrl: serverUrl,

@@ -42,6 +42,8 @@ services:
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-}
+      # MCP OAuth (required for remote MCP clients like Claude Desktop, Claude.ai, ChatGPT)
+      - PUBLIC_URL=${PUBLIC_URL:-}
     depends_on:
       db:
         condition: service_healthy
