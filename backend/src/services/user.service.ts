@@ -178,6 +178,47 @@ export class UserService {
     return crypto.randomBytes(3).toString('hex');
   }
 
+  async createPasswordResetToken(email: string): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user || user.disabledAt) return null;
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+      }
+    });
+
+    return token;
+  }
+
+  async consumePasswordResetToken(token: string, newPassword: string): Promise<void> {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const record = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash }
+    });
+
+    if (!record) throw new Error('Invalid or expired reset link.');
+    if (record.usedAt) throw new Error('This reset link has already been used.');
+    if (record.expiresAt < new Date()) throw new Error('This reset link has expired.');
+
+    const passwordHash = await this.hashPassword(newPassword);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: { passwordHash }
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() }
+      })
+    ]);
+  }
+
   private async hashPassword(password: string): Promise<string> {
     return bcrypt.hash(password, 10);
   }

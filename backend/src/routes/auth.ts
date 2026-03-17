@@ -5,6 +5,8 @@ import { authMiddleware } from '../middleware/auth';
 import { requireUserId } from '../context/user-context';
 import { getInboundEmailAddress } from '../config/email';
 import { getPrismaClient } from '../lib/prisma';
+import { getSmtpSender } from '../services/smtp-sender';
+import { getConfig } from '../config/env';
 
 export const authRouter = Router();
 
@@ -297,5 +299,85 @@ authRouter.post('/disable', authMiddleware, async (req: Request, res: Response) 
     } else {
       res.status(400).json({ error: { code: 'DISABLE_FAILED', message } });
     }
+  }
+});
+
+// ============================================
+// Password Reset (public, no auth required)
+// ============================================
+
+authRouter.post('/forgot-password', async (req: Request, res: Response) => {
+  const { email } = req.body as { email?: string };
+  if (!email || !isValidEmail(email)) {
+    res.status(400).json({
+      error: { code: 'VALIDATION_ERROR', message: 'A valid email address is required.' }
+    });
+    return;
+  }
+
+  const userService = getUserService();
+  const token = await userService.createPasswordResetToken(email.trim().toLowerCase());
+
+  // Always return success to prevent email enumeration
+  if (!token) {
+    res.json({ message: 'If an account with that email exists, a reset link has been sent.' });
+    return;
+  }
+
+  const smtpSender = getSmtpSender();
+  if (!smtpSender.isAvailable()) {
+    res.status(503).json({
+      error: { code: 'EMAIL_NOT_CONFIGURED', message: 'Password reset requires email to be configured. Contact your administrator.' }
+    });
+    return;
+  }
+
+  const config = getConfig();
+  const baseUrl = config.PUBLIC_URL || `http://localhost:${config.PORT}`;
+  const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+
+  await smtpSender.sendEmail({
+    to: email.trim().toLowerCase(),
+    subject: 'Reset your JustDo.so password',
+    text: `You requested a password reset for your JustDo.so account.\n\nClick this link to set a new password (valid for 1 hour):\n${resetUrl}\n\nIf you didn't request this, you can safely ignore this email.`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+        <h2 style="color: #1e293b; margin-bottom: 16px;">Reset your password</h2>
+        <p style="color: #475569; line-height: 1.6;">You requested a password reset for your JustDo.so account.</p>
+        <p style="margin: 24px 0;">
+          <a href="${resetUrl}" style="background: #2563eb; color: #fff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+            Reset Password
+          </a>
+        </p>
+        <p style="color: #94a3b8; font-size: 14px;">This link is valid for 1 hour. If you didn't request this, you can safely ignore this email.</p>
+      </div>
+    `
+  });
+
+  res.json({ message: 'If an account with that email exists, a reset link has been sent.' });
+});
+
+authRouter.post('/reset-password', async (req: Request, res: Response) => {
+  const { token, password } = req.body as { token?: string; password?: string };
+  if (!token) {
+    res.status(400).json({
+      error: { code: 'VALIDATION_ERROR', message: 'Reset token is required.' }
+    });
+    return;
+  }
+  if (!password || password.length < 8) {
+    res.status(400).json({
+      error: { code: 'VALIDATION_ERROR', message: 'Password must be at least 8 characters.' }
+    });
+    return;
+  }
+
+  const userService = getUserService();
+  try {
+    await userService.consumePasswordResetToken(token, password);
+    res.json({ message: 'Password has been reset. You can now log in.' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to reset password.';
+    res.status(400).json({ error: { code: 'RESET_FAILED', message } });
   }
 });

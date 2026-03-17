@@ -104,6 +104,7 @@ model User {
   calendarSettings   CalendarSettings?
   pushSubscriptions  PushSubscription[]
   agentApiKeys       AgentApiKey[]
+  passwordResetTokens PasswordResetToken[]
 }
 
 model Conversation {
@@ -376,6 +377,18 @@ model AgentApiKey {
 
   @@index([userId])
   @@index([keyPrefix])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model OAuthClient {

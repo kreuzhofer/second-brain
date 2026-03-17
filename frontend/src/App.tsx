@@ -18,12 +18,21 @@ function App() {
   const [authToken, setAuthToken] = useState<string>(() =>
     localStorage.getItem('justdo-auth-token') || ''
   );
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot' | 'reset'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('token') ? 'reset' : 'login';
+  });
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [authConfirmPassword, setAuthConfirmPassword] = useState('');
   const [authName, setAuthName] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
+  const [resetToken] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('token') || '';
+  });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [selectedEntryPath, setSelectedEntryPath] = useState<string | null>(null);
   const [focusEntry, setFocusEntry] = useState<EntryWithPath | null>(null);
@@ -63,6 +72,33 @@ function App() {
   };
 
   const handleAuthSubmit = async () => {
+    if (authMode === 'forgot') {
+      if (!authEmail) { setAuthError('Email is required.'); return; }
+      setAuthBusy(true); setAuthError(null); setAuthSuccess(null);
+      try {
+        await api.auth.forgotPassword({ email: authEmail });
+        setAuthSuccess('If an account with that email exists, a reset link has been sent. Check your inbox.');
+      } catch (err) {
+        setAuthError(err instanceof Error ? err.message : 'Failed to send reset email.');
+      } finally { setAuthBusy(false); }
+      return;
+    }
+
+    if (authMode === 'reset') {
+      if (!authPassword || authPassword.length < 8) { setAuthError('Password must be at least 8 characters.'); return; }
+      if (authPassword !== authConfirmPassword) { setAuthError('Passwords do not match.'); return; }
+      setAuthBusy(true); setAuthError(null); setAuthSuccess(null);
+      try {
+        await api.auth.resetPassword({ token: resetToken, password: authPassword });
+        setAuthSuccess('Password has been reset. You can now sign in.');
+        window.history.replaceState({}, '', '/');
+        setTimeout(() => { setAuthMode('login'); setAuthSuccess(null); }, 2000);
+      } catch (err) {
+        setAuthError(err instanceof Error ? err.message : 'Failed to reset password.');
+      } finally { setAuthBusy(false); }
+      return;
+    }
+
     if (!authEmail || !authPassword) {
       setAuthError('Email and password are required.');
       return;
@@ -74,6 +110,7 @@ function App() {
 
     setAuthBusy(true);
     setAuthError(null);
+    setAuthSuccess(null);
     try {
       const response = authMode === 'login'
         ? await api.auth.login({ email: authEmail, password: authPassword })
@@ -190,22 +227,26 @@ function App() {
             <CardHeader>
               <CardTitle>Welcome to JustDo.so</CardTitle>
               <CardDescription>
-                {authMode === 'login'
-                  ? 'Sign in to continue'
-                  : 'Create your account'}
+                {authMode === 'login' && 'Sign in to continue'}
+                {authMode === 'register' && 'Create your account'}
+                {authMode === 'forgot' && 'Reset your password'}
+                {authMode === 'reset' && 'Set a new password'}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div>
-                  <Input
-                    type="email"
-                    placeholder="Email"
-                    autoComplete="email"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                  />
-                </div>
+                {(authMode === 'login' || authMode === 'register' || authMode === 'forgot') && (
+                  <div>
+                    <Input
+                      type="email"
+                      placeholder="Email"
+                      autoComplete="email"
+                      value={authEmail}
+                      onChange={(e) => { setAuthEmail(e.target.value); setAuthError(null); setAuthSuccess(null); }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAuthSubmit()}
+                    />
+                  </div>
+                )}
                 {authMode === 'register' && (
                   <div>
                     <Input
@@ -217,46 +258,80 @@ function App() {
                     />
                   </div>
                 )}
-                <div>
-                  <Input
-                    type="password"
-                    placeholder="Password"
-                    autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                  />
-                  {authError && (
-                    <p className="text-sm text-destructive mt-2">{authError}</p>
-                  )}
-                </div>
+                {(authMode === 'login' || authMode === 'register') && (
+                  <div>
+                    <Input
+                      type="password"
+                      placeholder="Password"
+                      autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
+                      value={authPassword}
+                      onChange={(e) => { setAuthPassword(e.target.value); setAuthError(null); }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAuthSubmit()}
+                    />
+                  </div>
+                )}
+                {authMode === 'reset' && (
+                  <>
+                    <div>
+                      <Input
+                        type="password"
+                        placeholder="New password (min. 8 characters)"
+                        autoComplete="new-password"
+                        value={authPassword}
+                        onChange={(e) => { setAuthPassword(e.target.value); setAuthError(null); }}
+                      />
+                    </div>
+                    <div>
+                      <Input
+                        type="password"
+                        placeholder="Confirm new password"
+                        autoComplete="new-password"
+                        value={authConfirmPassword}
+                        onChange={(e) => { setAuthConfirmPassword(e.target.value); setAuthError(null); }}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAuthSubmit()}
+                      />
+                    </div>
+                  </>
+                )}
+                {authError && <p className="text-sm text-destructive">{authError}</p>}
+                {authSuccess && <p className="text-sm text-green-600 dark:text-green-400">{authSuccess}</p>}
                 <Button onClick={handleAuthSubmit} className="w-full" disabled={authBusy}>
-                  {authBusy ? 'Please wait…' : authMode === 'login' ? 'Sign in' : 'Create account'}
+                  {authBusy ? 'Please wait…'
+                    : authMode === 'login' ? 'Sign in'
+                    : authMode === 'register' ? 'Create account'
+                    : authMode === 'forgot' ? 'Send reset link'
+                    : 'Reset password'}
                 </Button>
-                <div className="text-sm text-muted-foreground text-center">
-                  {authMode === 'login' ? (
+                <div className="text-sm text-muted-foreground text-center space-y-1">
+                  {authMode === 'login' && (
                     <>
-                      Need an account?{' '}
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="px-1"
-                        onClick={() => setAuthMode('register')}
-                      >
-                        Register
-                      </Button>
+                      <div>
+                        <Button type="button" variant="link" className="px-1 text-xs" onClick={() => { setAuthMode('forgot'); setAuthError(null); setAuthSuccess(null); }}>
+                          Forgot password?
+                        </Button>
+                      </div>
+                      <div>
+                        Need an account?{' '}
+                        <Button type="button" variant="link" className="px-1" onClick={() => { setAuthMode('register'); setAuthError(null); }}>
+                          Register
+                        </Button>
+                      </div>
                     </>
-                  ) : (
-                    <>
+                  )}
+                  {authMode === 'register' && (
+                    <div>
                       Already have an account?{' '}
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="px-1"
-                        onClick={() => setAuthMode('login')}
-                      >
+                      <Button type="button" variant="link" className="px-1" onClick={() => { setAuthMode('login'); setAuthError(null); }}>
                         Sign in
                       </Button>
-                    </>
+                    </div>
+                  )}
+                  {(authMode === 'forgot' || authMode === 'reset') && (
+                    <div>
+                      <Button type="button" variant="link" className="px-1" onClick={() => { setAuthMode('login'); setAuthError(null); setAuthSuccess(null); }}>
+                        Back to sign in
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
