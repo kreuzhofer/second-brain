@@ -74,6 +74,9 @@ export interface EnvConfig {
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+
+  // MCP OAuth configuration
+  PUBLIC_URL?: string;
 }
 
 /**
@@ -357,6 +360,9 @@ export function loadEnvConfig(): EnvConfig {
     VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || undefined,
     VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || undefined,
     VAPID_SUBJECT: process.env.VAPID_SUBJECT || (process.env.DEFAULT_USER_EMAIL ? `mailto:${process.env.DEFAULT_USER_EMAIL}` : undefined),
+
+    // MCP OAuth configuration
+    PUBLIC_URL: process.env.PUBLIC_URL || undefined,
   };
 }
 

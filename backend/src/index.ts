@@ -19,6 +19,8 @@ import { insightsRouter } from './routes/insights';
 import { pushRouter } from './routes/push';
 import { apiKeysRouter } from './routes/api-keys';
 import { mcpRouter } from './routes/mcp';
+import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
+import { getOAuthProvider } from './services/oauth.provider';
 import { initializeDataFolder, initializeEmailChannel, shutdownEmailChannel } from './services/init.service';
 import { getCronService, resetCronService } from './services/cron.service';
 import { getOfflineQueueService } from './services/offline-queue.service';
@@ -35,6 +37,20 @@ const app = express();
 
 // Middleware
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
+
+// OAuth 2.0 for MCP (must be at app root before other routes)
+const serverUrl = new URL(config.PUBLIC_URL || `http://localhost:${config.PORT}`);
+app.use(mcpAuthRouter({
+  provider: getOAuthProvider(),
+  issuerUrl: serverUrl,
+  baseUrl: serverUrl,
+  resourceServerUrl: new URL('/mcp', serverUrl),
+  resourceName: 'JustDo Second Brain',
+  clientRegistrationOptions: { rateLimit: false },
+  authorizationOptions: { rateLimit: false },
+  tokenOptions: { rateLimit: false },
+  revocationOptions: { rateLimit: false },
+}));
 
 // Public routes (no auth required)
 app.use('/api/health', healthRouter);
@@ -63,9 +79,15 @@ if (process.env.NODE_ENV === 'production') {
   const publicPath = join(__dirname, '../public');
   app.use(express.static(publicPath));
   
-  // SPA fallback - serve index.html for all non-API routes
+  // SPA fallback - serve index.html for all non-API/OAuth routes
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api')) {
+    if (req.path.startsWith('/api') ||
+        req.path.startsWith('/.well-known') ||
+        req.path === '/authorize' ||
+        req.path === '/token' ||
+        req.path === '/register' ||
+        req.path === '/revoke' ||
+        req.path === '/mcp') {
       return next();
     }
     res.sendFile(join(publicPath, 'index.html'));

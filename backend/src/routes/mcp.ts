@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { getApiKeyService } from '../services/api-key.service';
+import { getOAuthProvider } from '../services/oauth.provider';
 import { setDefaultUserId } from '../context/user-context';
 import { STORE_MEMORY_TOOL_DEFINITION, handleStoreMemory } from '../mcp/tools/store-memory';
 import { RECALL_MEMORIES_TOOL_DEFINITION, handleRecallMemories } from '../mcp/tools/recall-memories';
@@ -79,18 +79,26 @@ async function authenticateRequest(req: Request): Promise<{ userId: string; agen
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
 
-  const key = authHeader.slice(7);
-  if (!key) return null;
+  const token = authHeader.slice(7);
+  if (!token) return null;
 
-  const apiKeyService = getApiKeyService();
-  return apiKeyService.verify(key);
+  try {
+    const authInfo = await getOAuthProvider().verifyAccessToken(token);
+    const extra = authInfo.extra as { userId: string; agentId: string; agentName: string } | undefined;
+    if (extra?.userId) return extra;
+  } catch {
+    // Token verification failed
+  }
+  return null;
 }
 
 // POST /mcp — client sends JSON-RPC requests
 mcpRouter.post('/', async (req: Request, res: Response) => {
   const auth = await authenticateRequest(req);
   if (!auth) {
-    res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Valid API key required. Create one in Account Settings > API Keys.' } });
+    res.status(401)
+      .set('WWW-Authenticate', `Bearer resource_metadata="${req.protocol}://${req.get('host')}/.well-known/oauth-protected-resource/mcp"`)
+      .json({ error: { code: 'UNAUTHORIZED', message: 'Valid access token required. Connect via OAuth or use an API key.' } });
     return;
   }
 

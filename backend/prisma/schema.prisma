@@ -378,6 +378,56 @@ model AgentApiKey {
   @@index([keyPrefix])
 }
 
+model OAuthClient {
+  id                   String    @id @default(uuid())
+  clientId             String    @unique
+  clientSecret         String?
+  clientName           String?
+  redirectUris         String[]
+  grantTypes           String[]  @default(["authorization_code", "refresh_token"])
+  responseTypes        String[]  @default(["code"])
+  tokenEndpointAuthMethod String @default("client_secret_post")
+  scope                String?
+  clientIdIssuedAt     Int?
+  clientSecretExpiresAt Int?
+  createdAt            DateTime  @default(now())
+
+  authCodes            OAuthAuthorizationCode[]
+  refreshTokens        OAuthRefreshToken[]
+}
+
+model OAuthAuthorizationCode {
+  id            String    @id @default(uuid())
+  code          String    @unique
+  clientId      String
+  client        OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId        String
+  redirectUri   String
+  codeChallenge String
+  scopes        String[]
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([code])
+  @@index([clientId])
+}
+
+model OAuthRefreshToken {
+  id            String    @id @default(uuid())
+  token         String    @unique
+  clientId      String
+  client        OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId        String
+  scopes        String[]
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([token])
+  @@index([clientId])
+}
+
 model EntrySection {
   id              String   @id @default(uuid())
   entryId         String
