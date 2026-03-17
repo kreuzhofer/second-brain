@@ -566,6 +566,18 @@ class ApiClient {
         body: JSON.stringify(payload),
       });
     },
+    oauthConsent: async (payload: {
+      client_id: string;
+      redirect_uri: string;
+      code_challenge: string;
+      state?: string;
+      scope?: string;
+    }): Promise<{ redirect_url: string }> => {
+      return this.request<{ redirect_url: string }>('/auth/oauth-consent', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
   };
 
   /**

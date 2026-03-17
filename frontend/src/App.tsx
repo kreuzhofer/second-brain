@@ -34,6 +34,24 @@ function App() {
     return params.get('token') || '';
   });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [oauthConsent] = useState(() => {
+    if (window.location.pathname !== '/oauth-consent') return null;
+    const p = new URLSearchParams(window.location.search);
+    const client_id = p.get('client_id');
+    const redirect_uri = p.get('redirect_uri');
+    const code_challenge = p.get('code_challenge');
+    if (!client_id || !redirect_uri || !code_challenge) return null;
+    return {
+      client_id,
+      client_name: p.get('client_name') || client_id,
+      redirect_uri,
+      code_challenge,
+      state: p.get('state') || undefined,
+      scope: p.get('scope') || undefined,
+    };
+  });
+  const [consentBusy, setConsentBusy] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
   const [selectedEntryPath, setSelectedEntryPath] = useState<string | null>(null);
   const [focusEntry, setFocusEntry] = useState<EntryWithPath | null>(null);
   const [focusInitialMinutes, setFocusInitialMinutes] = useState<number | undefined>(undefined);
@@ -125,6 +143,19 @@ function App() {
       setAuthError(err instanceof Error ? err.message : 'Authentication failed.');
     } finally {
       setAuthBusy(false);
+    }
+  };
+
+  const handleOAuthConsent = async () => {
+    if (!oauthConsent) return;
+    setConsentBusy(true);
+    setConsentError(null);
+    try {
+      const result = await api.auth.oauthConsent(oauthConsent);
+      window.location.href = result.redirect_url;
+    } catch (err) {
+      setConsentError(err instanceof Error ? err.message : 'Authorization failed.');
+      setConsentBusy(false);
     }
   };
 
@@ -222,15 +253,42 @@ function App() {
 
       {/* Main Content */}
       <main className={APP_SHELL_CLASSES.main}>
-        {!isAuthenticated ? (
+        {isAuthenticated && oauthConsent ? (
+          <Card className="max-w-md mx-auto">
+            <CardHeader>
+              <CardTitle>Authorize Access</CardTitle>
+              <CardDescription>An AI agent wants to connect to your Second Brain.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="rounded-md border p-4 bg-muted/30">
+                  <p className="text-sm">
+                    <span className="font-semibold text-foreground">{oauthConsent.client_name}</span>
+                    {' '}is requesting access to your Second Brain. This will allow the agent to read and write entries, search your knowledge base, and store memories.
+                  </p>
+                </div>
+                {consentError && <p className="text-sm text-destructive">{consentError}</p>}
+                <div className="flex gap-2">
+                  <Button onClick={handleOAuthConsent} className="flex-1" disabled={consentBusy}>
+                    {consentBusy ? 'Authorizing...' : 'Approve'}
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => window.close()} disabled={consentBusy}>
+                    Deny
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : !isAuthenticated ? (
           <Card className="max-w-md mx-auto">
             <CardHeader>
               <CardTitle>Welcome to JustDo.so</CardTitle>
               <CardDescription>
-                {authMode === 'login' && 'Sign in to continue'}
-                {authMode === 'register' && 'Create your account'}
-                {authMode === 'forgot' && 'Reset your password'}
-                {authMode === 'reset' && 'Set a new password'}
+                {oauthConsent ? 'Sign in to authorize agent access' :
+                  authMode === 'login' ? 'Sign in to continue' :
+                  authMode === 'register' ? 'Create your account' :
+                  authMode === 'forgot' ? 'Reset your password' :
+                  'Set a new password'}
               </CardDescription>
             </CardHeader>
             <CardContent>

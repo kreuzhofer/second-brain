@@ -7,6 +7,7 @@ import { getInboundEmailAddress } from '../config/email';
 import { getPrismaClient } from '../lib/prisma';
 import { getSmtpSender } from '../services/smtp-sender';
 import { getConfig } from '../config/env';
+import { getOAuthProvider } from '../services/oauth.provider';
 
 export const authRouter = Router();
 
@@ -379,5 +380,56 @@ authRouter.post('/reset-password', async (req: Request, res: Response) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to reset password.';
     res.status(400).json({ error: { code: 'RESET_FAILED', message } });
+  }
+});
+
+// ============================================
+// OAuth Consent (authenticated via JWT)
+// ============================================
+
+authRouter.post('/oauth-consent', authMiddleware, async (req: Request, res: Response) => {
+  const userId = requireUserId();
+  const { client_id, redirect_uri, code_challenge, state, scope } = req.body as {
+    client_id?: string;
+    redirect_uri?: string;
+    code_challenge?: string;
+    state?: string;
+    scope?: string;
+  };
+
+  if (!client_id || !redirect_uri || !code_challenge) {
+    res.status(400).json({
+      error: { code: 'VALIDATION_ERROR', message: 'Missing required OAuth parameters.' }
+    });
+    return;
+  }
+
+  const provider = getOAuthProvider();
+
+  // Verify the client exists
+  const client = await provider.clientsStore.getClient(client_id);
+  if (!client) {
+    res.status(400).json({
+      error: { code: 'INVALID_CLIENT', message: 'Unknown OAuth client.' }
+    });
+    return;
+  }
+
+  const scopes = scope ? scope.split(' ').filter(Boolean) : [];
+
+  try {
+    const code = await provider.generateAuthorizationCode(
+      userId, client_id, redirect_uri, code_challenge, state, scopes
+    );
+
+    // Build the redirect URL with code + state
+    const redirectUrl = new URL(redirect_uri);
+    redirectUrl.searchParams.set('code', code);
+    if (state) redirectUrl.searchParams.set('state', state);
+
+    res.json({ redirect_url: redirectUrl.toString() });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to generate authorization.';
+    res.status(500).json({ error: { code: 'AUTHORIZATION_FAILED', message } });
   }
 });
