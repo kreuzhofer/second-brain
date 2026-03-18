@@ -61,15 +61,12 @@ export async function handleStoreMemory(
     input.content
   );
 
-  // Generate embedding synchronously for immediate recallability
-  try {
-    await (search as any).ensureEmbedding(
-      result.entry.id,
-      `${input.title}\n[${input.memory_type}]\n${input.content}`
-    );
-  } catch {
-    // Embedding generation is best-effort
-  }
+  // Fire-and-forget embedding generation — don't block the MCP response.
+  // The embedding backfill service catches any missed embeddings on restart.
+  (search as any).ensureEmbedding(
+    result.entry.id,
+    `${input.title}\n[${input.memory_type}]\n${input.content}`
+  ).catch(() => { /* best-effort */ });
 
   return {
     path: result.path,

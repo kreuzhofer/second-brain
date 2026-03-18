@@ -6,7 +6,7 @@ describe('store_memory tool', () => {
   };
 
   const mockSearchService = {
-    ensureEmbedding: jest.fn()
+    ensureEmbedding: jest.fn().mockResolvedValue(undefined)
   };
 
   beforeEach(() => {
