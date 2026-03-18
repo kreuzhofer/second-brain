@@ -63,12 +63,20 @@ class JustDoClientsStore implements OAuthRegisteredClientsStore {
     const clientId = runtimeClient.client_id || randomUUID();
     const clientIdIssuedAt = runtimeClient.client_id_issued_at || Math.floor(Date.now() / 1000);
 
-    // Public clients (token_endpoint_auth_method: "none") must not have a secret.
+    // Determine if this is a public client (no secret needed).
     // The MCP SDK requires a secret on token exchange if one is stored, so we must
     // leave it null for public clients to allow secret-less token requests.
-    const isPublicClient = client.token_endpoint_auth_method === 'none';
+    // A client is public if:
+    //   - It explicitly sets token_endpoint_auth_method to "none", OR
+    //   - It provides neither a secret nor a secret-requiring auth method
+    //     (e.g. ChatGPT registers without specifying either)
+    const explicitMethod = client.token_endpoint_auth_method;
+    const secretRequiringMethods = ['client_secret_post', 'client_secret_basic'];
+    const isPublicClient = explicitMethod === 'none' ||
+      (!client.client_secret && (!explicitMethod || !secretRequiringMethods.includes(explicitMethod)));
     const clientSecret = isPublicClient ? null : (client.client_secret || randomBytes(32).toString('hex'));
-    const tokenEndpointAuthMethod = client.token_endpoint_auth_method ?? 'client_secret_post';
+    const tokenEndpointAuthMethod = isPublicClient ? 'none' : (explicitMethod ?? 'client_secret_post');
+    console.log(`[MCP-AUTH] registerClient -> isPublic=${isPublicClient} authMethod=${tokenEndpointAuthMethod} hasSecret=${!!clientSecret}`);
 
     const record = await this.prisma.oAuthClient.create({
       data: {

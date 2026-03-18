@@ -47,6 +47,18 @@ describe('OAuth flow for MCP', () => {
     expect(retrieved!.client_secret).toBeUndefined();
   });
 
+  it('registers as public client when no secret and no auth method provided', async () => {
+    const provider = getOAuthProvider();
+    const registered = await provider.clientsStore.registerClient!({
+      redirect_uris: [new URL('https://chatgpt.com/callback')] as any,
+      client_name: 'ChatGPT',
+    });
+
+    expect(registered.client_id).toBeDefined();
+    expect(registered.client_secret).toBeUndefined();
+    expect(registered.token_endpoint_auth_method).toBe('none');
+  });
+
   it('full auth code exchange flow', async () => {
     const provider = getOAuthProvider();
     const prisma = getPrismaClient();
