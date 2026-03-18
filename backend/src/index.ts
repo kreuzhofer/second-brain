@@ -161,17 +161,16 @@ async function start() {
     // One-time fix: older code always generated a client_secret during DCR,
     // even for public clients like ChatGPT that never send one on token exchange.
     // The MCP SDK rejects token requests when a stored secret exists but isn't
-    // provided. Wipe all OAuth clients so they re-register with correct settings.
+    // provided. Fix in-place: null out secrets so clients keep their client_id.
     {
       const { getPrismaClient } = await import('./lib/prisma');
       const prisma = getPrismaClient();
-      const count = await prisma.oAuthClient.count();
-      if (count > 0) {
-        // Cascade deletes auth codes and refresh tokens via FK constraints
-        await prisma.oAuthRefreshToken.deleteMany({});
-        await prisma.oAuthAuthorizationCode.deleteMany({});
-        await prisma.oAuthClient.deleteMany({});
-        console.log(`[MCP-AUTH] Cleared ${count} legacy OAuth client(s) for re-registration with correct secret handling`);
+      const fixed = await prisma.oAuthClient.updateMany({
+        where: { clientSecret: { not: null } },
+        data: { clientSecret: null, tokenEndpointAuthMethod: 'none' },
+      });
+      if (fixed.count > 0) {
+        console.log(`[MCP-AUTH] Fixed ${fixed.count} OAuth client(s): cleared secret for public client compatibility`);
       }
     }
 
