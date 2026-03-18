@@ -57,12 +57,18 @@ class JustDoClientsStore implements OAuthRegisteredClientsStore {
   async registerClient(
     client: Omit<OAuthClientInformationFull, 'client_id' | 'client_id_issued_at'>
   ): Promise<OAuthClientInformationFull> {
-    console.log(`[MCP-AUTH] clientsStore.registerClient name=${client.client_name} redirect_uris=${client.redirect_uris?.map(u => u.toString()).join(',')}`);
+    console.log(`[MCP-AUTH] clientsStore.registerClient name=${client.client_name} redirect_uris=${client.redirect_uris?.map(u => u.toString()).join(',')} token_endpoint_auth_method=${client.token_endpoint_auth_method || '(not set)'}`);
     // The SDK may pass client_id at runtime even though the type omits it
     const runtimeClient = client as OAuthClientInformationFull;
     const clientId = runtimeClient.client_id || randomUUID();
-    const clientSecret = client.client_secret || randomBytes(32).toString('hex');
     const clientIdIssuedAt = runtimeClient.client_id_issued_at || Math.floor(Date.now() / 1000);
+
+    // Public clients (token_endpoint_auth_method: "none") must not have a secret.
+    // The MCP SDK requires a secret on token exchange if one is stored, so we must
+    // leave it null for public clients to allow secret-less token requests.
+    const isPublicClient = client.token_endpoint_auth_method === 'none';
+    const clientSecret = isPublicClient ? null : (client.client_secret || randomBytes(32).toString('hex'));
+    const tokenEndpointAuthMethod = client.token_endpoint_auth_method ?? 'client_secret_post';
 
     const record = await this.prisma.oAuthClient.create({
       data: {
@@ -72,7 +78,7 @@ class JustDoClientsStore implements OAuthRegisteredClientsStore {
         redirectUris: client.redirect_uris.map((u) => u.toString()),
         grantTypes: client.grant_types ?? ['authorization_code', 'refresh_token'],
         responseTypes: client.response_types ?? ['code'],
-        tokenEndpointAuthMethod: client.token_endpoint_auth_method ?? 'client_secret_post',
+        tokenEndpointAuthMethod,
         scope: client.scope ?? null,
         clientIdIssuedAt,
         clientSecretExpiresAt: client.client_secret_expires_at ?? null,
