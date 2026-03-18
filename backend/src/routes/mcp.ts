@@ -20,10 +20,28 @@ export const mcpRouter = Router();
 // Store active transports by session ID
 const transports = new Map<string, { transport: StreamableHTTPServerTransport; agentId: string; agentName: string; userId: string }>();
 
+const MCP_SERVER_INSTRUCTIONS = `You are connected to JustDo.so — the user's personal knowledge management system.
+
+JustDo.so stores structured entries organized by category:
+- **people**: Contacts and relationships (fields: context, follow-ups, related projects)
+- **projects**: Multi-step efforts with goals and timelines (fields: status, next action, related people, due date)
+- **ideas**: Concepts and insights not yet committed to (fields: one-liner, related projects)
+- **tasks**: Single actionable items (fields: status, due date, duration, priority)
+- **memories**: Knowledge stored by AI agents like you (fields: memory type, confidence, expiration)
+
+Use store_memory to save important information about the user that should persist across conversations. Use search and list tools to find existing knowledge before creating duplicates. Use get_entry to read full details of a specific entry.
+
+When storing memories, choose the right memory_type:
+- fact: Personal details, background, skills, opinions
+- preference: How the user likes things done
+- context: Project details, work situations, ongoing topics
+- feedback: Corrections or preferences about your behavior
+- relationship: People and connections between them`;
+
 function createMcpServer(agentId: string, agentName: string, userId: string): Server {
   const server = new Server(
-    { name: 'justdo-brain', version: '1.0.0' },
-    { capabilities: { tools: {} } }
+    { name: 'justdo', version: '1.0.0' },
+    { capabilities: { tools: {} }, instructions: MCP_SERVER_INSTRUCTIONS }
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({

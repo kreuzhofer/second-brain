@@ -17,7 +17,7 @@ export interface SearchBrainResult {
 
 export const SEARCH_BRAIN_TOOL_DEFINITION = {
   name: 'search_brain',
-  description: "Search the user's brain (knowledge base) for entries about people, projects, ideas, tasks, and more. Returns matching entries with relevance scores.",
+  description: "Search the user's JustDo.so knowledge base for entries about people, projects, ideas, tasks, and memories. Returns matching entries with relevance scores.",
   inputSchema: {
     type: 'object' as const,
     properties: {

@@ -20,7 +20,7 @@ export interface ListEntriesResult {
 
 export const LIST_ENTRIES_TOOL_DEFINITION = {
   name: 'list_entries',
-  description: "List entries from the user's brain. Optionally filter by category and status. Returns summaries, not full content — use get_entry for details.",
+  description: "List entries from the user's JustDo.so knowledge base. Optionally filter by category and status. Returns summaries, not full content — use get_entry for details.",
   inputSchema: {
     type: 'object' as const,
     properties: {
