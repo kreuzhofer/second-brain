@@ -168,7 +168,7 @@ export class PushNotificationService {
     const titleMatch = markdownContent.match(/^\*\*(.+?)\*\*/);
     const rawTitle = titleMatch
       ? titleMatch[1].replace(/[^\w\s\-–—?']/g, '').trim()
-      : 'Second Brain';
+      : 'JustDo.so';
 
     // Extract body: take first meaningful non-empty, non-title line
     const lines = markdownContent.split('\n').filter((l) => l.trim() !== '');
@@ -177,7 +177,7 @@ export class PushNotificationService {
     );
     const body = bodyLine
       ? bodyLine.replace(/^\*\*|\*\*$/g, '').replace(/^- /, '').trim()
-      : 'You have a new nudge in your Second Brain.';
+      : 'You have a new nudge in JustDo.so.';
 
     // Truncate body to 120 chars for notification readability
     const truncatedBody =

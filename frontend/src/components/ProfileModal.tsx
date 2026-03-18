@@ -35,7 +35,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
 const EXTRACTION_PROMPTS: { title: string; description: string; prompt: string }[] = [
   {
     title: 'Extract knowledge from this conversation',
-    description: 'Saves key facts, people, projects, and ideas from the current chat into your brain.',
+    description: 'Saves key facts, people, projects, and ideas from the current chat into your JustDo.so.',
     prompt: `Review our entire conversation so far. Extract and store every piece of important information using the store_memory tool. For each item, choose the best memory_type:
 - "fact" for things about me (preferences, background, skills, opinions)
 - "relationship" for people I mentioned and my connection to them
@@ -46,7 +46,7 @@ Use descriptive titles. Include enough detail in the content that the memory is 
   },
   {
     title: 'Import a pasted conversation',
-    description: 'Paste an old chat below this prompt and the AI will extract everything into your brain.',
+    description: 'Paste an old chat below this prompt and the AI will extract everything into your JustDo.so.',
     prompt: `I'm going to paste a conversation below. Please carefully analyze it and use store_memory to capture ALL important information:
 
 1. Facts about me (preferences, background, decisions made)
@@ -62,8 +62,8 @@ Here is the conversation:
   },
   {
     title: 'Dump everything you know about me',
-    description: 'Asks the AI to transfer all knowledge it has about you into your brain.',
-    prompt: `You likely have knowledge about me from our conversations. I want to capture ALL of it in my second brain. Please go through everything you know about me and use store_memory for each piece of information:
+    description: 'Asks the AI to transfer all knowledge it has about you into your JustDo.so.',
+    prompt: `You likely have knowledge about me from our conversations. I want to capture ALL of it in my JustDo.so knowledge base. Please go through everything you know about me and use store_memory for each piece of information:
 
 - My personal details, background, and role
 - My preferences and how I like things done
@@ -77,7 +77,7 @@ Be thorough. Use the appropriate memory_type for each item. Better to store too 
   {
     title: 'Capture a project in detail',
     description: 'Extracts everything about a specific project — context, people, status, decisions, next actions.',
-    prompt: `I want to capture everything about a specific project into my second brain.
+    prompt: `I want to capture everything about a specific project into my JustDo.so knowledge base.
 
 First, use search_brain to check what already exists about this project: [PROJECT NAME]
 
@@ -764,7 +764,7 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
               <div className="space-y-2">
                 <label className="text-sm font-medium">Create API Key</label>
                 <p className="text-xs text-muted-foreground">
-                  API keys let AI agents (Claude Desktop, Cursor, etc.) access your brain via MCP.
+                  API keys let AI agents (Claude Desktop, Cursor, etc.) access your JustDo.so via MCP.
                 </p>
                 <div className="flex gap-2">
                   <Input
@@ -848,7 +848,7 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
               <div className="space-y-2">
                 <label className="text-sm font-medium">Setup Guide</label>
                 <p className="text-xs text-muted-foreground">
-                  Connect an AI agent to your brain via the MCP endpoint. Create an API key above, then configure your agent with the instructions below.
+                  Connect an AI agent to your JustDo.so via the MCP endpoint. Create an API key above, then configure your agent with the instructions below.
                 </p>
 
                 {/* Claude Code */}
@@ -971,7 +971,7 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
               <div className="space-y-2">
                 <label className="text-sm font-medium">OAuth Connections</label>
                 <p className="text-xs text-muted-foreground">
-                  External apps (like ChatGPT) connected to your brain via OAuth. Revoking a connection will sign out that app.
+                  External apps (like ChatGPT) connected to your JustDo.so via OAuth. Revoking a connection will sign out that app.
                 </p>
               </div>
 
@@ -1023,7 +1023,7 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
               <div className="space-y-2">
                 <label className="text-sm font-medium">Knowledge Extraction Prompts</label>
                 <p className="text-xs text-muted-foreground">
-                  Copy these prompts into ChatGPT, Claude, or any MCP-connected AI to extract and store knowledge in your brain.
+                  Copy these prompts into ChatGPT, Claude, or any MCP-connected AI to extract and store knowledge in your JustDo.so.
                 </p>
               </div>
 

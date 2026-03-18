@@ -257,14 +257,14 @@ function App() {
           <Card className="max-w-md mx-auto">
             <CardHeader>
               <CardTitle>Authorize Access</CardTitle>
-              <CardDescription>An AI agent wants to connect to your Second Brain.</CardDescription>
+              <CardDescription>An AI agent wants to connect to your JustDo.so account.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="rounded-md border p-4 bg-muted/30">
                   <p className="text-sm">
                     <span className="font-semibold text-foreground">{oauthConsent.client_name}</span>
-                    {' '}is requesting access to your Second Brain. This will allow the agent to read and write entries, search your knowledge base, and store memories.
+                    {' '}is requesting access to your JustDo.so account. This will allow the agent to read and write entries, search your knowledge base, and store memories.
                   </p>
                 </div>
                 {consentError && <p className="text-sm text-destructive">{consentError}</p>}

@@ -78,7 +78,7 @@ app.use(mcpAuthRouter({
   issuerUrl: serverUrl,
   baseUrl: serverUrl,
   resourceServerUrl: new URL('/mcp', serverUrl),
-  resourceName: 'JustDo Second Brain',
+  resourceName: 'JustDo.so',
   clientRegistrationOptions: { rateLimit: false },
   authorizationOptions: { rateLimit: false },
   tokenOptions: { rateLimit: false },
