@@ -314,6 +314,13 @@ export interface AgentApiKeyCreateResponse {
   agentName: string;
 }
 
+export interface OAuthConnection {
+  clientId: string;
+  clientName: string | null;
+  createdAt: string;
+  activeTokens: number;
+}
+
 class ApiClient {
   private authToken: string = '';
   private baseUrl: string = '/api';
@@ -835,6 +842,15 @@ class ApiClient {
     },
     delete: async (id: string): Promise<void> => {
       await this.request<void>(`/api-keys/${id}`, { method: 'DELETE' });
+    }
+  };
+
+  oauthConnections = {
+    list: async (): Promise<{ connections: OAuthConnection[] }> => {
+      return this.request<{ connections: OAuthConnection[] }>('/oauth-connections');
+    },
+    revoke: async (clientId: string): Promise<void> => {
+      await this.request<void>(`/oauth-connections/${clientId}`, { method: 'DELETE' });
     }
   };
 }

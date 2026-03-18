@@ -18,6 +18,7 @@ import { calendarRouter, calendarPublicRouter } from './routes/calendar';
 import { insightsRouter } from './routes/insights';
 import { pushRouter } from './routes/push';
 import { apiKeysRouter } from './routes/api-keys';
+import { oauthConnectionsRouter } from './routes/oauth-connections';
 import { mcpRouter } from './routes/mcp';
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { getOAuthProvider } from './services/oauth.provider';
@@ -105,6 +106,7 @@ app.use('/api/calendar', authMiddleware, calendarRouter);
 app.use('/api/insights', authMiddleware, insightsRouter);
 app.use('/api/push', authMiddleware, pushRouter);
 app.use('/api/api-keys', authMiddleware, apiKeysRouter);
+app.use('/api/oauth-connections', authMiddleware, oauthConnectionsRouter);
 
 // Serve frontend static files in production
 if (process.env.NODE_ENV === 'production') {

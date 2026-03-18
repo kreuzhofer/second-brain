@@ -6,10 +6,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Loader2, User, KeyRound, Shield, Copy, Check, Mail, Download, Send, Bot, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Loader2, User, KeyRound, Shield, Copy, Check, Mail, Download, Send, Bot, ChevronDown, ChevronRight, Link } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { api, AgentApiKey, AgentApiKeyCreateResponse } from '@/services/api';
+import { api, AgentApiKey, AgentApiKeyCreateResponse, OAuthConnection } from '@/services/api';
 import { cn } from '@/lib/utils';
 
 interface ProfileModalProps {
@@ -21,13 +21,14 @@ interface ProfileModalProps {
   onLogout?: () => void;
 }
 
-type Tab = 'profile' | 'password' | 'account' | 'apikeys';
+type Tab = 'profile' | 'password' | 'account' | 'apikeys' | 'connections';
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: 'profile', label: 'Profile', icon: <User className="h-4 w-4" /> },
   { key: 'password', label: 'Password', icon: <KeyRound className="h-4 w-4" /> },
   { key: 'account', label: 'Account', icon: <Shield className="h-4 w-4" /> },
   { key: 'apikeys', label: 'API Keys', icon: <Bot className="h-4 w-4" /> },
+  { key: 'connections', label: 'Connections', icon: <Link className="h-4 w-4" /> },
 ];
 
 export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpdate, onLogout }: ProfileModalProps) {
@@ -81,6 +82,11 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
   const [setupGuideOpen, setSetupGuideOpen] = useState<string | null>(null);
   const [configCopied, setConfigCopied] = useState<string | null>(null);
 
+  // OAuth Connections tab state
+  const [oauthConnections, setOauthConnections] = useState<OAuthConnection[]>([]);
+  const [oauthBusy, setOauthBusy] = useState(false);
+  const [oauthError, setOauthError] = useState<string | null>(null);
+
   // Sync props when modal opens
   useEffect(() => {
     if (open) {
@@ -107,6 +113,10 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
       setNewKeyName('');
       setNewKeyResult(null);
       setKeyCopied(false);
+
+      // Reset OAuth connections state
+      setOauthConnections([]);
+      setOauthError(null);
 
       // Fetch inbound email address
       api.auth.inboundEmail()
@@ -330,12 +340,41 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
     }
   }, [loadApiKeys]);
 
+  const loadOauthConnections = useCallback(async () => {
+    setOauthBusy(true);
+    setOauthError(null);
+    try {
+      const result = await api.oauthConnections.list();
+      setOauthConnections(result.connections);
+    } catch (err) {
+      setOauthError(err instanceof Error ? err.message : 'Failed to load connections.');
+    } finally {
+      setOauthBusy(false);
+    }
+  }, []);
+
+  const handleRevokeConnection = useCallback(async (clientId: string) => {
+    try {
+      await api.oauthConnections.revoke(clientId);
+      await loadOauthConnections();
+    } catch (err) {
+      setOauthError(err instanceof Error ? err.message : 'Failed to revoke connection.');
+    }
+  }, [loadOauthConnections]);
+
   // Load API keys when switching to the apikeys tab
   useEffect(() => {
     if (open && activeTab === 'apikeys') {
       loadApiKeys();
     }
   }, [open, activeTab, loadApiKeys]);
+
+  // Load OAuth connections when switching to the connections tab
+  useEffect(() => {
+    if (open && activeTab === 'connections') {
+      loadOauthConnections();
+    }
+  }, [open, activeTab, loadOauthConnections]);
 
   if (!open) return null;
 
@@ -848,6 +887,58 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
                   </p>
                 </SetupGuideSection>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'connections' && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">OAuth Connections</label>
+                <p className="text-xs text-muted-foreground">
+                  External apps (like ChatGPT) connected to your brain via OAuth. Revoking a connection will sign out that app.
+                </p>
+              </div>
+
+              {oauthError && <p className="text-sm text-destructive">{oauthError}</p>}
+
+              {oauthBusy && oauthConnections.length === 0 && (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {!oauthBusy && oauthConnections.length === 0 && (
+                <p className="text-sm text-muted-foreground">No connected apps.</p>
+              )}
+              {oauthConnections.length > 0 && (
+                <ul className="space-y-2">
+                  {oauthConnections.map((c) => (
+                    <li key={c.clientId} className="rounded-md border p-3 text-sm space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{c.clientName || c.clientId}</span>
+                        {c.activeTokens > 0 && (
+                          <span className="text-xs text-green-600 dark:text-green-400">Active</span>
+                        )}
+                        {c.activeTokens === 0 && (
+                          <span className="text-xs text-muted-foreground">No active sessions</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Connected {new Date(c.createdAt).toLocaleDateString()}
+                      </div>
+                      {c.activeTokens > 0 && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleRevokeConnection(c.clientId)}
+                          className="mt-1"
+                        >
+                          Revoke Access
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </div>
