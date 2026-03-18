@@ -56,36 +56,37 @@ function createMcpServer(agentId: string, agentName: string, userId: string): Se
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+    const start = Date.now();
 
     // Set user context for this request
     setDefaultUserId(userId);
 
     try {
+      let result: unknown;
       switch (name) {
-        case 'store_memory': {
-          const result = await handleStoreMemory(args as any, agentId, agentName);
-          return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-        }
-        case 'recall_memories': {
-          const result = await handleRecallMemories(args as any);
-          return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-        }
-        case 'search_brain': {
-          const result = await handleSearchBrain(args as any);
-          return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-        }
-        case 'get_entry': {
-          const result = await handleGetEntry(args as any);
-          return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-        }
-        case 'list_entries': {
-          const result = await handleListEntries(args as any);
-          return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-        }
+        case 'store_memory':
+          result = await handleStoreMemory(args as any, agentId, agentName);
+          break;
+        case 'recall_memories':
+          result = await handleRecallMemories(args as any);
+          break;
+        case 'search_brain':
+          result = await handleSearchBrain(args as any);
+          break;
+        case 'get_entry':
+          result = await handleGetEntry(args as any);
+          break;
+        case 'list_entries':
+          result = await handleListEntries(args as any);
+          break;
         default:
+          console.log(`[MCP] tool=${name} agent=${agentName} error="Unknown tool" ${Date.now() - start}ms`);
           return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
       }
+      console.log(`[MCP] tool=${name} agent=${agentName} status=ok ${Date.now() - start}ms`);
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] };
     } catch (error: any) {
+      console.error(`[MCP] tool=${name} agent=${agentName} status=error ${Date.now() - start}ms`, error.message, error.stack);
       return { content: [{ type: 'text', text: `Error: ${error.message}` }], isError: true };
     }
   });
