@@ -21,7 +21,7 @@ interface ProfileModalProps {
   onLogout?: () => void;
 }
 
-type Tab = 'profile' | 'password' | 'account' | 'apikeys' | 'connections';
+type Tab = 'profile' | 'password' | 'account' | 'apikeys' | 'connections' | 'prompts';
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: 'profile', label: 'Profile', icon: <User className="h-4 w-4" /> },
@@ -29,6 +29,79 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: 'account', label: 'Account', icon: <Shield className="h-4 w-4" /> },
   { key: 'apikeys', label: 'API Keys', icon: <Bot className="h-4 w-4" /> },
   { key: 'connections', label: 'Connections', icon: <Link className="h-4 w-4" /> },
+  { key: 'prompts', label: 'Prompts', icon: <Copy className="h-4 w-4" /> },
+];
+
+const EXTRACTION_PROMPTS: { title: string; description: string; prompt: string }[] = [
+  {
+    title: 'Extract knowledge from this conversation',
+    description: 'Saves key facts, people, projects, and ideas from the current chat into your brain.',
+    prompt: `Review our entire conversation so far. Extract and store every piece of important information using the store_memory tool. For each item, choose the best memory_type:
+- "fact" for things about me (preferences, background, skills, opinions)
+- "relationship" for people I mentioned and my connection to them
+- "context" for project details, work situations, or ongoing topics
+- "feedback" for corrections or preferences I expressed about how you should behave
+
+Use descriptive titles. Include enough detail in the content that the memory is useful on its own. Don't store trivial or redundant information.`,
+  },
+  {
+    title: 'Import a pasted conversation',
+    description: 'Paste an old chat below this prompt and the AI will extract everything into your brain.',
+    prompt: `I'm going to paste a conversation below. Please carefully analyze it and use store_memory to capture ALL important information:
+
+1. Facts about me (preferences, background, decisions made)
+2. People mentioned (who they are, relationship to me, any follow-ups)
+3. Projects discussed (status, decisions, next actions)
+4. Ideas or insights worth remembering
+5. Any feedback or corrections I gave
+
+For each memory, pick the appropriate memory_type (fact, preference, context, feedback, relationship) and write a clear title and detailed content. Don't skip anything significant.
+
+Here is the conversation:
+`,
+  },
+  {
+    title: 'Dump everything you know about me',
+    description: 'Asks the AI to transfer all knowledge it has about you into your brain.',
+    prompt: `You likely have knowledge about me from our conversations. I want to capture ALL of it in my second brain. Please go through everything you know about me and use store_memory for each piece of information:
+
+- My personal details, background, and role
+- My preferences and how I like things done
+- People in my life and my relationships with them
+- Projects I'm working on and their status
+- Ideas I've shared
+- Feedback I've given you about how to help me
+
+Be thorough. Use the appropriate memory_type for each item. Better to store too much than too little.`,
+  },
+  {
+    title: 'Capture a project in detail',
+    description: 'Extracts everything about a specific project — context, people, status, decisions, next actions.',
+    prompt: `I want to capture everything about a specific project into my second brain.
+
+First, use search_brain to check what already exists about this project: [PROJECT NAME]
+
+Then, based on what you know and what's missing, use store_memory to save:
+- Project context and goals (memory_type: "context")
+- Key people involved and their roles (memory_type: "relationship")
+- Important decisions made (memory_type: "context")
+- Current status and blockers (memory_type: "context")
+- Next actions and deadlines (memory_type: "context")
+
+Replace [PROJECT NAME] with the actual project name before running.`,
+  },
+  {
+    title: 'Capture relationships and people',
+    description: 'Extracts all people mentioned in conversation with context about each relationship.',
+    prompt: `Review our conversation and identify every person I've mentioned. For each person, use store_memory with memory_type "relationship" to capture:
+
+- Who they are (role, title, organization)
+- How I know them / my relationship to them
+- Any relevant context (what we discussed about them, pending follow-ups)
+- Their connection to my projects or other people
+
+Use their name as the title. Be specific in the content — vague memories aren't useful.`,
+  },
 ];
 
 export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpdate, onLogout }: ProfileModalProps) {
@@ -86,6 +159,9 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
   const [oauthConnections, setOauthConnections] = useState<OAuthConnection[]>([]);
   const [oauthBusy, setOauthBusy] = useState(false);
   const [oauthError, setOauthError] = useState<string | null>(null);
+
+  // Prompts tab state
+  const [promptCopied, setPromptCopied] = useState<number | null>(null);
 
   // Sync props when modal opens
   useEffect(() => {
@@ -385,7 +461,7 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-background rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col border">
+      <div className="bg-background rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col border">
         {/* Header */}
         <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
           <h2 className="text-lg font-semibold">Account Settings</h2>
@@ -395,14 +471,14 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b px-6 gap-1">
+        <div className="flex border-b px-6 gap-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {TABS.map((tab) => (
             <button
               key={tab.key}
               type="button"
               onClick={() => setActiveTab(tab.key)}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors -mb-px',
+                'flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap shrink-0',
                 activeTab === tab.key
                   ? 'border-foreground text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -939,6 +1015,46 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
                   ))}
                 </ul>
               )}
+            </div>
+          )}
+
+          {activeTab === 'prompts' && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Knowledge Extraction Prompts</label>
+                <p className="text-xs text-muted-foreground">
+                  Copy these prompts into ChatGPT, Claude, or any MCP-connected AI to extract and store knowledge in your brain.
+                </p>
+              </div>
+
+              <ul className="space-y-2">
+                {EXTRACTION_PROMPTS.map((p, i) => (
+                  <li key={i} className="rounded-md border p-3 text-sm space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1 min-w-0">
+                        <span className="font-medium">{p.title}</span>
+                        <p className="text-xs text-muted-foreground">{p.description}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 h-8 w-8 p-0"
+                        onClick={() => {
+                          navigator.clipboard.writeText(p.prompt);
+                          setPromptCopied(i);
+                          setTimeout(() => setPromptCopied(null), 2000);
+                        }}
+                      >
+                        {promptCopied === i ? (
+                          <Check className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
