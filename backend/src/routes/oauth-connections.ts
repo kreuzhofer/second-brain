@@ -16,10 +16,15 @@ oauthConnectionsRouter.get('/', async (_req: Request, res: Response) => {
   const prisma = getPrismaClient();
 
   try {
+    // Only show clients that have at least one active (non-revoked, non-expired) token
     const clients = await prisma.oAuthClient.findMany({
       where: {
         refreshTokens: {
-          some: { userId },
+          some: {
+            userId,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
         },
       },
       include: {
@@ -62,22 +67,22 @@ oauthConnectionsRouter.delete('/:clientId', async (req: Request, res: Response) 
   const { clientId } = req.params;
 
   try {
-    // Revoke all refresh tokens for this user+client
-    const result = await prisma.oAuthRefreshToken.updateMany({
-      where: {
-        clientId,
-        userId,
-        revokedAt: null,
-      },
-      data: { revokedAt: new Date() },
+    // Verify this client has tokens belonging to this user
+    const tokenCount = await prisma.oAuthRefreshToken.count({
+      where: { clientId, userId },
     });
 
-    if (result.count === 0) {
+    if (tokenCount === 0) {
       res.status(404).json({
-        error: { code: 'NOT_FOUND', message: 'No active connection found for this client.' },
+        error: { code: 'NOT_FOUND', message: 'No connection found for this client.' },
       });
       return;
     }
+
+    // Delete all tokens, auth codes, and the client itself
+    await prisma.oAuthRefreshToken.deleteMany({ where: { clientId } });
+    await prisma.oAuthAuthorizationCode.deleteMany({ where: { clientId } });
+    await prisma.oAuthClient.delete({ where: { clientId } });
 
     res.status(204).send();
   } catch (error) {
