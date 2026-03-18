@@ -201,10 +201,16 @@ export class JustDoOAuthProvider implements OAuthServerProvider {
       data: { usedAt: new Date() },
     });
 
+    // Look up client name to embed in token (survives client deletion)
+    const client = await this.prisma.oAuthClient.findUnique({
+      where: { clientId: record.clientId },
+      select: { clientName: true },
+    });
+
     // Generate access token (JWT)
     const config = getConfig();
     const accessToken = jwt.sign(
-      { sub: record.userId, clientId: record.clientId, type: 'mcp_access' },
+      { sub: record.userId, clientId: record.clientId, clientName: client?.clientName || null, type: 'mcp_access' },
       config.JWT_SECRET,
       { expiresIn: '1h' }
     );
@@ -257,10 +263,16 @@ export class JustDoOAuthProvider implements OAuthServerProvider {
       data: { revokedAt: new Date() },
     });
 
+    // Look up client name to embed in token
+    const client = await this.prisma.oAuthClient.findUnique({
+      where: { clientId: record.clientId },
+      select: { clientName: true },
+    });
+
     // Generate new access token
     const config = getConfig();
     const accessToken = jwt.sign(
-      { sub: record.userId, clientId: record.clientId, type: 'mcp_access' },
+      { sub: record.userId, clientId: record.clientId, clientName: client?.clientName || null, type: 'mcp_access' },
       config.JWT_SECRET,
       { expiresIn: '1h' }
     );
@@ -294,11 +306,13 @@ export class JustDoOAuthProvider implements OAuthServerProvider {
       const decoded = jwt.verify(token, config.JWT_SECRET) as {
         sub: string;
         clientId: string;
+        clientName?: string;
         type: string;
       };
 
       if (decoded.type === 'mcp_access') {
-        console.log(`[MCP-AUTH] verifyAccessToken -> JWT valid user=${decoded.sub} client=${decoded.clientId}`);
+        const agentName = decoded.clientName || decoded.clientId;
+        console.log(`[MCP-AUTH] verifyAccessToken -> JWT valid user=${decoded.sub} client=${decoded.clientId} name=${agentName}`);
         return {
           token,
           clientId: decoded.clientId,
@@ -306,7 +320,7 @@ export class JustDoOAuthProvider implements OAuthServerProvider {
           extra: {
             userId: decoded.sub,
             agentId: decoded.clientId,
-            agentName: `oauth-client:${decoded.clientId}`,
+            agentName,
           },
         };
       }
