@@ -43,7 +43,7 @@ When storing memories, choose the right memory_type:
 - relationship: People and connections between them`;
 
   const server = new Server(
-    { name: 'justdo', version: '1.0.0' },
+    { name: 'justdoso', version: '1.0.0' },
     { capabilities: { tools: {} }, instructions }
   );
 

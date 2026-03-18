@@ -40,7 +40,7 @@ When storing memories, choose the right memory_type:
 
 function createMcpServer(agentId: string, agentName: string, userId: string): Server {
   const server = new Server(
-    { name: 'justdo', version: '1.0.0' },
+    { name: 'justdoso', version: '1.0.0' },
     { capabilities: { tools: {} }, instructions: MCP_SERVER_INSTRUCTIONS }
   );
 
