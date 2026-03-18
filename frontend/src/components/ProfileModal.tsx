@@ -959,7 +959,7 @@ export function ProfileModal({ open, userEmail, userName, onClose, onProfileUpda
                     <div><strong>Transport:</strong> Streamable HTTP (POST/GET/DELETE)</div>
                   </div>
                   <p className="text-xs text-muted-foreground pt-2">
-                    <strong>Available tools:</strong> store_memory, recall_memories, search_brain, get_entry, list_entries
+                    <strong>Available tools:</strong> store_memory, recall_memories, search_brain, get_entry, list_entries, delete_entry
                   </p>
                 </SetupGuideSection>
               </div>

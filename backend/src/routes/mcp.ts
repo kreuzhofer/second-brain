@@ -14,6 +14,7 @@ import { RECALL_MEMORIES_TOOL_DEFINITION, handleRecallMemories } from '../mcp/to
 import { SEARCH_BRAIN_TOOL_DEFINITION, handleSearchBrain } from '../mcp/tools/search-brain';
 import { GET_ENTRY_TOOL_DEFINITION, handleGetEntry } from '../mcp/tools/get-entry';
 import { LIST_ENTRIES_TOOL_DEFINITION, handleListEntries } from '../mcp/tools/list-entries';
+import { DELETE_ENTRY_TOOL_DEFINITION, handleDeleteEntry } from '../mcp/tools/delete-entry';
 
 export const mcpRouter = Router();
 
@@ -51,6 +52,7 @@ function createMcpServer(agentId: string, agentName: string, userId: string): Se
       SEARCH_BRAIN_TOOL_DEFINITION,
       GET_ENTRY_TOOL_DEFINITION,
       LIST_ENTRIES_TOOL_DEFINITION,
+      DELETE_ENTRY_TOOL_DEFINITION,
     ]
   }));
 
@@ -78,6 +80,9 @@ function createMcpServer(agentId: string, agentName: string, userId: string): Se
           break;
         case 'list_entries':
           result = await handleListEntries(args as any);
+          break;
+        case 'delete_entry':
+          result = await handleDeleteEntry(args as any);
           break;
         default:
           console.log(`[MCP] tool=${name} agent=${agentName} error="Unknown tool" ${Date.now() - start}ms`);

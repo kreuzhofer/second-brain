@@ -11,6 +11,7 @@ import { RECALL_MEMORIES_TOOL_DEFINITION, handleRecallMemories } from './tools/r
 import { SEARCH_BRAIN_TOOL_DEFINITION, handleSearchBrain } from './tools/search-brain';
 import { GET_ENTRY_TOOL_DEFINITION, handleGetEntry } from './tools/get-entry';
 import { LIST_ENTRIES_TOOL_DEFINITION, handleListEntries } from './tools/list-entries';
+import { DELETE_ENTRY_TOOL_DEFINITION, handleDeleteEntry } from './tools/delete-entry';
 
 const agentId = process.env.MCP_AGENT_ID || 'unknown';
 const agentName = process.env.MCP_AGENT_NAME || 'Unknown Agent';
@@ -55,6 +56,7 @@ When storing memories, choose the right memory_type:
       SEARCH_BRAIN_TOOL_DEFINITION,
       GET_ENTRY_TOOL_DEFINITION,
       LIST_ENTRIES_TOOL_DEFINITION,
+      DELETE_ENTRY_TOOL_DEFINITION,
     ]
   }));
 
@@ -80,6 +82,9 @@ When storing memories, choose the right memory_type:
           break;
         case 'list_entries':
           result = await handleListEntries(args as any);
+          break;
+        case 'delete_entry':
+          result = await handleDeleteEntry(args as any);
           break;
         default:
           console.error(`[MCP] tool=${name} agent=${agentName} error="Unknown tool" ${Date.now() - start}ms`);
