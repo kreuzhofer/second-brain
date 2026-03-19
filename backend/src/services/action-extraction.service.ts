@@ -4,6 +4,7 @@
  */
 
 import OpenAI from 'openai';
+import { getOpenAIClient } from '../lib/openai';
 import { getConfig } from '../config/env';
 import { Category } from '../types/entry.types';
 import { getCurrentDateString } from '../utils/date';
@@ -55,7 +56,7 @@ export class ActionExtractionService {
 
   constructor(openaiClient?: OpenAI, timeoutMs?: number) {
     const config = getConfig();
-    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY, maxRetries: 3 });
+    this.openai = openaiClient ?? getOpenAIClient();
     this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.model = config.OPENAI_MODEL_ACTION_EXTRACTION || 'gpt-4o-mini';
   }

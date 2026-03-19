@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import OpenAI from 'openai';
+import { getOpenAIClient } from '../lib/openai';
 import { getPrismaClient } from '../lib/prisma';
 import { EntryService, getEntryService } from './entry.service';
 import { getConfig } from '../config/env';
@@ -111,7 +112,7 @@ export class FocusService {
     }
 
     if (!this.openai) {
-      this.openai = new OpenAI({ apiKey: this.config.OPENAI_API_KEY, maxRetries: 3 });
+      this.openai = getOpenAIClient();
     }
 
     try {

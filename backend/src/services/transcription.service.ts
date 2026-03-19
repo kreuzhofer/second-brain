@@ -1,4 +1,5 @@
 import OpenAI, { toFile } from 'openai';
+import { getOpenAIClient } from '../lib/openai';
 import { getConfig } from '../config/env';
 
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
@@ -69,7 +70,7 @@ export class TranscriptionService {
     }
 
     if (!this.openai) {
-      this.openai = new OpenAI({ apiKey: this.config.OPENAI_API_KEY, maxRetries: 3 });
+      this.openai = getOpenAIClient();
     }
 
     const extension = EXT_BY_MIME[normalizedMimeType] ?? 'webm';

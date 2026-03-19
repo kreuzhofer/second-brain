@@ -8,6 +8,7 @@
  */
 
 import OpenAI from 'openai';
+import { getOpenAIClient } from '../lib/openai';
 import { getConfig } from '../config/env';
 import {
   ChatResponse,
@@ -122,7 +123,7 @@ export class ChatService {
     this.entryService = entryService ?? getEntryService();
     this.toolRegistry = toolRegistry ?? getToolRegistry();
     this.toolExecutor = toolExecutor ?? getToolExecutor();
-    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY, maxRetries: 3 });
+    this.openai = openaiClient ?? getOpenAIClient();
     this.confidenceThreshold = config.CONFIDENCE_THRESHOLD;
     this.toolCallModel = config.OPENAI_MODEL_CHAT_TOOL_CALL || 'gpt-4o-mini';
     this.finalResponseModel = config.OPENAI_MODEL_CHAT_FINAL_RESPONSE || 'gpt-4o-mini';

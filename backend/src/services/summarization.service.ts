@@ -5,6 +5,7 @@
  */
 
 import OpenAI from 'openai';
+import { getOpenAIClient } from '../lib/openai';
 import { getConfig } from '../config/env';
 import { Message, ConversationSummary } from '../types/chat.types';
 import {
@@ -61,7 +62,7 @@ export class SummarizationService {
     conversationService?: ConversationService
   ) {
     const config = getConfig();
-    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY, maxRetries: 3 });
+    this.openai = openaiClient ?? getOpenAIClient();
     this.conversationService = conversationService ?? getConversationService();
     this.model = config.OPENAI_MODEL_SUMMARIZATION || 'gpt-4o-mini';
   }

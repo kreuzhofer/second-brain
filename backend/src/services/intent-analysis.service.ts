@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { getOpenAIClient } from '../lib/openai';
 import { getConfig } from '../config/env';
 
 export interface UpdateIntentInput {
@@ -58,7 +59,7 @@ export class IntentAnalysisService {
 
   constructor(openaiClient?: OpenAI, timeoutMs?: number) {
     const config = getConfig();
-    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY, maxRetries: 3 });
+    this.openai = openaiClient ?? getOpenAIClient();
     this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.model = config.OPENAI_MODEL_INTENT_ANALYSIS || 'gpt-4o-mini';
   }

@@ -4,6 +4,7 @@
  */
 
 import OpenAI from 'openai';
+import { getOpenAIClient } from '../lib/openai';
 import { getPrismaClient } from '../lib/prisma';
 import { getConfig } from '../config/env';
 import { requireUserId } from '../context/user-context';
@@ -99,7 +100,7 @@ export class DailyTipService {
     }
 
     if (!this.openai) {
-      this.openai = new OpenAI({ apiKey: config.OPENAI_API_KEY, maxRetries: 3 });
+      this.openai = getOpenAIClient();
     }
 
     const attempts = 3;
