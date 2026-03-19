@@ -120,7 +120,7 @@ export class ClassificationAgent {
 
   constructor(openaiClient?: OpenAI, timeoutMs?: number) {
     const config = getConfig();
-    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY });
+    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY, maxRetries: 3 });
     this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.model = config.OPENAI_MODEL_CLASSIFICATION || 'gpt-4o-mini';
   }

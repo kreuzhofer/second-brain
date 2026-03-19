@@ -26,7 +26,7 @@ export class OpenAIEmbeddingService implements EmbeddingService {
 
   constructor(openaiClient?: OpenAI, timeoutMs?: number, model?: string) {
     const config = getConfig();
-    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY });
+    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY, maxRetries: 3 });
     this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.model = model ?? config.OPENAI_MODEL_EMBEDDING ?? 'text-embedding-3-large';
   }

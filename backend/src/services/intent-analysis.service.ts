@@ -58,7 +58,7 @@ export class IntentAnalysisService {
 
   constructor(openaiClient?: OpenAI, timeoutMs?: number) {
     const config = getConfig();
-    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY });
+    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY, maxRetries: 3 });
     this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.model = config.OPENAI_MODEL_INTENT_ANALYSIS || 'gpt-4o-mini';
   }

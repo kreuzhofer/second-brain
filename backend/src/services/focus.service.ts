@@ -111,7 +111,7 @@ export class FocusService {
     }
 
     if (!this.openai) {
-      this.openai = new OpenAI({ apiKey: this.config.OPENAI_API_KEY });
+      this.openai = new OpenAI({ apiKey: this.config.OPENAI_API_KEY, maxRetries: 3 });
     }
 
     try {

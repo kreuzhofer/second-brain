@@ -46,7 +46,7 @@ export class ToolGuardrailService {
 
   constructor(openaiClient?: OpenAI, timeoutMs?: number) {
     const config = getConfig();
-    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY });
+    this.openai = openaiClient ?? new OpenAI({ apiKey: config.OPENAI_API_KEY, maxRetries: 3 });
     this.model = config.OPENAI_MODEL_TOOL_GUARDRAIL || config.OPENAI_MODEL_INTENT_ANALYSIS || 'gpt-4o-mini';
     this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }

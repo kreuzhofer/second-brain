@@ -99,7 +99,7 @@ export class DailyTipService {
     }
 
     if (!this.openai) {
-      this.openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
+      this.openai = new OpenAI({ apiKey: config.OPENAI_API_KEY, maxRetries: 3 });
     }
 
     const attempts = 3;
