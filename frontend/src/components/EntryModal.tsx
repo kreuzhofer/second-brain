@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { api, EntryWithPath, EntryLinksResponse, EntryGraphResponse } from '@/services/api';
-import { X, Loader2, FileText, User, Briefcase, Lightbulb, ClipboardList, Pencil, Check, Plus } from 'lucide-react';
+import { X, Loader2, FileText, User, Briefcase, Lightbulb, ClipboardList, Pencil, Check, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   hasNotesChanges,
@@ -316,6 +316,21 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
     }
   };
 
+  const handleDelete = async () => {
+    if (!entry) return;
+    const name = String(entry.entry?.name || entry.entry?.suggested_name || entry.path);
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    try {
+      await runMutationAndRefresh(
+        () => api.entries.delete(entry.path),
+        refresh
+      );
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete entry.');
+    }
+  };
+
   if (!entryPath) return null;
 
   const isTaskCategory = (category: string): boolean => category === 'task' || category === 'admin';
@@ -413,9 +428,14 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
               {String(entry?.entry?.name || entry?.entry?.suggested_name || 'Entry Details')}
             </h2>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleClose} aria-label="Close">
-            <X className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" onClick={handleDelete} aria-label="Delete entry" className="text-muted-foreground hover:text-destructive">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={handleClose} aria-label="Close">
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
         {/* Body */}
