@@ -272,6 +272,26 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
     }
   };
 
+  const handleBoardPostpone = async (entryPath: string, toDate: Date) => {
+    try {
+      await api.entries.update(entryPath, { fixed_at: toDate.toISOString() });
+      await refresh();
+      await loadCalendarPlan();
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to postpone task');
+    }
+  };
+
+  const handleBoardChangePriority = async (entryPath: string, priority: number) => {
+    try {
+      await api.entries.update(entryPath, { priority });
+      await refresh();
+      await loadCalendarPlan();
+    } catch (err) {
+      setCalendarError(err instanceof Error ? err.message : 'Failed to update priority');
+    }
+  };
+
   const handlePublishLinks = async () => {
     setCalendarError(null);
     try {
@@ -1159,6 +1179,8 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                 onNavigate={setCalendarStartDayOffset}
                 onEntryClick={onEntryClick}
                 onMarkDone={handleBoardMarkDone}
+                onPostpone={handleBoardPostpone}
+                onChangePriority={handleBoardChangePriority}
               />
             )}
 

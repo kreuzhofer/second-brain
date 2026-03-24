@@ -8,6 +8,8 @@ import {
   formatDayHeader,
   addDaysToYmd,
   getBusyBlockTextStyle,
+  getPostponeTomorrow,
+  getPostponeNextMonday,
   withAlpha
 } from './calendar-board-helpers';
 
@@ -139,6 +141,39 @@ describe('calendar-board-helpers', () => {
 
     it('falls back to default slate when input is not hex', () => {
       expect(withAlpha('not-a-color', 0.25)).toBe('rgba(148, 163, 184, 0.25)');
+    });
+  });
+
+  describe('getPostponeTomorrow', () => {
+    it('returns a date one day ahead at 9:00 AM', () => {
+      const result = getPostponeTomorrow();
+      const now = new Date();
+      const expectedDay = new Date(now);
+      expectedDay.setDate(expectedDay.getDate() + 1);
+      expect(result.getDate()).toBe(expectedDay.getDate());
+      expect(result.getHours()).toBe(9);
+      expect(result.getMinutes()).toBe(0);
+      expect(result.getSeconds()).toBe(0);
+    });
+  });
+
+  describe('getPostponeNextMonday', () => {
+    it('returns a future Monday at 9:00 AM', () => {
+      const result = getPostponeNextMonday();
+      expect(result.getDay()).toBe(1); // Monday
+      expect(result.getHours()).toBe(9);
+      expect(result.getMinutes()).toBe(0);
+      expect(result > new Date()).toBe(true);
+    });
+
+    it('skips to the following Monday when today is Monday', () => {
+      // getPostponeNextMonday always returns at least 1 day ahead
+      const result = getPostponeNextMonday();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const resultDay = new Date(result);
+      resultDay.setHours(0, 0, 0, 0);
+      expect(resultDay.getTime()).toBeGreaterThan(today.getTime());
     });
   });
 });

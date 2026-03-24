@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from '@/hooks/use-theme';
 import {
   CalendarBusyBlock,
@@ -14,11 +14,23 @@ import {
   formatDayHeader,
   getBusyBlockTextStyle,
   generateTimeLabels,
+  getPostponeNextMonday,
+  getPostponeTomorrow,
   parseTimeToMinutes,
   timeToMinuteOffset,
   withAlpha
 } from '@/components/calendar-board-helpers';
 import { CheckCircle2, ChevronLeft, ChevronRight, Circle } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const PIXELS_PER_MINUTE = 1.5;
 const TIME_LABEL_STEP = 60;
@@ -32,6 +44,21 @@ const CATEGORY_COLORS: Record<string, { bg: string; border: string; text: string
   people:   { bg: 'bg-pink-100 dark:bg-pink-900/30',   border: 'border-pink-300 dark:border-pink-700',   text: 'text-pink-900 dark:text-pink-200' }
 };
 
+interface ContextMenuState {
+  x: number;
+  y: number;
+  entryPath: string;
+  category: string;
+}
+
+const PRIORITY_LABELS: Record<number, string> = {
+  1: '1 — Highest',
+  2: '2 — High',
+  3: '3 — Medium',
+  4: '4 — Low',
+  5: '5 — Lowest',
+};
+
 interface CalendarBoardViewProps {
   plan: WeekPlanResponse;
   busyBlocks: CalendarBusyBlock[];
@@ -42,6 +69,8 @@ interface CalendarBoardViewProps {
   onNavigate: (offset: number) => void;
   onEntryClick: (path: string) => void;
   onMarkDone: (entryPath: string) => Promise<void>;
+  onPostpone: (entryPath: string, toDate: Date) => Promise<void>;
+  onChangePriority: (entryPath: string, priority: number) => Promise<void>;
 }
 
 interface PositionedItem {
@@ -66,12 +95,17 @@ export default function CalendarBoardView({
   startDayOffset,
   onNavigate,
   onEntryClick,
-  onMarkDone
+  onMarkDone,
+  onPostpone,
+  onChangePriority
 }: CalendarBoardViewProps) {
   const { resolvedTheme } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [markingDone, setMarkingDone] = useState<string | null>(null);
   const [confirmingDone, setConfirmingDone] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
   const [nowMinute, setNowMinute] = useState(() => {
     const now = new Date();
     return now.getUTCHours() * 60 + now.getUTCMinutes();
@@ -234,6 +268,39 @@ export default function CalendarBoardView({
       setConfirmingDone(null);
     }
   };
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, entryPath: string, category: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, entryPath, category });
+  }, []);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent, entryPath: string, category: string) => {
+    longPressFiredRef.current = false;
+    const touch = e.touches[0];
+    const x = touch.clientX;
+    const y = touch.clientY;
+    longPressTimerRef.current = setTimeout(() => {
+      longPressFiredRef.current = true;
+      setContextMenu({ x, y, entryPath, category });
+    }, 500);
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  const handleTouchMove = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
   const getCategoryColors = (category: string) =>
     CATEGORY_COLORS[category] || CATEGORY_COLORS.task;
@@ -424,11 +491,16 @@ export default function CalendarBoardView({
                         key={`${pi.item.entryPath}-${pi.item.start}`}
                         type="button"
                         onClick={() => {
+                          if (longPressFiredRef.current) return;
                           if (isConfirming) {
                             setConfirmingDone(null);
                           }
                           onEntryClick(pi.item.entryPath);
                         }}
+                        onContextMenu={(e) => handleContextMenu(e, pi.item.entryPath, pi.item.category)}
+                        onTouchStart={(e) => handleTouchStart(e, pi.item.entryPath, pi.item.category)}
+                        onTouchEnd={handleTouchEnd}
+                        onTouchMove={handleTouchMove}
                         className={`absolute left-1 right-1 rounded border overflow-hidden z-[2] text-left cursor-pointer hover:shadow-md transition-shadow ${colors.bg} ${colors.border}`}
                         style={{
                           top: pi.topPx,
@@ -496,6 +568,55 @@ export default function CalendarBoardView({
           })}
         </div>
       </div>
+
+      {/* Context menu */}
+      {contextMenu && (
+        <DropdownMenu open onOpenChange={(open) => { if (!open) closeContextMenu(); }}>
+          {/* Invisible anchor at cursor position */}
+          <div style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, width: 0, height: 0, pointerEvents: 'none' }} />
+          <DropdownMenuContent
+            style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y }}
+            align="start"
+            className="z-50"
+          >
+            <DropdownMenuItem onClick={() => { onEntryClick(contextMenu.entryPath); closeContextMenu(); }}>
+              Edit
+            </DropdownMenuItem>
+
+            {(contextMenu.category === 'task' || contextMenu.category === 'admin') && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => { onMarkDone(contextMenu.entryPath); closeContextMenu(); }}>
+                  Mark as done
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => { onPostpone(contextMenu.entryPath, getPostponeTomorrow()); closeContextMenu(); }}>
+                  Postpone to tomorrow
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { onPostpone(contextMenu.entryPath, getPostponeNextMonday()); closeContextMenu(); }}>
+                  Postpone to next Monday
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>Priority</DropdownMenuSubTrigger>
+                  <DropdownMenuPortal>
+                    <DropdownMenuSubContent>
+                      {[1, 2, 3, 4, 5].map((p) => (
+                        <DropdownMenuItem
+                          key={p}
+                          onClick={() => { onChangePriority(contextMenu.entryPath, p); closeContextMenu(); }}
+                        >
+                          {PRIORITY_LABELS[p]}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuPortal>
+                </DropdownMenuSub>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       {/* Unscheduled items */}
       {visibleUnscheduled.length > 0 && (

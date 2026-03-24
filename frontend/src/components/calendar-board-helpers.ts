@@ -105,6 +105,23 @@ export function getBusyBlockTextStyle(isDark?: boolean): { titleColor: string; l
   };
 }
 
+/** Get tomorrow at 9:00 AM local time (for "Postpone to tomorrow"). */
+export function getPostponeTomorrow(): Date {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  return d;
+}
+
+/** Get next Monday at 9:00 AM local time (for "Postpone to next Monday"). */
+export function getPostponeNextMonday(): Date {
+  const d = new Date();
+  const daysUntilMonday = ((8 - d.getDay()) % 7) || 7;
+  d.setDate(d.getDate() + daysUntilMonday);
+  d.setHours(9, 0, 0, 0);
+  return d;
+}
+
 /** Convert a hex color to rgba() with alpha; fall back to slate when invalid. */
 export function withAlpha(color: string, alpha: number): string {
   const hex = color.trim();
