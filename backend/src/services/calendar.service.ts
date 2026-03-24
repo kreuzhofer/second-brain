@@ -1225,7 +1225,10 @@ export class CalendarService {
 
     const dueDate = toYmd(dueAt);
 
+    // Overdue — highest priority
     if (dueDate < startYmd) return score + 80;
+
+    // Due within the planning window — boost inversely to days remaining
     if (dueDate <= endYmd) {
       const deltaDays =
         (parseYmdAsUtc(dueDate).getTime() - parseYmdAsUtc(startYmd).getTime()) / (24 * 60 * 60 * 1000);
@@ -1239,7 +1242,12 @@ export class CalendarService {
       return score + boost;
     }
 
-    return score + 5;
+    // Due after the planning window — deprioritize so urgent tasks get slots first.
+    // Further away = lower priority (capped at -20 penalty).
+    const daysAfterWindow =
+      (parseYmdAsUtc(dueDate).getTime() - parseYmdAsUtc(endYmd).getTime()) / (24 * 60 * 60 * 1000);
+    const penalty = Math.min(20, Math.floor(daysAfterWindow));
+    return score - penalty;
   }
 
   private toBusyIntervalsForWindow(
@@ -1311,17 +1319,32 @@ export class CalendarService {
       : null;
 
     if (dueIndex !== null) {
+      // Due date is after the planning window — prefer later days to leave
+      // early slots free for more urgent tasks
+      if (dueIndex >= days) {
+        return Array.from({ length: days - minimumDayIndex }, (_, i) => i + minimumDayIndex)
+          .filter((dayIndex) => this.isWorkingDay(addDays(windowStart, dayIndex), workingDays))
+          .sort((a, b) => {
+            // Prefer days with lighter load, then later days
+            if (dayLoads[a] === dayLoads[b]) return b - a;
+            return dayLoads[a] - dayLoads[b];
+          });
+      }
+
       const boundedDue = Math.max(0, Math.min(days - 1, dueIndex));
       if (boundedDue < minimumDayIndex) {
+        // Overdue — schedule ASAP on any available day
         return Array.from({ length: days - minimumDayIndex }, (_, i) => i + minimumDayIndex).filter((dayIndex) =>
           this.isWorkingDay(addDays(windowStart, dayIndex), workingDays)
         );
       }
+      // Due within window — schedule on or before due date, earliest first
       return Array.from({ length: boundedDue - minimumDayIndex + 1 }, (_, i) => i + minimumDayIndex).filter((dayIndex) =>
         this.isWorkingDay(addDays(windowStart, dayIndex), workingDays)
       );
     }
 
+    // No due date — spread by load, prefer earlier days for tie-breaking
     return Array.from({ length: days - minimumDayIndex }, (_, i) => i + minimumDayIndex).sort((a, b) => {
       if (dayLoads[a] === dayLoads[b]) {
         return a - b;
