@@ -15,6 +15,9 @@ import { SEARCH_BRAIN_TOOL_DEFINITION, handleSearchBrain } from '../mcp/tools/se
 import { GET_ENTRY_TOOL_DEFINITION, handleGetEntry } from '../mcp/tools/get-entry';
 import { LIST_ENTRIES_TOOL_DEFINITION, handleListEntries } from '../mcp/tools/list-entries';
 import { DELETE_ENTRY_TOOL_DEFINITION, handleDeleteEntry } from '../mcp/tools/delete-entry';
+import { CREATE_TASK_TOOL_DEFINITION, handleCreateTask } from '../mcp/tools/create-task';
+import { UPDATE_TASK_TOOL_DEFINITION, handleUpdateTask } from '../mcp/tools/update-task';
+import { LIST_TASKS_TOOL_DEFINITION, handleListTasks } from '../mcp/tools/list-tasks';
 
 export const mcpRouter = Router();
 
@@ -53,6 +56,9 @@ function createMcpServer(agentId: string, agentName: string, userId: string): Se
       GET_ENTRY_TOOL_DEFINITION,
       LIST_ENTRIES_TOOL_DEFINITION,
       DELETE_ENTRY_TOOL_DEFINITION,
+      CREATE_TASK_TOOL_DEFINITION,
+      UPDATE_TASK_TOOL_DEFINITION,
+      LIST_TASKS_TOOL_DEFINITION,
     ]
   }));
 
@@ -83,6 +89,15 @@ function createMcpServer(agentId: string, agentName: string, userId: string): Se
           break;
         case 'delete_entry':
           result = await handleDeleteEntry(args as any);
+          break;
+        case 'create_task':
+          result = await handleCreateTask(args as any);
+          break;
+        case 'update_task':
+          result = await handleUpdateTask(args as any);
+          break;
+        case 'list_tasks':
+          result = await handleListTasks(args as any);
           break;
         default:
           console.log(`[MCP] tool=${name} agent=${agentName} error="Unknown tool" ${Date.now() - start}ms`);

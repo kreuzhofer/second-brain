@@ -12,6 +12,9 @@ import { SEARCH_BRAIN_TOOL_DEFINITION, handleSearchBrain } from './tools/search-
 import { GET_ENTRY_TOOL_DEFINITION, handleGetEntry } from './tools/get-entry';
 import { LIST_ENTRIES_TOOL_DEFINITION, handleListEntries } from './tools/list-entries';
 import { DELETE_ENTRY_TOOL_DEFINITION, handleDeleteEntry } from './tools/delete-entry';
+import { CREATE_TASK_TOOL_DEFINITION, handleCreateTask } from './tools/create-task';
+import { UPDATE_TASK_TOOL_DEFINITION, handleUpdateTask } from './tools/update-task';
+import { LIST_TASKS_TOOL_DEFINITION, handleListTasks } from './tools/list-tasks';
 
 const agentId = process.env.MCP_AGENT_ID || 'unknown';
 const agentName = process.env.MCP_AGENT_NAME || 'Unknown Agent';
@@ -57,6 +60,9 @@ When storing memories, choose the right memory_type:
       GET_ENTRY_TOOL_DEFINITION,
       LIST_ENTRIES_TOOL_DEFINITION,
       DELETE_ENTRY_TOOL_DEFINITION,
+      CREATE_TASK_TOOL_DEFINITION,
+      UPDATE_TASK_TOOL_DEFINITION,
+      LIST_TASKS_TOOL_DEFINITION,
     ]
   }));
 
@@ -85,6 +91,15 @@ When storing memories, choose the right memory_type:
           break;
         case 'delete_entry':
           result = await handleDeleteEntry(args as any);
+          break;
+        case 'create_task':
+          result = await handleCreateTask(args as any);
+          break;
+        case 'update_task':
+          result = await handleUpdateTask(args as any);
+          break;
+        case 'list_tasks':
+          result = await handleListTasks(args as any);
           break;
         default:
           console.error(`[MCP] tool=${name} agent=${agentName} error="Unknown tool" ${Date.now() - start}ms`);
