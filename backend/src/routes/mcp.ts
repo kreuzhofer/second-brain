@@ -8,6 +8,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { getOAuthProvider } from '../services/oauth.provider';
+import { getApiKeyService } from '../services/api-key.service';
 import { setDefaultUserId } from '../context/user-context';
 import { STORE_MEMORY_TOOL_DEFINITION, handleStoreMemory } from '../mcp/tools/store-memory';
 import { RECALL_MEMORIES_TOOL_DEFINITION, handleRecallMemories } from '../mcp/tools/recall-memories';
@@ -121,13 +122,19 @@ async function authenticateRequest(req: Request): Promise<{ userId: string; agen
   const token = authHeader.slice(7);
   if (!token) return null;
 
+  // Try OAuth token first
   try {
     const authInfo = await getOAuthProvider().verifyAccessToken(token);
     const extra = authInfo.extra as { userId: string; agentId: string; agentName: string } | undefined;
     if (extra?.userId) return extra;
   } catch {
-    // Token verification failed
+    // OAuth verification failed, try API key
   }
+
+  // Fall back to API key
+  const apiKeyAuth = await getApiKeyService().verify(token);
+  if (apiKeyAuth) return apiKeyAuth;
+
   return null;
 }
 
