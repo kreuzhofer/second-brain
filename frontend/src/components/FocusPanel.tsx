@@ -768,15 +768,16 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
                     </select>
                   </>
                 )}
-                <label className="text-xs text-muted-foreground">Days</label>
+                <label className="text-xs text-muted-foreground" title="Number of days in the planning window">Plan</label>
                 <select
                   className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                   value={calendarPlanDays}
                   onChange={(event) => setCalendarPlanDays(Number(event.target.value))}
+                  title="Planning window: how many days ahead to schedule tasks"
                 >
                   {[5, 7, 10, 14].map((dayCount) => (
                     <option key={dayCount} value={dayCount}>
-                      {dayCount}
+                      {dayCount}d
                     </option>
                   ))}
                 </select>
@@ -896,7 +897,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
             {calendarError && <p className="text-sm text-destructive">{calendarError}</p>}
             {calendarPlan && calendarPlan.warnings && calendarPlan.warnings.length > 0 && (
               <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-md px-2 py-1">
-                {calendarPlan.warnings.length} item(s) could not be scheduled in this window.
+                {calendarPlan.warnings.length} item(s) could not be scheduled in the {calendarPlanDays}-day planning window ({calendarPlan.startDate} to {calendarPlan.endDate}).
               </div>
             )}
 
