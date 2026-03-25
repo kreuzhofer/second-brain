@@ -7,6 +7,8 @@ export interface CreateTaskInput {
   due_at?: string;
   duration_minutes?: number;
   priority?: number;
+  pinned?: boolean;
+  not_before?: string;
   tags?: string[];
   description?: string;
 }
@@ -22,6 +24,8 @@ export const CREATE_TASK_TOOL_DEFINITION = {
       due_at: { type: 'string', description: 'Optional due datetime in ISO 8601 format' },
       duration_minutes: { type: 'number', description: 'Estimated duration in minutes (5-720)' },
       priority: { type: 'number', description: 'Priority level 1-5 (1 = highest)' },
+      pinned: { type: 'boolean', description: 'If true, task is pinned to the exact due_at datetime (fixed appointment)' },
+      not_before: { type: 'string', description: 'Do not schedule before this date (ISO 8601). Task remains flexible.' },
       tags: { type: 'array', items: { type: 'string' }, description: 'Optional tags for categorization' },
       description: { type: 'string', description: 'Optional detailed description / notes for the task' }
     },
@@ -46,6 +50,8 @@ export async function handleCreateTask(
       due_at: input.due_at,
       duration_minutes: input.duration_minutes,
       priority: input.priority,
+      pinned: input.pinned,
+      not_before: input.not_before,
       tags: input.tags || [],
       source_channel: 'api',
       confidence: 1.0

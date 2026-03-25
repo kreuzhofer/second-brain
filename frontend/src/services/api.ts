@@ -82,7 +82,8 @@ export interface EntrySummary {
   due_date?: string;
   due_at?: string;
   duration_minutes?: number;
-  fixed_at?: string;
+  pinned?: boolean;
+  not_before?: string;
   priority?: number;
   context?: string;
   last_touched?: string;

@@ -9,6 +9,8 @@ export interface UpdateTaskInput {
   due_at?: string | null;
   duration_minutes?: number;
   priority?: number;
+  pinned?: boolean;
+  not_before?: string | null;
   tags?: string[];
   description?: string;
 }
@@ -26,6 +28,8 @@ export const UPDATE_TASK_TOOL_DEFINITION = {
       due_at: { type: ['string', 'null'], description: 'Due datetime (ISO 8601) or null to clear' },
       duration_minutes: { type: 'number', description: 'Estimated duration in minutes (5-720)' },
       priority: { type: 'number', description: 'Priority level 1-5 (1 = highest)' },
+      pinned: { type: 'boolean', description: 'If true, task is pinned to the exact due_at datetime' },
+      not_before: { type: ['string', 'null'], description: 'Do not schedule before this date (ISO 8601) or null to clear' },
       tags: { type: 'array', items: { type: 'string' }, description: 'Replace tags' },
       description: { type: 'string', description: 'Replace task description/notes' }
     },
@@ -50,6 +54,8 @@ export async function handleUpdateTask(
   if (input.due_at !== undefined) updates.due_at = input.due_at;
   if (input.duration_minutes !== undefined) updates.duration_minutes = input.duration_minutes;
   if (input.priority !== undefined) updates.priority = input.priority;
+  if (input.pinned !== undefined) updates.pinned = input.pinned;
+  if (input.not_before !== undefined) updates.not_before = input.not_before;
   if (input.tags !== undefined) updates.tags = input.tags;
 
   let bodyUpdate: BodyContentUpdate | undefined;

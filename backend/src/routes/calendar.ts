@@ -186,7 +186,7 @@ calendarPublicRouter.get('/quick-action', async (req: Request, res: Response) =>
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         tomorrow.setHours(9, 0, 0, 0);
-        await entryService.update(entryPath, { fixed_at: tomorrow.toISOString() } as any);
+        await entryService.update(entryPath, { not_before: tomorrow.toISOString() } as any);
         return { redirect: false, message: `Skipped "${entryPath}" — rescheduled to tomorrow` };
       }
 

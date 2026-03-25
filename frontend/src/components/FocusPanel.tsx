@@ -274,7 +274,7 @@ export function FocusPanel({ onEntryClick, maxItems = 5 }: FocusPanelProps) {
 
   const handleBoardPostpone = async (entryPath: string, toDate: Date) => {
     try {
-      await api.entries.update(entryPath, { fixed_at: toDate.toISOString() });
+      await api.entries.update(entryPath, { not_before: toDate.toISOString() });
       await refresh();
       await loadCalendarPlan();
     } catch (err) {

@@ -62,7 +62,8 @@ export interface AdminEntry extends BaseEntry {
   due_date?: string;
   due_at?: string;
   duration_minutes?: number;
-  fixed_at?: string;
+  pinned?: boolean;
+  not_before?: string;
   priority?: number;
 }
 
@@ -170,7 +171,8 @@ export interface EntrySummary {
   due_date?: string;
   due_at?: string;
   duration_minutes?: number;
-  fixed_at?: string;
+  pinned?: boolean;
+  not_before?: string;
   priority?: number;
   context?: string;
   last_touched?: string;
@@ -227,7 +229,8 @@ export interface CreateAdminInput {
   due_date?: string;
   due_at?: string;
   duration_minutes?: number;
-  fixed_at?: string;
+  pinned?: boolean;
+  not_before?: string;
   priority?: number;
   tags?: string[];
   source_channel: Channel;
@@ -301,7 +304,8 @@ export interface UpdateAdminInput {
   due_date?: string | null;
   due_at?: string | null;
   duration_minutes?: number;
-  fixed_at?: string | null;
+  pinned?: boolean;
+  not_before?: string | null;
   priority?: number;
   tags?: string[];
   confidence?: number;

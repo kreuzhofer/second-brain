@@ -302,7 +302,8 @@ describe('Calendar API Integration Tests', () => {
         status: 'pending',
         due_date: '2026-02-09',
         duration_minutes: 60,
-        fixed_at: '2026-02-09T13:15:00.000Z',
+        due_at: '2026-02-09T13:15:00.000Z',
+        pinned: true,
         source_channel: 'api',
         confidence: 0.95
       })
@@ -530,7 +531,8 @@ describe('Calendar API Integration Tests', () => {
       .patch('/api/entries/task/task-alpha')
       .set('Authorization', `Bearer ${authToken}`)
       .send({
-        fixed_at: '2026-02-09T16:00:00.000Z'
+        due_at: '2026-02-09T16:00:00.000Z',
+        pinned: true
       })
       .expect(200);
 
@@ -558,7 +560,8 @@ describe('Calendar API Integration Tests', () => {
         status: 'pending',
         due_date: today,
         duration_minutes: 30,
-        fixed_at: missedFixedAt,
+        due_at: missedFixedAt,
+        pinned: true,
         source_channel: 'api',
         confidence: 0.9
       })
@@ -572,7 +575,7 @@ describe('Calendar API Integration Tests', () => {
     const item = plan.body.items.find((entry: any) => entry.entryPath === 'task/missed-deep-work-slot');
     expect(item).toBeDefined();
     expect(new Date(item.start).getTime()).toBeGreaterThanOrEqual(now.getTime());
-    expect(item.reason).toContain('Rescheduled after missed fixed slot');
+    expect(item.reason).toContain('Rescheduled after missed pinned slot');
   });
 
   it('gets and updates scheduler settings, then applies working hours to planning', async () => {

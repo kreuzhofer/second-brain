@@ -43,7 +43,7 @@ const CLASSIFICATION_SCHEMA = `{
     // For people: { "context": string, "followUps": string[], "relatedProjects": string[] }
     // For projects: { "status": "active"|"waiting"|"blocked"|"someday", "nextAction": string, "relatedPeople": string[], "dueDate"?: string }
     // For ideas: { "oneLiner": string, "relatedProjects": string[] }
-    // For task: { "status": "pending", "dueDate"?: string, "dueAt"?: string, "durationMinutes"?: number, "fixedAt"?: string, "relatedPeople": string[] }
+    // For task: { "status": "pending", "dueDate"?: string, "dueAt"?: string, "durationMinutes"?: number, "pinned"?: boolean, "relatedPeople": string[] }
   },
   "related_entries": ["slug1", "slug2"],
   "reasoning": "Brief explanation of classification decision",
@@ -197,7 +197,7 @@ Today's date is ${today}. Convert relative dates (e.g. today, tomorrow, next wee
 For tasks, extract relatedPeople as an array of full names mentioned (empty array if none).
 For tasks, infer durationMinutes when explicitly mentioned (e.g. "30 minute task"). Default to 30 when unspecified.
 For tasks, use dueAt for date+time deadlines when present (e.g. "tomorrow by 3pm"), and dueDate when only date is known.
-For tasks, use fixedAt when the user explicitly requests a fixed execution slot/time.
+For tasks, set pinned to true when the user explicitly requests a fixed execution time (e.g. "at 2pm"). The dueAt field will be used as the pinned time.
 
 Schema:
 ${CLASSIFICATION_SCHEMA}
@@ -498,9 +498,7 @@ ${context.indexContent || '(No existing entries)'}
         ? String(fields.dueAt || fields.due_at)
         : undefined,
       durationMinutes,
-      fixedAt: fields.fixedAt || fields.fixed_at
-        ? String(fields.fixedAt || fields.fixed_at)
-        : undefined,
+      pinned: Boolean(fields.pinned),
       priority,
       relatedPeople: this.normalizeStringArray(
         fields.relatedPeople || fields.related_people

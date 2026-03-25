@@ -277,7 +277,8 @@ export class EntryService {
             status: payload.status || 'pending',
             dueDate,
             durationMinutes: parseTaskDurationMinutes(payload.duration_minutes, 30),
-            fixedAt: parseOptionalDateTime(payload.fixed_at, 'fixed_at'),
+            pinned: payload.pinned ?? false,
+            notBefore: parseOptionalDateTime(payload.not_before, 'not_before'),
             priority: parseTaskPriority(payload.priority, 3)
           }
         });
@@ -456,8 +457,9 @@ export class EntryService {
             ? entry.adminDetails.dueDate.toISOString()
             : undefined;
           summary.duration_minutes = entry.adminDetails.durationMinutes;
-          summary.fixed_at = entry.adminDetails.fixedAt
-            ? entry.adminDetails.fixedAt.toISOString()
+          summary.pinned = entry.adminDetails.pinned ?? false;
+          summary.not_before = entry.adminDetails.notBefore
+            ? entry.adminDetails.notBefore.toISOString()
             : undefined;
           summary.priority = entry.adminDetails.priority ?? 3;
         }
@@ -579,7 +581,8 @@ export class EntryService {
         const hasDueAt = Object.prototype.hasOwnProperty.call(updates as any, 'due_at');
         const hasDueDate = Object.prototype.hasOwnProperty.call(updates as any, 'due_date');
         const hasDurationMinutes = Object.prototype.hasOwnProperty.call(updates as any, 'duration_minutes');
-        const hasFixedAt = Object.prototype.hasOwnProperty.call(updates as any, 'fixed_at');
+        const hasPinned = Object.prototype.hasOwnProperty.call(updates as any, 'pinned');
+        const hasNotBefore = Object.prototype.hasOwnProperty.call(updates as any, 'not_before');
         const hasPriority = Object.prototype.hasOwnProperty.call(updates as any, 'priority');
 
         let dueDateData: Date | null | undefined;
@@ -597,9 +600,14 @@ export class EntryService {
           );
         }
 
-        let fixedAtData: Date | null | undefined;
-        if (hasFixedAt) {
-          fixedAtData = parseOptionalDateTime((updates as any).fixed_at, 'fixed_at');
+        let pinnedData: boolean | undefined;
+        if (hasPinned) {
+          pinnedData = Boolean((updates as any).pinned);
+        }
+
+        let notBeforeData: Date | null | undefined;
+        if (hasNotBefore) {
+          notBeforeData = parseOptionalDateTime((updates as any).not_before, 'not_before');
         }
 
         let priorityData: number | undefined;
@@ -613,7 +621,8 @@ export class EntryService {
             status: (updates as any).status ?? existing.adminDetails?.status,
             dueDate: dueDateData,
             durationMinutes: durationMinutesData,
-            fixedAt: fixedAtData,
+            pinned: pinnedData,
+            notBefore: notBeforeData,
             priority: priorityData
           }
         });
@@ -794,7 +803,8 @@ export class EntryService {
             status: entry.status || 'pending',
             dueDate,
             durationMinutes: parseTaskDurationMinutes(entry.duration_minutes, 30),
-            fixedAt: parseOptionalDateTime(entry.fixed_at, 'fixed_at'),
+            pinned: entry.pinned ?? false,
+            notBefore: parseOptionalDateTime(entry.not_before, 'not_before'),
             priority: parseTaskPriority(entry.priority, 3)
           }
         });
@@ -994,8 +1004,9 @@ export class EntryService {
             ? entry.adminDetails.dueDate.toISOString()
             : undefined,
           duration_minutes: entry.adminDetails?.durationMinutes ?? 30,
-          fixed_at: entry.adminDetails?.fixedAt
-            ? entry.adminDetails.fixedAt.toISOString()
+          pinned: entry.adminDetails?.pinned ?? false,
+          not_before: entry.adminDetails?.notBefore
+            ? entry.adminDetails.notBefore.toISOString()
             : undefined,
           priority: entry.adminDetails?.priority ?? 3
         } as AdminEntry;

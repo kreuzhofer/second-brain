@@ -309,7 +309,8 @@ model AdminTaskDetails {
   status           AdminStatus
   dueDate          DateTime?
   durationMinutes  Int         @default(30)
-  fixedAt          DateTime?
+  pinned           Boolean     @default(false)
+  notBefore        DateTime?
   priority         Int         @default(3)
 }
 

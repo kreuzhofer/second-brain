@@ -102,16 +102,10 @@ export const buildTaskDuePayload = (
   };
 };
 
-export const buildTaskFixedPayload = (draft: DateTimeDraft): { fixed_at: string | null } => {
-  if (!draft.date) {
-    return { fixed_at: null };
+export const buildTaskNotBeforePayload = (date: string): { not_before: string | null } => {
+  if (!date) {
+    return { not_before: null };
   }
-
-  if (!draft.hasTime || !draft.time) {
-    throw new Error('Fixed time requires both date and time.');
-  }
-
-  return {
-    fixed_at: combineLocalDateAndTime(draft.date, draft.time)
-  };
+  // Use UTC midnight so the date doesn't shift across timezones
+  return { not_before: `${date}T00:00:00.000Z` };
 };

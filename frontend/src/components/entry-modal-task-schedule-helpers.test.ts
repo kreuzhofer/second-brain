@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildTaskDuePayload,
-  buildTaskFixedPayload,
+  buildTaskNotBeforePayload,
   formatTaskDeadline,
   parseTaskDateTime,
   selectTaskDueInput
@@ -66,34 +66,14 @@ describe('buildTaskDuePayload', () => {
   });
 });
 
-describe('buildTaskFixedPayload', () => {
-  it('returns null when no fixed date is provided', () => {
-    expect(
-      buildTaskFixedPayload({
-        date: '',
-        time: '',
-        hasTime: false
-      })
-    ).toEqual({ fixed_at: null });
+describe('buildTaskNotBeforePayload', () => {
+  it('returns null when no date is provided', () => {
+    expect(buildTaskNotBeforePayload('')).toEqual({ not_before: null });
   });
 
-  it('throws if fixed date is set without time', () => {
-    expect(() =>
-      buildTaskFixedPayload({
-        date: '2026-03-11',
-        time: '',
-        hasTime: false
-      })
-    ).toThrow('Fixed time requires both date and time.');
-  });
-
-  it('builds fixed_at timestamp when date and time are set', () => {
-    const payload = buildTaskFixedPayload({
-      date: '2026-03-11',
-      time: '10:15',
-      hasTime: true
-    });
-    expect(payload.fixed_at).toMatch(/^2026-03-11T/);
+  it('builds not_before ISO string from date', () => {
+    const payload = buildTaskNotBeforePayload('2026-03-11');
+    expect(payload.not_before).toMatch(/^2026-03-11T/);
   });
 });
 

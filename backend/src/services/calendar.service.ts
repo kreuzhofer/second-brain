@@ -112,7 +112,8 @@ interface Candidate {
   sourceName: string;
   dueDate?: string;
   dueAt?: Date;
-  fixedAt?: Date;
+  pinned: boolean;
+  notBefore?: Date;
   title: string;
   durationMinutes: number;
   taskPriority: number;
@@ -791,7 +792,8 @@ export class CalendarService {
       if (isTaskCategory(entry.category) && entry.adminDetails) {
         const dueAt = entry.adminDetails.dueDate ?? undefined;
         const dueDate = dueAt ? toYmd(dueAt) : undefined;
-        const fixedAt = entry.adminDetails.fixedAt ?? undefined;
+        const pinned = entry.adminDetails.pinned ?? false;
+        const notBefore = entry.adminDetails.notBefore ?? undefined;
         const taskPriority = entry.adminDetails.priority ?? 3;
         const priority = this.computePriority(dueAt, startYmd, endYmd, 'task', taskPriority);
         return {
@@ -801,12 +803,13 @@ export class CalendarService {
           title: entry.title,
           dueDate,
           dueAt,
-          fixedAt,
+          pinned,
+          notBefore,
           durationMinutes: Math.max(5, entry.adminDetails.durationMinutes || 30),
           taskPriority,
           priority,
-          reason: fixedAt
-            ? `Fixed at ${fixedAt.toISOString()}`
+          reason: pinned && dueAt
+            ? `Pinned at ${dueAt.toISOString()}`
             : dueAt
               ? `Due at ${dueAt.toISOString()}`
               : 'Pending task'
@@ -824,6 +827,7 @@ export class CalendarService {
         title: nextAction || `Progress ${entry.title}`,
         dueDate: projectDueDate,
         dueAt: projectDueAt,
+        pinned: false,
         durationMinutes: 90,
         taskPriority: 3,
         priority,
@@ -872,16 +876,22 @@ export class CalendarService {
     }
 
     const items: WeekPlanItem[] = [];
-    const missedFixedCandidates: Candidate[] = [];
-    const fixedCandidates = candidates.filter((candidate) => Boolean(candidate.fixedAt));
-    const flexibleCandidates = candidates.filter((candidate) => !candidate.fixedAt);
+    const missedPinnedCandidates: Candidate[] = [];
+    // Pinned candidates: pinned=true AND have a specific time (dueAt with non-midnight time)
+    const pinnedCandidates = candidates.filter((candidate) => {
+      if (!candidate.pinned || !candidate.dueAt) return false;
+      const dueMinutes = candidate.dueAt.getUTCHours() * 60 + candidate.dueAt.getUTCMinutes();
+      return dueMinutes !== 0; // Midnight = date-only, not a true pinned time
+    });
+    const pinnedPaths = new Set(pinnedCandidates.map((c) => c.entryPath));
+    const flexibleCandidates = candidates.filter((candidate) => !pinnedPaths.has(candidate.entryPath));
 
-    for (const candidate of fixedCandidates) {
-      const fixedAt = candidate.fixedAt as Date;
+    for (const candidate of pinnedCandidates) {
+      const pinnedAt = candidate.dueAt as Date;
       const dayIndex = Math.floor((Date.UTC(
-        fixedAt.getUTCFullYear(),
-        fixedAt.getUTCMonth(),
-        fixedAt.getUTCDate()
+        pinnedAt.getUTCFullYear(),
+        pinnedAt.getUTCMonth(),
+        pinnedAt.getUTCDate()
       ) - start.getTime()) / (24 * 60 * 60 * 1000));
 
       if (dayIndex < 0 || dayIndex >= days) {
@@ -890,7 +900,7 @@ export class CalendarService {
           warnings,
           candidate,
           'outside_window',
-          `Skipped ${candidate.sourceName}: fixed appointment is outside planning window`
+          `Skipped ${candidate.sourceName}: pinned appointment is outside planning window`
         );
         continue;
       }
@@ -902,21 +912,21 @@ export class CalendarService {
           warnings,
           candidate,
           'outside_working_hours',
-          `Skipped ${candidate.sourceName}: fixed appointment is on a non-working day`
+          `Skipped ${candidate.sourceName}: pinned appointment is on a non-working day`
         );
         continue;
       }
 
-      const startMinute = fixedAt.getUTCHours() * 60 + fixedAt.getUTCMinutes();
+      const startMinute = pinnedAt.getUTCHours() * 60 + pinnedAt.getUTCMinutes();
       const endMinute = startMinute + candidate.durationMinutes;
       if (
         enforceCurrentTime &&
         (dayIndex < todayIndex || (dayIndex === todayIndex && endMinute + MISSED_TASK_GRACE_MINUTES <= nowMinute))
       ) {
-        missedFixedCandidates.push({
+        missedPinnedCandidates.push({
           ...candidate,
-          fixedAt: undefined,
-          reason: `Rescheduled after missed fixed slot (${candidate.reason})`
+          pinned: false,
+          reason: `Rescheduled after missed pinned slot (${candidate.reason})`
         });
         continue;
       }
@@ -926,7 +936,7 @@ export class CalendarService {
           warnings,
           candidate,
           'outside_working_hours',
-          `Skipped ${candidate.sourceName}: fixed appointment is outside working hours`
+          `Skipped ${candidate.sourceName}: pinned appointment is outside working hours`
         );
         continue;
       }
@@ -940,7 +950,7 @@ export class CalendarService {
           warnings,
           candidate,
           'fixed_conflict',
-          `Skipped ${candidate.sourceName}: fixed appointment conflicts with busy blocks`
+          `Skipped ${candidate.sourceName}: pinned appointment conflicts with busy blocks`
         );
         continue;
       }
@@ -965,7 +975,7 @@ export class CalendarService {
       });
     }
 
-    const allFlexibleCandidates = [...flexibleCandidates, ...missedFixedCandidates];
+    const allFlexibleCandidates = [...flexibleCandidates, ...missedPinnedCandidates];
     allFlexibleCandidates.sort((a, b) => b.priority - a.priority);
     const minimumDayIndex = enforceCurrentTime ? Math.max(0, Math.min(days, todayIndex)) : 0;
 
@@ -1307,6 +1317,16 @@ export class CalendarService {
     workingDays: number[],
     minimumDayIndex = 0
   ): number[] {
+    // Respect notBefore constraint — raise minimum day index
+    if (candidate.notBefore) {
+      const notBeforeYmd = toYmd(candidate.notBefore);
+      const notBeforeIndex = Math.floor(
+        (parseYmdAsUtc(notBeforeYmd).getTime() - parseYmdAsUtc(startYmd).getTime()) /
+          (24 * 60 * 60 * 1000)
+      );
+      minimumDayIndex = Math.max(minimumDayIndex, notBeforeIndex);
+    }
+
     if (minimumDayIndex >= days) {
       return [];
     }

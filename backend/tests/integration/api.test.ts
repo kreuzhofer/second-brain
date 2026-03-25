@@ -465,7 +465,8 @@ describe('API Integration Tests', () => {
           name: 'Schedule-aware task',
           status: 'pending',
           due_at: '2026-02-12T15:00:00.000Z',
-          fixed_at: '2026-02-10T09:30:00.000Z',
+          pinned: true,
+          not_before: '2026-02-10T09:30:00.000Z',
           duration_minutes: 90,
           priority: 5,
           source_channel: 'api',
@@ -476,7 +477,8 @@ describe('API Integration Tests', () => {
       expect(createResponse.body.path).toBe('task/schedule-aware-task');
       expect(createResponse.body.entry.duration_minutes).toBe(90);
       expect(createResponse.body.entry.due_at).toBe('2026-02-12T15:00:00.000Z');
-      expect(createResponse.body.entry.fixed_at).toBe('2026-02-10T09:30:00.000Z');
+      expect(createResponse.body.entry.pinned).toBe(true);
+      expect(createResponse.body.entry.not_before).toBe('2026-02-10T09:30:00.000Z');
       expect(createResponse.body.entry.due_date).toBe('2026-02-12');
       expect(createResponse.body.entry.priority).toBe(5);
     });
@@ -490,7 +492,8 @@ describe('API Integration Tests', () => {
           name: 'Mutable schedule task',
           status: 'pending',
           due_date: '2026-02-12',
-          fixed_at: '2026-02-10T09:30:00.000Z',
+          pinned: true,
+          not_before: '2026-02-10T09:30:00.000Z',
           source_channel: 'api',
           confidence: 0.9
         })
@@ -502,14 +505,16 @@ describe('API Integration Tests', () => {
         .send({
           duration_minutes: 45,
           due_at: '2026-02-13T10:00:00.000Z',
-          fixed_at: null,
+          not_before: null,
+          pinned: false,
           priority: 2
         })
         .expect(200);
 
       expect(updated.body.entry.duration_minutes).toBe(45);
       expect(updated.body.entry.due_at).toBe('2026-02-13T10:00:00.000Z');
-      expect(updated.body.entry.fixed_at).toBeUndefined();
+      expect(updated.body.entry.pinned).toBe(false);
+      expect(updated.body.entry.not_before).toBeUndefined();
       expect(updated.body.entry.due_date).toBe('2026-02-13');
       expect(updated.body.entry.priority).toBe(2);
     });

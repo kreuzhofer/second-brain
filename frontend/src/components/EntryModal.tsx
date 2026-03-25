@@ -18,7 +18,7 @@ import {
 } from '@/components/entry-modal-helpers';
 import {
   buildTaskDuePayload,
-  buildTaskFixedPayload,
+  buildTaskNotBeforePayload,
   formatTaskDeadline,
   selectTaskDueInput,
   parseTaskDateTime
@@ -54,9 +54,8 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
   const [taskDueDateDraft, setTaskDueDateDraft] = useState<string>('');
   const [taskDueTimeDraft, setTaskDueTimeDraft] = useState<string>('');
   const [taskDueTimeEnabled, setTaskDueTimeEnabled] = useState<boolean>(false);
-  const [taskFixedDateDraft, setTaskFixedDateDraft] = useState<string>('');
-  const [taskFixedTimeDraft, setTaskFixedTimeDraft] = useState<string>('');
-  const [taskFixedTimeEnabled, setTaskFixedTimeEnabled] = useState<boolean>(false);
+  const [taskPinnedDraft, setTaskPinnedDraft] = useState<boolean>(false);
+  const [taskNotBeforeDraft, setTaskNotBeforeDraft] = useState<string>('');
   const [isSavingTaskSchedule, setIsSavingTaskSchedule] = useState(false);
   const [taskScheduleError, setTaskScheduleError] = useState<string | null>(null);
   const [isMarkingTaskDone, setIsMarkingTaskDone] = useState(false);
@@ -92,25 +91,23 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
       setTaskDueDateDraft('');
       setTaskDueTimeDraft('');
       setTaskDueTimeEnabled(false);
-      setTaskFixedDateDraft('');
-      setTaskFixedTimeDraft('');
-      setTaskFixedTimeEnabled(false);
+      setTaskPinnedDraft(false);
+      setTaskNotBeforeDraft('');
       return;
     }
     const duration = (entry.entry as any).duration_minutes;
     const priority = (entry.entry as any).priority;
     const dueAt = selectTaskDueInput((entry.entry as any).due_date, (entry.entry as any).due_at);
-    const fixedAt = (entry.entry as any).fixed_at;
+    const notBefore = (entry.entry as any).not_before;
     const dueDraft = parseTaskDateTime(dueAt);
-    const fixedDraft = parseTaskDateTime(fixedAt);
+    const notBeforeDraft = parseTaskDateTime(notBefore);
     setTaskDurationDraft(duration ? String(duration) : '30');
     setTaskPriorityDraft(priority ? String(priority) : '3');
     setTaskDueDateDraft(dueDraft.date);
     setTaskDueTimeDraft(dueDraft.time);
     setTaskDueTimeEnabled(dueDraft.hasTime);
-    setTaskFixedDateDraft(fixedDraft.date);
-    setTaskFixedTimeDraft(fixedDraft.time);
-    setTaskFixedTimeEnabled(fixedDraft.hasTime);
+    setTaskPinnedDraft((entry.entry as any).pinned ?? false);
+    setTaskNotBeforeDraft(notBeforeDraft.date);
     setTaskScheduleError(null);
   }, [entry]);
 
@@ -276,17 +273,14 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
         time: taskDueTimeDraft,
         hasTime: taskDueTimeEnabled
       });
-      const fixedPayload = buildTaskFixedPayload({
-        date: taskFixedDateDraft,
-        time: taskFixedTimeDraft,
-        hasTime: taskFixedTimeEnabled
-      });
+      const notBeforePayload = buildTaskNotBeforePayload(taskNotBeforeDraft);
       const updated = await runMutationAndRefresh(
         () => api.entries.update(entry.path, {
           duration_minutes: Math.floor(parsedDuration),
           priority: Math.floor(parsedPriority),
+          pinned: taskPinnedDraft,
           ...duePayload,
-          ...fixedPayload
+          ...notBeforePayload
         }),
         refresh,
         () => setTaskScheduleError('Schedule saved, but list refresh failed. Please refresh.')
@@ -389,7 +383,7 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
   };
 
   const hiddenFields = ['id', 'name', 'suggested_name', 'source_channel'];
-  const taskScheduleFields = ['due_date', 'due_at', 'duration_minutes', 'fixed_at', 'priority'];
+  const taskScheduleFields = ['due_date', 'due_at', 'duration_minutes', 'pinned', 'not_before', 'priority'];
   const metaFields = ['created_at', 'updated_at', 'confidence', 'total_focus_minutes', 'last_touched'];
 
   const getOverviewFieldEntries = (value: Record<string, unknown>) =>
@@ -399,16 +393,6 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
 
   const getMetaFieldEntries = (value: Record<string, unknown>) =>
     Object.entries(value).filter(([key]) => metaFields.includes(key));
-
-  const formatDateTimeDisplay = (value: unknown): string => {
-    if (typeof value !== 'string' || !value) return '-';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      return new Date(`${value}T00:00:00`).toLocaleDateString();
-    }
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return String(value);
-    return parsed.toLocaleString();
-  };
 
   const modalContent = (
     <div 
@@ -522,9 +506,14 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
                       <p className="text-sm">
                         Deadline: {formatTaskDeadline((entry.entry as any).due_date, (entry.entry as any).due_at)}
                       </p>
-                      <p className="text-sm">
-                        Fixed slot: {formatDateTimeDisplay((entry.entry as any).fixed_at)}
-                      </p>
+                      {(entry.entry as any).pinned && (
+                        <p className="text-sm">Pinned to time</p>
+                      )}
+                      {(entry.entry as any).not_before && (
+                        <p className="text-sm">
+                          Not before: {new Date((entry.entry as any).not_before).toLocaleDateString()}
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -640,29 +629,32 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
                           <option value="5">5 (High)</option>
                         </select>
                       </label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <label className="space-y-1">
-                          <span className="text-xs text-muted-foreground">Deadline date (optional)</span>
+                      <label className="space-y-1">
+                        <span className="text-xs text-muted-foreground">Due by (optional)</span>
+                        <input
+                          type="date"
+                          className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+                          value={taskDueDateDraft}
+                          onChange={(event) => setTaskDueDateDraft(event.target.value)}
+                          disabled={isSavingTaskSchedule}
+                        />
+                      </label>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm text-muted-foreground">
                           <input
-                            type="date"
-                            className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
-                            value={taskDueDateDraft}
-                            onChange={(event) => setTaskDueDateDraft(event.target.value)}
+                            type="checkbox"
+                            className="h-4 w-4"
+                            checked={taskDueTimeEnabled}
+                            onChange={(event) => {
+                              setTaskDueTimeEnabled(event.target.checked);
+                              if (!event.target.checked) setTaskPinnedDraft(false);
+                            }}
                             disabled={isSavingTaskSchedule}
                           />
+                          Set time
                         </label>
-                        <div className="space-y-2">
-                          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4"
-                              checked={taskDueTimeEnabled}
-                              onChange={(event) => setTaskDueTimeEnabled(event.target.checked)}
-                              disabled={isSavingTaskSchedule}
-                            />
-                            Set deadline time
-                          </label>
-                          {taskDueTimeEnabled && (
+                        {taskDueTimeEnabled && (
+                          <>
                             <input
                               type="time"
                               className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
@@ -670,42 +662,29 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
                               onChange={(event) => setTaskDueTimeDraft(event.target.value)}
                               disabled={isSavingTaskSchedule}
                             />
-                          )}
-                        </div>
+                            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4"
+                                checked={taskPinnedDraft}
+                                onChange={(event) => setTaskPinnedDraft(event.target.checked)}
+                                disabled={isSavingTaskSchedule}
+                              />
+                              Pin to this time
+                            </label>
+                          </>
+                        )}
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <label className="space-y-1">
-                          <span className="text-xs text-muted-foreground">Fixed slot date (optional)</span>
-                          <input
-                            type="date"
-                            className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
-                            value={taskFixedDateDraft}
-                            onChange={(event) => setTaskFixedDateDraft(event.target.value)}
-                            disabled={isSavingTaskSchedule}
-                          />
-                        </label>
-                        <div className="space-y-2">
-                          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4"
-                              checked={taskFixedTimeEnabled}
-                              onChange={(event) => setTaskFixedTimeEnabled(event.target.checked)}
-                              disabled={isSavingTaskSchedule}
-                            />
-                            Set fixed time
-                          </label>
-                          {taskFixedTimeEnabled && (
-                            <input
-                              type="time"
-                              className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
-                              value={taskFixedTimeDraft}
-                              onChange={(event) => setTaskFixedTimeDraft(event.target.value)}
-                              disabled={isSavingTaskSchedule}
-                            />
-                          )}
-                        </div>
-                      </div>
+                      <label className="space-y-1">
+                        <span className="text-xs text-muted-foreground">Not before (optional)</span>
+                        <input
+                          type="date"
+                          className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+                          value={taskNotBeforeDraft}
+                          onChange={(event) => setTaskNotBeforeDraft(event.target.value)}
+                          disabled={isSavingTaskSchedule}
+                        />
+                      </label>
                       {taskScheduleError && (
                         <p className="text-sm text-destructive">{taskScheduleError}</p>
                       )}
@@ -725,9 +704,8 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
                             setTaskDueDateDraft('');
                             setTaskDueTimeDraft('');
                             setTaskDueTimeEnabled(false);
-                            setTaskFixedDateDraft('');
-                            setTaskFixedTimeDraft('');
-                            setTaskFixedTimeEnabled(false);
+                            setTaskPinnedDraft(false);
+                            setTaskNotBeforeDraft('');
                           }}
                         >
                           Clear schedule

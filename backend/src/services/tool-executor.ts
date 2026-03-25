@@ -597,8 +597,8 @@ export class ToolExecutor {
     const normalizedDueDate = normalizeDueDate(rawDueDate, sourceText);
     const rawDueAt = (fields.dueAt ?? fields.due_at) as string | undefined;
     const normalizedDueAt = typeof rawDueAt === 'string' && rawDueAt.trim() ? rawDueAt : undefined;
-    const rawFixedAt = (fields.fixedAt ?? fields.fixed_at) as string | undefined;
-    const normalizedFixedAt = typeof rawFixedAt === 'string' && rawFixedAt.trim() ? rawFixedAt : undefined;
+    const rawPinned = fields.pinned;
+    const normalizedPinned = rawPinned === true || rawPinned === 'true';
     const rawDurationMinutes = fields.durationMinutes ?? fields.duration_minutes;
     const inferredDurationMinutes = this.extractDurationMinutes(rawDurationMinutes, sourceText);
     const rawPriority = fields.priority;
@@ -634,7 +634,7 @@ export class ToolExecutor {
           due_date: normalizedDueDate,
           due_at: normalizedDueAt,
           duration_minutes: inferredDurationMinutes,
-          fixed_at: normalizedFixedAt,
+          pinned: normalizedPinned,
           priority: inferredPriority
         };
     }
