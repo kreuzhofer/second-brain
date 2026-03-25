@@ -717,6 +717,22 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
                       {taskScheduleError && (
                         <p className="text-sm text-destructive">{taskScheduleError}</p>
                       )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isSavingTaskSchedule}
+                        onClick={() => {
+                          setTaskDurationDraft('30');
+                          setTaskPriorityDraft('3');
+                          setTaskDueDateDraft('');
+                          setTaskDueTimeDraft('');
+                          setTaskDueTimeEnabled(false);
+                          setTaskPinnedDraft(false);
+                          setTaskNotBeforeDraft('');
+                        }}
+                      >
+                        Clear schedule
+                      </Button>
                     </>
                   ) : (
                     <p className="text-sm text-muted-foreground">Schedule settings are available for tasks only.</p>
