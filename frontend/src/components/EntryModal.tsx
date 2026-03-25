@@ -208,25 +208,54 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
     return window.confirm('You have unsaved note changes. Discard them?');
   };
 
+  const hasScheduleChanges = (): boolean => {
+    if (!entry || !isTaskCategory(entry.category)) return false;
+    const e = entry.entry as any;
+    const dueAt = selectTaskDueInput(e.due_date, e.due_at);
+    const dueDraft = parseTaskDateTime(dueAt);
+    const nbDraft = parseTaskDateTime(e.not_before);
+    if (taskDurationDraft !== (e.duration_minutes ? String(e.duration_minutes) : '30')) return true;
+    if (taskPriorityDraft !== (e.priority ? String(e.priority) : '3')) return true;
+    if (taskDueDateDraft !== dueDraft.date) return true;
+    if (taskDueTimeDraft !== dueDraft.time) return true;
+    if (taskDueTimeEnabled !== dueDraft.hasTime) return true;
+    if (taskPinnedDraft !== (e.pinned ?? false)) return true;
+    if (taskNotBeforeDraft !== nbDraft.date) return true;
+    return false;
+  };
+
   const handleClose = async () => {
-    if (isSavingNotes) return;
-    if (!shouldPromptUnsavedNotes(isEditingNotes, entry?.content, notesDraft)) {
-      onClose();
-      return;
+    if (isSavingNotes || isSavingTaskSchedule) return;
+
+    // Check for unsaved schedule changes
+    if (hasScheduleChanges()) {
+      const shouldSave = window.confirm('You have unsaved schedule changes. Save them?');
+      if (shouldSave) {
+        await saveTaskSchedule();
+        onClose();
+        return;
+      }
     }
-    const shouldSave = window.confirm('You have unsaved note changes. Save them?');
-    if (shouldSave) {
-      await saveNotes();
-      if (!hasNotesChanges(entry?.content, notesDraft)) {
+
+    // Check for unsaved note changes
+    if (shouldPromptUnsavedNotes(isEditingNotes, entry?.content, notesDraft)) {
+      const shouldSave = window.confirm('You have unsaved note changes. Save them?');
+      if (shouldSave) {
+        await saveNotes();
+        if (!hasNotesChanges(entry?.content, notesDraft)) {
+          onClose();
+        }
+        return;
+      }
+      const discard = window.confirm('Discard unsaved note changes?');
+      if (discard) {
+        cancelNotesEdit();
         onClose();
       }
       return;
     }
-    const discard = window.confirm('Discard unsaved note changes?');
-    if (discard) {
-      cancelNotesEdit();
-      onClose();
-    }
+
+    onClose();
   };
 
   const saveNotes = async () => {
@@ -688,29 +717,6 @@ export function EntryModal({ entryPath, onClose, onStartFocus, onEntryClick }: E
                       {taskScheduleError && (
                         <p className="text-sm text-destructive">{taskScheduleError}</p>
                       )}
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={saveTaskSchedule}
-                          disabled={isSavingTaskSchedule}
-                        >
-                          {isSavingTaskSchedule ? 'Saving...' : 'Save schedule'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={isSavingTaskSchedule}
-                          onClick={() => {
-                            setTaskDueDateDraft('');
-                            setTaskDueTimeDraft('');
-                            setTaskDueTimeEnabled(false);
-                            setTaskPinnedDraft(false);
-                            setTaskNotBeforeDraft('');
-                          }}
-                        >
-                          Clear schedule
-                        </Button>
-                      </div>
                     </>
                   ) : (
                     <p className="text-sm text-muted-foreground">Schedule settings are available for tasks only.</p>
